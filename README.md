@@ -172,3 +172,12 @@ There is a GLPI version typical lifecycle:
  * Several months after major version released, a new major version (9.4) is released.
    Previous major versions become unsupported, please update to the new major version.
    Obviously, we provide support for the migration tools too!
+
+
+## Proyecto GLPI-SIUDT
+
+Implementación de una herramienta de software para la gestión de activos tecnológicos y el control de incidencias para la Dirección SIUDT de la UNAN-Managua.
+
+El desarrollo personalizado del proyecto se encuentra en:
+
+`plugins/siudt_front`
