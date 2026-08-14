@@ -1,0 +1,232 @@
+/**
+ * GLPI Custom Theme - Paleta: Azul Oscuro (#0f172a), Rojo (#dc2626) y Amarillo (#f59e0b)
+ */
+
+:root {
+    --tblr-primary: #dc2626 !important;
+    --tblr-primary-rgb: 220, 38, 38 !important;
+    --tblr-secondary: #f59e0b !important;
+    --tblr-secondary-rgb: 245, 158, 11 !important;
+    --tblr-yellow: #f59e0b !important;
+    --tblr-red: #dc2626 !important;
+    --tblr-blue: #0f172a !important;
+    --mainmenu-bg: #0f172a !important;
+    --mainmenu-fg: #ffffff !important;
+    --header-bg: #1e293b !important;
+    --header-fg: #ffffff !important;
+    --primary: #dc2626 !important;
+    --secondary: #f59e0b !important;
+    --link-color: #dc2626 !important;
+    --hover-bg: rgba(245, 158, 11, 0.15) !important;
+}
+
+/* ==========================================================================
+   1. Navegación Principal & Menú Lateral (Sidebar & Topbar - Azul Oscuro)
+   ========================================================================== */
+.sidebar,
+.topbar,
+.navbar-vertical,
+.navbar-dark {
+    background-color: #0f172a !important;
+    color: #ffffff !important;
+    border-right: 1px solid #1e293b !important;
+}
+
+.sidebar .nav-link,
+.topbar .nav-link,
+.navbar-vertical .nav-link {
+    color: #cbd5e1 !important;
+    transition: all 0.2s ease-in-out;
+}
+
+.sidebar .nav-link:hover,
+.topbar .nav-link:hover,
+.navbar-vertical .nav-link:hover {
+    color: #f59e0b !important; /* Amarillo en hover */
+    background-color: rgba(245, 158, 11, 0.1) !important;
+}
+
+.sidebar .nav-item.active > .nav-link,
+.sidebar .nav-link.active,
+.navbar-vertical .nav-link.active {
+    color: #ffffff !important;
+    background-color: #dc2626 !important; /* Rojo en ítem activo */
+    border-left: 4px solid #f59e0b !important; /* Acento Amarillo */
+    font-weight: 600;
+}
+
+.sidebar .nav-link .nav-link-icon,
+.topbar .nav-link .nav-link-icon {
+    color: #f59e0b !important; /* Iconos en Amarillo */
+}
+
+.sidebar .nav-item.active .nav-link-icon {
+    color: #ffffff !important;
+}
+
+/* Header superior */
+header,
+.navbar-expand-md.topbar {
+    background-color: #1e293b !important;
+    border-bottom: 2px solid #dc2626 !important;
+}
+
+/* ==========================================================================
+   2. Botones & Acentos (Rojo y Amarillo)
+   ========================================================================== */
+
+/* Botón Primario -> Rojo */
+.btn-primary,
+button[type="submit"].btn-primary,
+.btn-success {
+    background-color: #dc2626 !important;
+    border-color: #dc2626 !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 4px rgba(220, 38, 38, 0.25) !important;
+}
+
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active,
+.btn-success:hover {
+    background-color: #b91c1c !important;
+    border-color: #b91c1c !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 0 0.25rem rgba(245, 158, 11, 0.4) !important; /* Ring Amarillo */
+}
+
+/* Botón Secundario -> Amarillo */
+.btn-secondary,
+.btn-warning,
+.btn-info {
+    background-color: #f59e0b !important;
+    border-color: #f59e0b !important;
+    color: #0f172a !important;
+    font-weight: 600;
+}
+
+.btn-secondary:hover,
+.btn-warning:hover,
+.btn-info:hover {
+    background-color: #d97706 !important;
+    border-color: #d97706 !important;
+    color: #ffffff !important;
+}
+
+/* Botones Outline */
+.btn-outline-primary {
+    color: #dc2626 !important;
+    border-color: #dc2626 !important;
+}
+
+.btn-outline-primary:hover {
+    background-color: #dc2626 !important;
+    color: #ffffff !important;
+}
+
+.btn-outline-secondary {
+    color: #f59e0b !important;
+    border-color: #f59e0b !important;
+}
+
+.btn-outline-secondary:hover {
+    background-color: #f59e0b !important;
+    color: #0f172a !important;
+}
+
+/* ==========================================================================
+   3. Tarjetas & Contenedores (Cards & Widgets)
+   ========================================================================== */
+.card {
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.05) !important;
+}
+
+.card-header {
+    background-color: #0f172a !important;
+    color: #ffffff !important;
+    border-bottom: 3px solid #f59e0b !important; /* Borde inferior Amarillo */
+    font-weight: 600;
+}
+
+.card-header .card-title,
+.card-header h3,
+.card-header h4 {
+    color: #ffffff !important;
+}
+
+/* ==========================================================================
+   4. Tablas (Table Headers - Azul Oscuro)
+   ========================================================================== */
+.table thead th,
+.tab_cadre th,
+table.tab_cadre_fixe th {
+    background-color: #0f172a !important;
+    color: #ffffff !important;
+    border-bottom: 2px solid #dc2626 !important;
+    text-transform: uppercase;
+    font-size: 0.825rem;
+    letter-spacing: 0.05em;
+}
+
+.table tbody tr:hover,
+.tab_cadre tr:hover {
+    background-color: rgba(245, 158, 11, 0.08) !important; /* Resalte fila hover en amarillo suave */
+}
+
+/* Paginación */
+.pagination .page-item.active .page-link {
+    background-color: #dc2626 !important;
+    border-color: #dc2626 !important;
+    color: #ffffff !important;
+}
+
+.pagination .page-link {
+    color: #0f172a !important;
+}
+
+.pagination .page-link:hover {
+    color: #f59e0b !important;
+    background-color: #0f172a !important;
+}
+
+/* ==========================================================================
+   5. Badges, Alertas & Enlaces
+   ========================================================================== */
+.badge.bg-primary,
+.badge-primary {
+    background-color: #dc2626 !important;
+    color: #ffffff !important;
+}
+
+.badge.bg-secondary,
+.badge.bg-warning,
+.badge-secondary,
+.badge-warning {
+    background-color: #f59e0b !important;
+    color: #0f172a !important;
+    font-weight: 600;
+}
+
+.badge.bg-info {
+    background-color: #0f172a !important;
+    color: #f59e0b !important;
+}
+
+a {
+    color: #dc2626 !important;
+    text-decoration: none;
+}
+
+a:hover {
+    color: #f59e0b !important;
+    text-decoration: underline;
+}
+
+/* Formularios en focus */
+.form-control:focus,
+.form-select:focus {
+    border-color: #f59e0b !important;
+    box-shadow: 0 0 0 0.25rem rgba(220, 38, 38, 0.25) !important;
+}
