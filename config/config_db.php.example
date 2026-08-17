@@ -1,0 +1,18 @@
+<?php
+/**
+ * GLPI Database Configuration Example for XAMPP (MySQL / MariaDB)
+ * 
+ * Copia este archivo a 'config/config_db.php' e ingresa los datos de tu base de datos en XAMPP.
+ */
+
+class DB extends DBmysql {
+   public $dbhost     = '127.0.0.1';
+   public $dbuser     = 'root';
+   public $dbpassword = '';
+   public $dbdefault  = 'glpi_siudt';
+   public $use_unicode= true;
+
+   public function __construct() {
+      // Permitir reintentos de conexión
+   }
+}

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "php -S localhost:8080 -t .",
-    "start": "npm run dev"
+    "start": "php -S localhost:8080 -t .",
+    "info": "echo GLPI esta optimizado para ejecutarse en XAMPP (Apache + MySQL) en http://localhost/glpi-siudt"
   }
 }

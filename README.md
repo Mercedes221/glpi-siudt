@@ -179,5 +179,44 @@ There is a GLPI version typical lifecycle:
 Implementación de una herramienta de software para la gestión de activos tecnológicos y el control de incidencias para la Dirección SIUDT de la UNAN-Managua.
 
 El desarrollo personalizado del proyecto se encuentra en:
-
 `plugins/siudt_front`
+
+---
+
+### 🚀 Instrucciones de Ejecución con XAMPP (Entorno Recomendado)
+
+Para ejecutar el proyecto utilizando **XAMPP (Apache + MySQL)**:
+
+1. **Ubicación del Proyecto**:
+   Coloque o enlace la carpeta del proyecto en el directorio `htdocs` de XAMPP:
+   `C:\xampp\htdocs\glpi-siudt`
+
+2. **Iniciar Servicios en XAMPP Control Panel**:
+   - Inicie **Apache**
+   - Inicie **MySQL**
+
+3. **Configuración de Base de Datos**:
+   - Copie el archivo de plantilla `config/config_db.php.example` a `config/config_db.php`:
+     ```bash
+     copy config\config_db.php.example config\config_db.php
+     ```
+   - Si no ha instalado la base de datos, acceda a la URL de instalación en el navegador:
+     `http://localhost/glpi-siudt` o `http://localhost/glpi-siudt/install/install.php`
+
+4. **Acceso a la Aplicación**:
+   Abra el navegador en:
+   `http://localhost/glpi-siudt`
+
+---
+
+### 🎨 Diseño y Paleta de Colores Personalizados
+
+El proyecto cuenta con un **diseño moderno** optimizado con la siguiente paleta de colores:
+- **Azul Oscuro (`#0f172a`)**: Menú principal, barra lateral, encabezados de tablas y tarjetas.
+- **Rojo (`#dc2626`)**: Botones de acción principal, enlaces primarios, paginación activa y acentos de tablas.
+- **Amarillo (`#f59e0b`)**: Acentos de resalte en hover, bordes de tarjetas, botones secundarios y de advertencia.
+
+Las reglas CSS del tema se encuentran centralizadas en:
+- [`public/css/custom_theme.css`](file:///c:/Users/ccarcache/Desktop/Repo/glpi-siudt/public/css/custom_theme.css)
+- [`css/custom_theme.css`](file:///c:/Users/ccarcache/Desktop/Repo/glpi-siudt/css/custom_theme.css)
+
