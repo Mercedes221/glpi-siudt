@@ -303,3 +303,59 @@ a:hover {
     border-color: #8e24aa !important;
     box-shadow: 0 0 0 0.25rem rgba(142, 36, 170, 0.25) !important;
 }
+
+/* ==========================================================================
+   6. Logo Institucional Personalizado (Escudo)
+   ========================================================================== */
+.glpi-logo {
+    background-image: url('../../pics/logos/logo-custom.png') !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    background-size: contain !important;
+    display: inline-block !important;
+}
+
+/* Logo en Sidebar y Topbar */
+.navbar-brand .glpi-logo,
+.sidebar .navbar-brand .glpi-logo,
+.topbar .navbar-brand .glpi-logo,
+.page .glpi-logo {
+    background-image: url('../../pics/logos/logo-custom.png') !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    background-size: contain !important;
+    width: 60px !important;
+    height: 60px !important;
+    max-height: 60px !important;
+}
+
+.sidebar .navbar-brand {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0.6rem 0.5rem !important;
+}
+
+/* Sidebar Colapsado */
+body.navbar-collapsed .navbar-brand .glpi-logo {
+    background-image: url('../../pics/logos/logo-G-100-white.png') !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    background-size: contain !important;
+    width: 44px !important;
+    height: 44px !important;
+}
+
+/* Pantalla de Inicio de Sesión / Login */
+.page-anonymous .glpi-logo {
+    background-image: url('../../pics/logos/logo-custom.png') !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    background-size: contain !important;
+    width: 160px !important;
+    height: 160px !important;
+    display: inline-block !important;
+    content: "" !important;
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.25));
+}
+
