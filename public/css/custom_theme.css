@@ -1,153 +1,212 @@
 /**
- * GLPI Custom Theme - UNSN Managua
- * Paleta: Azul Principal (#1e3a8a), Rojo Secundario (#dc2626) y Amarillo Terciario (#f59e0b)
+ * GLPI Custom Theme - Paleta Gradiente
+ * Inspirado en la paleta: Amarillo (#FFD600), Naranja (#FF8C00), Bermellón (#F4511E),
+ * Rojo (#D32F2F), Magenta Oscuro (#AD1457), Fucsia/Rosa (#D81B60),
+ * Púrpura (#8E24AA), Índigo (#5E35B1), Azul Real (#3949AB) y Azul Eléctrico (#1E88E5).
  */
 
 :root {
-    --tblr-primary: #1e3a8a !important;
-    --tblr-primary-rgb: 30, 58, 138 !important;
-    --tblr-secondary: #dc2626 !important;
-    --tblr-secondary-rgb: 220, 38, 38 !important;
-    --tblr-yellow: #f59e0b !important;
-    --tblr-red: #dc2626 !important;
-    --tblr-blue: #1e3a8a !important;
-    --mainmenu-bg: #0f172a !important;
+    /* Colores individuales de la paleta */
+    --color-palette-yellow: #ffd600;
+    --color-palette-orange: #ff8c00;
+    --color-palette-vermilion: #f4511e;
+    --color-palette-red: #d32f2f;
+    --color-palette-wine: #ad1457;
+    --color-palette-magenta: #d81b60;
+    --color-palette-purple: #8e24aa;
+    --color-palette-indigo: #5e35b1;
+    --color-palette-blue-indigo: #3949ab;
+    --color-palette-blue: #1e88e5;
+    
+    /* Fondos oscuros */
+    --bg-dark-base: #0a0e1a;
+    --bg-dark-surface: #121026;
+    --bg-dark-header: #15102a;
+
+    /* Gradientes principales */
+    --gradient-full-spectrum: linear-gradient(90deg, #ffd600 0%, #ff8c00 12%, #f4511e 25%, #d32f2f 37%, #ad1457 50%, #d81b60 62%, #8e24aa 75%, #5e35b1 87%, #1e88e5 100%);
+    --gradient-primary: linear-gradient(135deg, #5e35b1 0%, #8e24aa 50%, #d81b60 100%);
+    --gradient-primary-hover: linear-gradient(135deg, #6a3cbd 0%, #9c27b0 50%, #e91e63 100%);
+    --gradient-secondary: linear-gradient(135deg, #d32f2f 0%, #f4511e 50%, #ff8c00 100%);
+    --gradient-secondary-hover: linear-gradient(135deg, #e53935 0%, #ff5722 50%, #ffa726 100%);
+    --gradient-warm: linear-gradient(135deg, #ff8c00 0%, #ffd600 100%);
+    --gradient-cool: linear-gradient(135deg, #1e88e5 0%, #3949ab 50%, #5e35b1 100%);
+    --gradient-sidebar: linear-gradient(180deg, #0a0e1a 0%, #120e24 50%, #1a0b22 100%);
+    --gradient-header: linear-gradient(90deg, #0a0e1a 0%, #16102a 50%, #1e0e24 100%);
+    --gradient-card-header: linear-gradient(135deg, #0d1222 0%, #1c102e 100%);
+    --gradient-table-header: linear-gradient(90deg, #0e1326 0%, #19122c 50%, #201026 100%);
+
+    /* Tabler & GLPI Tokens */
+    --tblr-primary: #8e24aa !important;
+    --tblr-primary-rgb: 142, 36, 170 !important;
+    --tblr-secondary: #f4511e !important;
+    --tblr-secondary-rgb: 244, 81, 30 !important;
+    --tblr-yellow: #ffd600 !important;
+    --tblr-red: #d32f2f !important;
+    --tblr-blue: #1e88e5 !important;
+    --mainmenu-bg: #0a0e1a !important;
     --mainmenu-fg: #ffffff !important;
-    --header-bg: #1e293b !important;
+    --header-bg: #15102a !important;
     --header-fg: #ffffff !important;
-    --primary: #1e3a8a !important;
-    --secondary: #dc2626 !important;
-    --link-color: #1e3a8a !important;
-    --hover-bg: rgba(245, 158, 11, 0.15) !important;
+    --primary: #8e24aa !important;
+    --secondary: #f4511e !important;
+    --link-color: #8e24aa !important;
+    --hover-bg: rgba(216, 27, 96, 0.15) !important;
 }
 
 /* ==========================================================================
-   1. Navegación Principal & Menú Lateral (Azul Oscuro)
+   1. Navegación Principal & Menú Lateral (Gradientes Oscuros & Acentos Vivos)
    ========================================================================== */
 .sidebar,
-.topbar,
 .navbar-vertical,
 .navbar-dark {
-    background-color: #0f172a !important;
+    background: var(--gradient-sidebar) !important;
     color: #ffffff !important;
-    border-right: 1px solid #1e293b !important;
+    border-right: 1px solid rgba(142, 36, 170, 0.25) !important;
+}
+
+.topbar,
+header,
+.navbar-expand-md.topbar {
+    background: var(--gradient-header) !important;
+    color: #ffffff !important;
+    border-bottom: 2px solid transparent !important;
+    border-image: var(--gradient-full-spectrum) 1 !important;
+    position: relative;
 }
 
 .sidebar .nav-link,
 .topbar .nav-link,
 .navbar-vertical .nav-link {
     color: #cbd5e1 !important;
-    transition: all 0.2s ease-in-out;
+    transition: all 0.25s ease-in-out;
+    border-radius: 6px;
+    margin: 2px 6px;
 }
 
 .sidebar .nav-link:hover,
 .topbar .nav-link:hover,
 .navbar-vertical .nav-link:hover {
-    color: #f59e0b !important; /* Amarillo en hover */
-    background-color: rgba(245, 158, 11, 0.1) !important;
+    color: #ffd600 !important; /* Amarillo en hover */
+    background: linear-gradient(90deg, rgba(216, 27, 96, 0.18) 0%, rgba(255, 140, 0, 0.12) 100%) !important;
+    transform: translateX(2px);
 }
 
 .sidebar .nav-item.active > .nav-link,
 .sidebar .nav-link.active,
 .navbar-vertical .nav-link.active {
     color: #ffffff !important;
-    background-color: #1e3a8a !important; /* Azul primario en ítem activo */
-    border-left: 4px solid #f59e0b !important; /* Acento Amarillo */
+    background: linear-gradient(90deg, rgba(94, 53, 177, 0.6) 0%, rgba(216, 27, 96, 0.45) 100%) !important;
+    border-left: 4px solid #ffd600 !important; /* Borde activo amarillo brillante */
+    box-shadow: inset 0 0 12px rgba(216, 27, 96, 0.25) !important;
     font-weight: 600;
 }
 
 .sidebar .nav-link .nav-link-icon,
 .topbar .nav-link .nav-link-icon {
-    color: #f59e0b !important; /* Iconos en Amarillo */
+    color: #ff8c00 !important; /* Iconos en degradado naranja cálido */
+    transition: color 0.25s ease;
+}
+
+.sidebar .nav-link:hover .nav-link-icon,
+.topbar .nav-link:hover .nav-link-icon {
+    color: #ffd600 !important;
 }
 
 .sidebar .nav-item.active .nav-link-icon {
-    color: #ffffff !important;
-}
-
-/* Header superior */
-header,
-.navbar-expand-md.topbar {
-    background-color: #1e293b !important;
-    border-bottom: 2px solid #dc2626 !important; /* Rojo */
+    color: #ffd600 !important;
 }
 
 /* ==========================================================================
-   2. Botones & Acentos (Azul y Rojo)
+   2. Botones & Acentos (Gradientes Púrpura-Magenta & Cálido Rojo-Naranja)
    ========================================================================== */
 
-/* Botón Primario -> Azul */
+/* Botón Primario -> Gradiente Púrpura a Magenta */
 .btn-primary,
 button[type="submit"].btn-primary,
 .btn-success {
-    background-color: #1e3a8a !important;
-    border-color: #1e3a8a !important;
+    background: var(--gradient-primary) !important;
+    border: none !important;
     color: #ffffff !important;
-    box-shadow: 0 2px 4px rgba(30, 58, 138, 0.25) !important;
+    box-shadow: 0 4px 12px rgba(142, 36, 170, 0.35) !important;
+    transition: all 0.25s ease-in-out !important;
 }
 
 .btn-primary:hover,
 .btn-primary:focus,
 .btn-primary:active,
 .btn-success:hover {
-    background-color: #1e40af !important;
-    border-color: #1e40af !important;
+    background: var(--gradient-primary-hover) !important;
     color: #ffffff !important;
-    box-shadow: 0 0 0 0.25rem rgba(245, 158, 11, 0.4) !important; /* Ring Amarillo */
+    box-shadow: 0 6px 16px rgba(216, 27, 96, 0.45) !important;
+    transform: translateY(-1px);
 }
 
-/* Botón Secundario -> Rojo */
+/* Botón Secundario & Warning & Danger -> Gradiente Rojo a Naranja Cálido */
 .btn-secondary,
 .btn-danger,
 .btn-warning {
-    background-color: #dc2626 !important;
-    border-color: #dc2626 !important;
+    background: var(--gradient-secondary) !important;
+    border: none !important;
     color: #ffffff !important;
     font-weight: 600;
+    box-shadow: 0 4px 12px rgba(244, 81, 30, 0.35) !important;
+    transition: all 0.25s ease-in-out !important;
 }
 
 .btn-secondary:hover,
 .btn-danger:hover,
 .btn-warning:hover {
-    background-color: #b91c1c !important;
-    border-color: #b91c1c !important;
+    background: var(--gradient-secondary-hover) !important;
     color: #ffffff !important;
+    box-shadow: 0 6px 16px rgba(255, 140, 0, 0.45) !important;
+    transform: translateY(-1px);
 }
 
 /* Botones Outline */
 .btn-outline-primary {
-    color: #1e3a8a !important;
-    border-color: #1e3a8a !important;
+    color: #8e24aa !important;
+    border: 1.5px solid #8e24aa !important;
+    background: transparent !important;
+    transition: all 0.25s ease-in-out !important;
 }
 
 .btn-outline-primary:hover {
-    background-color: #1e3a8a !important;
+    background: var(--gradient-primary) !important;
+    border-color: transparent !important;
     color: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(142, 36, 170, 0.35) !important;
 }
 
 .btn-outline-secondary {
-    color: #dc2626 !important;
-    border-color: #dc2626 !important;
+    color: #f4511e !important;
+    border: 1.5px solid #f4511e !important;
+    background: transparent !important;
+    transition: all 0.25s ease-in-out !important;
 }
 
 .btn-outline-secondary:hover {
-    background-color: #dc2626 !important;
+    background: var(--gradient-secondary) !important;
+    border-color: transparent !important;
     color: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(244, 81, 30, 0.35) !important;
 }
 
 /* ==========================================================================
-   3. Tarjetas & Contenedores (Cards & Widgets)
+   3. Tarjetas & Contenedores (Cards & Widgets con Acento Gradiente)
    ========================================================================== */
 .card {
     border: 1px solid #e2e8f0 !important;
-    border-radius: 8px !important;
-    box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.05) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06) !important;
+    overflow: hidden;
 }
 
 .card-header {
-    background-color: #0f172a !important;
+    background: var(--gradient-card-header) !important;
     color: #ffffff !important;
-    border-bottom: 3px solid #f59e0b !important; /* Borde inferior Amarillo */
+    border-bottom: 3px solid transparent !important;
+    border-image: linear-gradient(90deg, #ffd600, #ff8c00, #d81b60, #8e24aa) 1 !important;
     font-weight: 600;
 }
 
@@ -158,14 +217,15 @@ button[type="submit"].btn-primary,
 }
 
 /* ==========================================================================
-   4. Tablas (Table Headers - Azul Oscuro)
+   4. Tablas (Table Headers con Gradientes)
    ========================================================================== */
 .table thead th,
 .tab_cadre th,
 table.tab_cadre_fixe th {
-    background-color: #0f172a !important;
+    background: var(--gradient-table-header) !important;
     color: #ffffff !important;
-    border-bottom: 2px solid #dc2626 !important;
+    border-bottom: 2px solid transparent !important;
+    border-image: linear-gradient(90deg, #d81b60, #f4511e, #ff8c00) 1 !important;
     text-transform: uppercase;
     font-size: 0.825rem;
     letter-spacing: 0.05em;
@@ -173,23 +233,26 @@ table.tab_cadre_fixe th {
 
 .table tbody tr:hover,
 .tab_cadre tr:hover {
-    background-color: rgba(245, 158, 11, 0.08) !important; /* Resalte fila hover en amarillo */
+    background: linear-gradient(90deg, rgba(216, 27, 96, 0.06) 0%, rgba(255, 140, 0, 0.04) 100%) !important;
 }
 
 /* Paginación */
 .pagination .page-item.active .page-link {
-    background-color: #1e3a8a !important;
-    border-color: #1e3a8a !important;
+    background: var(--gradient-primary) !important;
+    border-color: #8e24aa !important;
     color: #ffffff !important;
+    box-shadow: 0 2px 6px rgba(142, 36, 170, 0.35) !important;
 }
 
 .pagination .page-link {
-    color: #0f172a !important;
+    color: #0a0e1a !important;
+    border-radius: 6px;
+    margin: 0 2px;
 }
 
 .pagination .page-link:hover {
-    color: #dc2626 !important;
-    background-color: #f8fafc !important;
+    color: #d81b60 !important;
+    background-color: #fdf2f8 !important;
 }
 
 /* ==========================================================================
@@ -197,36 +260,46 @@ table.tab_cadre_fixe th {
    ========================================================================== */
 .badge.bg-primary,
 .badge-primary {
-    background-color: #1e3a8a !important;
+    background: var(--gradient-primary) !important;
     color: #ffffff !important;
+    box-shadow: 0 2px 6px rgba(142, 36, 170, 0.25) !important;
 }
 
 .badge.bg-secondary,
 .badge-secondary {
-    background-color: #dc2626 !important;
+    background: var(--gradient-secondary) !important;
     color: #ffffff !important;
+    box-shadow: 0 2px 6px rgba(244, 81, 30, 0.25) !important;
 }
 
 .badge.bg-warning,
 .badge-warning {
-    background-color: #f59e0b !important;
-    color: #0f172a !important;
-    font-weight: 600;
+    background: var(--gradient-warm) !important;
+    color: #0a0e1a !important;
+    font-weight: 700;
+    box-shadow: 0 2px 6px rgba(255, 140, 0, 0.25) !important;
+}
+
+.badge.bg-info,
+.badge-info {
+    background: var(--gradient-cool) !important;
+    color: #ffffff !important;
 }
 
 a {
-    color: #1e3a8a !important;
+    color: #8e24aa !important;
     text-decoration: none;
+    transition: color 0.2s ease-in-out;
 }
 
 a:hover {
-    color: #dc2626 !important;
+    color: #d81b60 !important;
     text-decoration: underline;
 }
 
 /* Formularios en focus */
 .form-control:focus,
 .form-select:focus {
-    border-color: #1e3a8a !important;
-    box-shadow: 0 0 0 0.25rem rgba(30, 58, 138, 0.25) !important;
+    border-color: #8e24aa !important;
+    box-shadow: 0 0 0 0.25rem rgba(142, 36, 170, 0.25) !important;
 }
