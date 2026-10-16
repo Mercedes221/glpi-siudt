@@ -9,19 +9,19 @@
     /* Colores individuales de la paleta */
     --color-palette-yellow: #ffd600;
     --color-palette-orange: #ff8c00;
-    --color-palette-vermilion: #f4511e;
-    --color-palette-red: #d32f2f;
-    --color-palette-wine: #ad1457;
-    --color-palette-magenta: #d81b60;
-    --color-palette-purple: #8e24aa;
-    --color-palette-indigo: #5e35b1;
-    --color-palette-blue-indigo: #3949ab;
-    --color-palette-blue: #1e88e5;
+    --color-palette-vermilion: #c4c3c2;
+    --color-palette-red: #c9c4c4;
+    --color-palette-wine: #c19ead;
+    --color-palette-magenta: #fcfc6b;
+    --color-palette-purple: #f1eff1;
+    --color-palette-indigo: #f1f0f3;
+    --color-palette-blue-indigo: #bc7d7d;
+    --color-palette-blue: #d4e5f4;
     
     /* Fondos oscuros */
-    --bg-dark-base: #0a0e1a;
-    --bg-dark-surface: #121026;
-    --bg-dark-header: #15102a;
+    --bg-dark-base: #3059d3;
+    --bg-dark-surface: #4132e6;
+    --bg-dark-header: #2e0db2;
 
     /* Gradientes principales */
     --gradient-full-spectrum: linear-gradient(90deg, #ffd600 0%, #ff8c00 12%, #f4511e 25%, #d32f2f 37%, #ad1457 50%, #d81b60 62%, #8e24aa 75%, #5e35b1 87%, #1e88e5 100%);
@@ -61,7 +61,7 @@
 .navbar-vertical,
 .navbar-dark {
     background: var(--gradient-sidebar) !important;
-    color: #ffffff !important;
+    color: #ebf561 !important;
     border-right: 1px solid rgba(142, 36, 170, 0.25) !important;
 }
 
@@ -165,8 +165,8 @@ button[type="submit"].btn-primary,
 
 /* Botones Outline */
 .btn-outline-primary {
-    color: #8e24aa !important;
-    border: 1.5px solid #8e24aa !important;
+    color: #f1f1f1 !important;
+    border: 1.5px solid #f9f8f9 !important;
     background: transparent !important;
     transition: all 0.25s ease-in-out !important;
 }
