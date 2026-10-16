@@ -181,3 +181,22 @@ Implementación de una herramienta de software para la gestión de activos tecno
 El desarrollo personalizado del proyecto se encuentra en:
 
 `plugins/siudt_front`
+
+## Ejecución con Docker Compose
+
+La configuración usa PHP 8.2 con Apache y MariaDB 10.11, versiones compatibles
+con GLPI 10.0.18. La aplicación se sirve desde `public/` y Apache reenvía las
+rutas de GLPI al router, incluido el instalador. La configuración de GLPI, sus
+archivos y los datos de la base de datos se conservan en volúmenes.
+
+1. Copia `.env.example` a `.env` y reemplaza ambos valores por contraseñas
+   aleatorias seguras.
+2. Ejecuta `docker compose up -d --build`.
+3. Abre <http://localhost:8080> para completar el instalador de GLPI. Cuando lo
+   solicite, usa `db` como servidor, `glpi` como base de datos y usuario, y el
+   valor de `GLPI_DB_PASSWORD` en `.env` como contraseña.
+4. Para administrar la base de datos, abre <http://localhost:8081> e inicia
+   sesión con el usuario `glpi` y `GLPI_DB_PASSWORD`. phpMyAdmin solo se publica
+   en la interfaz local de la máquina.
+
+Al cambiar código o plugins, vuelve a ejecutar `docker compose up -d --build`.
