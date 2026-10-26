@@ -25,7 +25,7 @@ RUN apt-get update \
 RUN printf 'session.cookie_httponly=On\n' > /usr/local/etc/php/conf.d/glpi-security.ini
 
 RUN sed -ri 's!/var/www/html!/var/www/html/public!g' /etc/apache2/sites-available/000-default.conf \
-    && printf '<Directory /var/www/html/public>\n    AllowOverride All\n    Require all granted\n    FallbackResource /index.php\n</Directory>\n' \
+    && printf '<Directory /var/www/html/public>\n    AllowOverride All\n    Require all granted\n    RewriteEngine On\n    RewriteRule ^apirest[.]php(/.*)?$ /index.php [END]\n    FallbackResource /index.php\n</Directory>\n' \
         > /etc/apache2/conf-available/glpi.conf \
     && a2enconf glpi
 

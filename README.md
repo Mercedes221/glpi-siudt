@@ -200,3 +200,87 @@ archivos y los datos de la base de datos se conservan en volúmenes.
    en la interfaz local de la máquina.
 
 Al cambiar código o plugins, vuelve a ejecutar `docker compose up -d --build`.
+
+### Cargar computadoras ficticias de prueba
+
+El cargador `tools/seed-demo-computers.php` crea 100 computadoras ficticias
+mediante la API de GLPI. La vista previa no modifica datos; el cargador omite
+las etiquetas de activo de demostración que ya existan, por lo que se puede
+ejecutar más de una vez sin duplicar esos registros.
+
+La API de GLPI debe estar habilitada y el usuario del token debe tener permiso
+para crear computadoras. En PowerShell, configura la URL de la instancia y el
+token remoto de usuario desde la configuración de GLPI:
+
+```powershell
+$env:GLPI_URL = "http://localhost:8080"
+$env:GLPI_USER_TOKEN = "<token-remoto-del-usuario>"
+# Define GLPI_APP_TOKEN solo si la configuración de la API lo requiere.
+php tools/seed-demo-computers.php
+php tools/seed-demo-computers.php --apply
+```
+
+`--apply` es necesario para insertar registros. No guardes los tokens en el
+repositorio; al terminar puedes quitarlos de la sesión de PowerShell con
+`Remove-Item Env:GLPI_USER_TOKEN, Env:GLPI_APP_TOKEN`.
+
+Apache debe enviar `/apirest.php/...` al enrutador de GLPI porque el contenedor
+publica `public/` como raíz web. Esta regla está incluida en la imagen; si ya
+estás usando una imagen anterior, reconstruye y reinicia la aplicación con
+`docker compose up -d --build app`.
+
+### Crear técnicos ficticios de prueba
+
+El cargador `tools/seed-demo-technicians.php` crea cinco cuentas ficticias
+con nombres de usuario `demo-siudt-tech-01` a `demo-siudt-tech-05`, las asigna
+al perfil `Technician` y las limita a la entidad raíz. No crea correos ni
+personas reales. La vista previa no modifica datos; `--apply` crea las cuentas
+que falten y omite las que ya existan.
+
+La API debe estar habilitada y el usuario de los tokens debe poder crear
+usuarios y asignar el perfil Técnico. Primero revisa la vista previa:
+
+```powershell
+php tools/seed-demo-technicians.php
+```
+
+Si el perfil aparece en GLPI con otro nombre, configura
+`GLPI_TECH_PROFILE_NAME` con el nombre exacto antes de importar. Al crear
+cuentas, el cargador imprime una contraseña temporal aleatoria una sola vez;
+guárdala de forma segura para las pruebas y cámbiala al iniciar sesión. Si
+vuelves a ejecutar el cargador, las cuentas existentes se omiten y sus
+contraseñas no se vuelven a mostrar ni se cambian.
+
+```powershell
+$env:GLPI_TECH_PROFILE_NAME = "Technician"
+php tools/seed-demo-technicians.php --apply
+```
+
+### Crear tickets ficticios de prueba
+
+El cargador `tools/seed-demo-tickets.php` prepara cinco incidentes y cinco
+solicitudes con estado nuevo y etiquetas únicas `DEMO-SIUDT-TICKET-001` a
+`DEMO-SIUDT-TICKET-010`. En la importación intenta relacionarlos con las
+computadoras marcadas `DEMO-SIUDT-ACT-*` y con las cuentas
+`demo-siudt-tech-*` que ya existan. Si no encuentra activos o técnicos, deja
+vacía esa relación e informa al terminar. Los registros existentes con esos
+nombres se omiten en ejecuciones posteriores.
+
+Primero revisa la vista previa; no envía nada a GLPI:
+
+```powershell
+php tools/seed-demo-tickets.php
+```
+
+Para guardar los diez tickets, configura los tokens en la misma sesión de
+PowerShell y ejecuta:
+
+```powershell
+$env:GLPI_URL = "http://localhost:8080"
+$env:GLPI_USER_TOKEN = "<token-remoto-del-usuario>"
+$env:GLPI_APP_TOKEN = "<token-de-aplicacion>"
+php tools/seed-demo-tickets.php --apply
+```
+
+El usuario de la API necesita permiso para crear tickets, agregar actores y
+vincular computadoras. Nunca pegues ni guardes los tokens en el repositorio.

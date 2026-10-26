@@ -297,6 +297,13 @@ a:hover {
     text-decoration: underline;
 }
 
+.dropdown-menu .dropdown-item:hover,
+.dropdown-menu .dropdown-item:focus,
+.dropdown-menu .dropdown-item.active {
+    color: #ffffff !important;
+    text-decoration: none;
+}
+
 /* Formularios en focus */
 .form-control:focus,
 .form-select:focus {
@@ -358,4 +365,3 @@ body.navbar-collapsed .navbar-brand .glpi-logo {
     content: "" !important;
     filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.25));
 }
-
