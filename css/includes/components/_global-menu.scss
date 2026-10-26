@@ -84,16 +84,33 @@
     }
 
     #navbar-menu {
+        .nav-link,
+        .nav-link:hover,
+        .nav-link:focus,
+        .nav-link:active,
+        .nav-link.active,
+        .nav-link.show,
+        .menu-label,
+        .dropdown-item,
+        .dropdown-item:hover,
+        .dropdown-item:focus,
+        .dropdown-item:active,
+        .dropdown-item.active,
+        .dropdown-item > span {
+            color: #fff !important;
+            -webkit-text-fill-color: #fff !important;
+        }
+
         .nav-item {
             .nav-link {
-                color: rgba($color: $mainmenu-fg, $alpha: 80%);
+                color: #fff;
                 border-left: 3px solid transparent;
                 border-radius: unset;
 
                 &.show,
                 &.active {
                     border-left-color: rgba($color: $primary, $alpha: 30%);
-                    color: rgba($color: $primary, $alpha: 90%);
+                    color: #fff;
                     font-weight: bold;
                 }
 
@@ -118,7 +135,7 @@
 
                             &:hover {
                                 border-left-color: $primary;
-                                color: $primary;
+                                color: #fff;
                                 background-color: rgba($color: #000, $alpha: 20%);
                             }
                         }
@@ -133,7 +150,7 @@
             &:hover {
                 .nav-link {
                     border-left-color: $primary;
-                    color: $primary;
+                    color: #fff;
                     background-color: rgba($color: #000, $alpha: 10%);
                 }
             }

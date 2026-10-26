@@ -9,19 +9,19 @@
     /* Colores individuales de la paleta */
     --color-palette-yellow: #ffd600;
     --color-palette-orange: #ff8c00;
-    --color-palette-vermilion: #f4511e;
-    --color-palette-red: #d32f2f;
-    --color-palette-wine: #ad1457;
-    --color-palette-magenta: #d81b60;
-    --color-palette-purple: #8e24aa;
-    --color-palette-indigo: #5e35b1;
-    --color-palette-blue-indigo: #3949ab;
-    --color-palette-blue: #1e88e5;
+    --color-palette-vermilion: #c4c3c2;
+    --color-palette-red: #c9c4c4;
+    --color-palette-wine: #c19ead;
+    --color-palette-magenta: #fcfc6b;
+    --color-palette-purple: #f1eff1;
+    --color-palette-indigo: #f1f0f3;
+    --color-palette-blue-indigo: #bc7d7d;
+    --color-palette-blue: #d4e5f4;
     
     /* Fondos oscuros */
-    --bg-dark-base: #0a0e1a;
-    --bg-dark-surface: #121026;
-    --bg-dark-header: #15102a;
+    --bg-dark-base: #3059d3;
+    --bg-dark-surface: #4132e6;
+    --bg-dark-header: #2e0db2;
 
     /* Gradientes principales */
     --gradient-full-spectrum: linear-gradient(90deg, #ffd600 0%, #ff8c00 12%, #f4511e 25%, #d32f2f 37%, #ad1457 50%, #d81b60 62%, #8e24aa 75%, #5e35b1 87%, #1e88e5 100%);
@@ -61,7 +61,7 @@
 .navbar-vertical,
 .navbar-dark {
     background: var(--gradient-sidebar) !important;
-    color: #ffffff !important;
+    color: #ebf561 !important;
     border-right: 1px solid rgba(142, 36, 170, 0.25) !important;
 }
 
@@ -78,7 +78,7 @@ header,
 .sidebar .nav-link,
 .topbar .nav-link,
 .navbar-vertical .nav-link {
-    color: #cbd5e1 !important;
+    color: #ffffff !important;
     transition: all 0.25s ease-in-out;
     border-radius: 6px;
     margin: 2px 6px;
@@ -87,7 +87,7 @@ header,
 .sidebar .nav-link:hover,
 .topbar .nav-link:hover,
 .navbar-vertical .nav-link:hover {
-    color: #ffd600 !important; /* Amarillo en hover */
+    color: #ffffff !important;
     background: linear-gradient(90deg, rgba(216, 27, 96, 0.18) 0%, rgba(255, 140, 0, 0.12) 100%) !important;
     transform: translateX(2px);
 }
@@ -165,8 +165,8 @@ button[type="submit"].btn-primary,
 
 /* Botones Outline */
 .btn-outline-primary {
-    color: #8e24aa !important;
-    border: 1.5px solid #8e24aa !important;
+    color: #f1f1f1 !important;
+    border: 1.5px solid #f9f8f9 !important;
     background: transparent !important;
     transition: all 0.25s ease-in-out !important;
 }
@@ -286,22 +286,32 @@ table.tab_cadre_fixe th {
     color: #ffffff !important;
 }
 
-a {
+a:not(.nav-link):not(.dropdown-item) {
     color: #8e24aa !important;
     text-decoration: none;
     transition: color 0.2s ease-in-out;
 }
 
-a:hover {
+a:not(.nav-link):not(.dropdown-item):hover {
     color: #d81b60 !important;
     text-decoration: underline;
 }
 
-.dropdown-menu .dropdown-item:hover,
-.dropdown-menu .dropdown-item:focus,
-.dropdown-menu .dropdown-item.active {
+#navbar-menu a.nav-link,
+#navbar-menu a.nav-link:hover,
+#navbar-menu a.nav-link:focus,
+#navbar-menu a.nav-link:active,
+#navbar-menu a.nav-link.active,
+#navbar-menu a.nav-link.show,
+#navbar-menu a.nav-link .menu-label,
+#navbar-menu a.dropdown-item,
+#navbar-menu a.dropdown-item:hover,
+#navbar-menu a.dropdown-item:focus,
+#navbar-menu a.dropdown-item:active,
+#navbar-menu a.dropdown-item.active,
+#navbar-menu a.dropdown-item > span {
     color: #ffffff !important;
-    text-decoration: none;
+    -webkit-text-fill-color: #ffffff !important;
 }
 
 /* Formularios en focus */
@@ -315,7 +325,7 @@ a:hover {
    6. Logo Institucional Personalizado (Escudo)
    ========================================================================== */
 .glpi-logo {
-    background-image: url('../../pics/logos/logo-custom.png') !important;
+    background-image: url('../../pics/logos/logo-GS.png') !important;
     background-repeat: no-repeat !important;
     background-position: center !important;
     background-size: contain !important;
@@ -327,7 +337,7 @@ a:hover {
 .sidebar .navbar-brand .glpi-logo,
 .topbar .navbar-brand .glpi-logo,
 .page .glpi-logo {
-    background-image: url('../../pics/logos/logo-custom.png') !important;
+    background-image: url('../../pics/logos/logo-GS.png') !important;
     background-repeat: no-repeat !important;
     background-position: center !important;
     background-size: contain !important;
@@ -343,6 +353,17 @@ a:hover {
     padding: 0.6rem 0.5rem !important;
 }
 
+.sidebar .navbar-brand .glpi-logo {
+    background-image: url('../../pics/logos/logo-GS-sidebar.png') !important;
+    width: 72px !important;
+    height: 66px !important;
+    max-height: 66px !important;
+}
+
+body:not(.navbar-collapsed) .sidebar .navbar-brand .glpi-logo {
+    background-size: 72px auto !important;
+}
+
 /* Sidebar Colapsado */
 body.navbar-collapsed .navbar-brand .glpi-logo {
     background-image: url('../../pics/logos/logo-G-100-white.png') !important;
@@ -355,7 +376,7 @@ body.navbar-collapsed .navbar-brand .glpi-logo {
 
 /* Pantalla de Inicio de Sesión / Login */
 .page-anonymous .glpi-logo {
-    background-image: url('../../pics/logos/logo-custom.png') !important;
+    background-image: url('../../pics/logos/logo-GS-login.png') !important;
     background-repeat: no-repeat !important;
     background-position: center !important;
     background-size: contain !important;
