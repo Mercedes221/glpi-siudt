@@ -32790,14 +32790,18 @@ body .flatpickr-time input:hover, body .flatpickr-time .flatpickr-am-pm:hover, b
 .sidebar ~ .page-wrapper, .sidebar ~ .navbar {
   transition: margin-inline-start var(--animate-duration);
 }
+.sidebar #navbar-menu .nav-link, .sidebar #navbar-menu .nav-link:hover, .sidebar #navbar-menu .nav-link:focus, .sidebar #navbar-menu .nav-link:active, .sidebar #navbar-menu .nav-link.active, .sidebar #navbar-menu .nav-link.show, .sidebar #navbar-menu .menu-label, .sidebar #navbar-menu .dropdown-item, .sidebar #navbar-menu .dropdown-item:hover, .sidebar #navbar-menu .dropdown-item:focus, .sidebar #navbar-menu .dropdown-item:active, .sidebar #navbar-menu .dropdown-item.active, .sidebar #navbar-menu .dropdown-item > span {
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+}
 .sidebar #navbar-menu .nav-item .nav-link {
-  color: rgba(252, 231, 228, 0.8);
+  color: #fff;
   border-left: 3px solid transparent;
   border-radius: unset;
 }
 .sidebar #navbar-menu .nav-item .nav-link.show, .sidebar #navbar-menu .nav-item .nav-link.active {
   border-left-color: rgba(252, 121, 98, 0.3);
-  color: rgba(252, 121, 98, 0.9);
+  color: #fff;
   font-weight: bold;
 }
 .sidebar #navbar-menu .nav-item .nav-link.active + .dropdown-menu, .sidebar #navbar-menu .nav-item .nav-link.show + .dropdown-menu {
@@ -32817,7 +32821,7 @@ body .flatpickr-time input:hover, body .flatpickr-time .flatpickr-am-pm:hover, b
 }
 .sidebar #navbar-menu .nav-item .nav-link.active + .dropdown-menu .dropdown-item:hover, .sidebar #navbar-menu .nav-item .nav-link.show + .dropdown-menu .dropdown-item:hover {
   border-left-color: #fc7962;
-  color: #fc7962;
+  color: #fff;
   background-color: rgba(0, 0, 0, 0.2);
 }
 .sidebar #navbar-menu .nav-item i {
@@ -32825,7 +32829,7 @@ body .flatpickr-time input:hover, body .flatpickr-time .flatpickr-am-pm:hover, b
 }
 .sidebar #navbar-menu .nav-item:hover .nav-link {
   border-left-color: #fc7962;
-  color: #fc7962;
+  color: #fff;
   background-color: rgba(0, 0, 0, 0.1);
 }
 .sidebar .reduce-menu::before {
