@@ -142,6 +142,17 @@ button[type="submit"].btn-primary,
     transform: translateY(-1px);
 }
 
+body .alert-warning a.btn-primary,
+body .alert-warning a.btn-primary:hover,
+body .alert-warning a.btn-primary:focus,
+body .alert-warning a.btn-primary:active,
+body .alert-warning a.btn-primary:visited,
+body .alert-warning a.btn-primary * {
+    --tblr-btn-color-text: #ffffff !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+}
+
 /* Botón Secundario & Warning & Danger -> Gradiente Rojo a Naranja Cálido */
 .btn-secondary,
 .btn-danger,

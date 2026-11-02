@@ -1,0 +1,10 @@
+{
+  "name": "glpi-siudt",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "php -S localhost:8080 -t .",
+    "start": "npm run dev"
+  }
+}

@@ -1,0 +1,7 @@
+.git
+.env
+.env.*
+config/config_db.php
+config/glpicrypt.key
+files/**
+node_modules
