@@ -14,19 +14,21 @@ namespace Symfony\Component\Cache\Adapter;
 use Psr\Cache\CacheItemInterface;
 use Symfony\Component\Cache\CacheItem;
 use Symfony\Contracts\Cache\CacheInterface;
+use Symfony\Contracts\Cache\NamespacedPoolInterface;
 
 /**
  * @author Titouan Galopin <galopintitouan@gmail.com>
  */
-class NullAdapter implements AdapterInterface, CacheInterface
+class NullAdapter implements AdapterInterface, CacheInterface, NamespacedPoolInterface, TagAwareAdapterInterface
 {
-    private static $createCacheItem;
+    private static \Closure $createCacheItem;
 
     public function __construct()
     {
-        self::$createCacheItem ?? self::$createCacheItem = \Closure::bind(
+        self::$createCacheItem ??= \Closure::bind(
             static function ($key) {
                 $item = new CacheItem();
+                $item->isTaggable = true;
                 $item->key = $key;
                 $item->isHit = false;
 
@@ -37,108 +39,66 @@ class NullAdapter implements AdapterInterface, CacheInterface
         );
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function get(string $key, callable $callback, float $beta = null, array &$metadata = null)
+    public function get(string $key, callable $callback, ?float $beta = null, ?array &$metadata = null): mixed
     {
         $save = true;
 
         return $callback((self::$createCacheItem)($key), $save);
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getItem($key)
+    public function getItem(mixed $key): CacheItem
     {
         return (self::$createCacheItem)($key);
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getItems(array $keys = [])
+    public function getItems(array $keys = []): iterable
     {
         return $this->generateItems($keys);
     }
 
-    /**
-     * {@inheritdoc}
-     *
-     * @return bool
-     */
-    public function hasItem($key)
+    public function hasItem(mixed $key): bool
     {
         return false;
     }
 
-    /**
-     * {@inheritdoc}
-     *
-     * @return bool
-     */
-    public function clear(string $prefix = '')
+    public function clear(string $prefix = ''): bool
     {
         return true;
     }
 
-    /**
-     * {@inheritdoc}
-     *
-     * @return bool
-     */
-    public function deleteItem($key)
+    public function deleteItem(mixed $key): bool
     {
         return true;
     }
 
-    /**
-     * {@inheritdoc}
-     *
-     * @return bool
-     */
-    public function deleteItems(array $keys)
+    public function deleteItems(array $keys): bool
     {
         return true;
     }
 
-    /**
-     * {@inheritdoc}
-     *
-     * @return bool
-     */
-    public function save(CacheItemInterface $item)
+    public function save(CacheItemInterface $item): bool
     {
         return true;
     }
 
-    /**
-     * {@inheritdoc}
-     *
-     * @return bool
-     */
-    public function saveDeferred(CacheItemInterface $item)
+    public function saveDeferred(CacheItemInterface $item): bool
     {
         return true;
     }
 
-    /**
-     * {@inheritdoc}
-     *
-     * @return bool
-     */
-    public function commit()
+    public function commit(): bool
     {
         return true;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function delete(string $key): bool
     {
         return $this->deleteItem($key);
+    }
+
+    public function withSubNamespace(string $namespace): static
+    {
+        return clone $this;
     }
 
     private function generateItems(array $keys): \Generator
@@ -148,5 +108,10 @@ class NullAdapter implements AdapterInterface, CacheInterface
         foreach ($keys as $key) {
             yield $key => $f($key);
         }
+    }
+
+    public function invalidateTags(array $tags): bool
+    {
+        return true;
     }
 }

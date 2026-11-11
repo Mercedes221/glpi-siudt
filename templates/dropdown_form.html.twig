@@ -5,8 +5,7 @@
  #
  # http://glpi-project.org
  #
- # @copyright 2015-2025 Teclib' and contributors.
- # @copyright 2003-2014 by the INDEPNET Development Team.
+ # @copyright 2015-2026 Teclib' and contributors.
  # @licence   https://www.gnu.org/licenses/gpl-3.0.html
  #
  # ---------------------------------------------------------------------
@@ -33,6 +32,9 @@
 
 {% import 'components/form/fields_macros.html.twig' as fields %}
 
+{% set is_device_model  = is_device_model ?? false %}
+{% set has_device_model = has_device_model ?? false %}
+
 <div class="asset">
     {{ include('components/form/header.html.twig') }}
     {% set rand          = random() %}
@@ -40,30 +42,41 @@
     {% set params        = params ?? [] %}
     {% set target        = params['target'] ?? item.getFormURL() %}
     {% set withtemplate  = params['withtemplate'] ?? '' %}
+    {% set item_has_pictures = item.hasItemtypeOrModelPictures() %}
 
-    <div class="card-body row">
+    {% if item_has_pictures and not is_device_model and has_device_model %}
+        <div class="card-body d-flex flex-wrap">
+            <div class="col-12 col-xxl-{{ item_has_pictures ? '9' : '12' }} flex-column">
+                <div class="d-flex flex-row flex-wrap flex-xl-nowrap">
+                    <div class="row flex-row align-items-start flex-grow-1">
+                        <div class="row flex-row">
+    {% else %}
+        <div class="card-body row">
+    {% endif %}
+
+    {% block form_fields %}
         {% set picture_fields = ['picture_front', 'picture_rear', 'pictures'] %}
         {% set has_picture_field = false %}
 
         {# Show fields common to all dropdowns #}
-        {{ fields.autoNameField(
-            item.isField('designation') ? 'designation' : 'name',
-            item,
-            __('Name'),
-            withtemplate
-        ) }}
+                {{ fields.autoNameField(
+                    item.isField('designation') ? 'designation' : 'name',
+                    item,
+                    __('Name'),
+                    withtemplate
+                ) }}
 
-        {% if item.isField('comment') %}
-            {{ fields.textareaField(
-                'comment',
-                item.fields['comment'],
-                _n('Comment', 'Comments', get_plural_number()),
-            ) }}
-        {% endif %}
+                {% if item.isField('comment') %}
+                    {{ fields.textareaField(
+                        'comment',
+                        item.fields['comment'],
+                        _n('Comment', 'Comments', get_plural_number()),
+                    ) }}
+                {% endif %}
 
         {# Dynamically show additional fields unique to certain dropdowns #}
         {% for field in additional_fields %}
-            {% set fields_params = field['form_params'] ?? base_fields_params %}
+            {% set fields_params = base_fields_params|merge(field['form_params'] ?? []) %}
             {% set type = field['type']|default('') %}
             {% set show_field = true %}
             {% if field['name'] == 'entities_id' and (type != 'parent' or item.fields['id'] == 0) %}
@@ -72,6 +85,9 @@
             {% endif %}
             {% if field['name'] in picture_fields %}
                 {% set show_field = false %}
+                {% if is_device_model %}
+                    {% set has_picture_field = true %}
+                {% endif %}
             {% endif %}
             {% if show_field %}
 
@@ -114,6 +130,13 @@
                     {{ fields.autoNameField(field['name'], item, field['label'], withtemplate, fields_params) }}
                 {% elseif type == 'textarea' %}
                     {{ fields.textareaField(field['name'], item.fields[field['name']], field['label'], fields_params) }}
+                {% elseif type == 'illustration' %}
+                        {% set _default_illustration = field['default_illustration'] ?? constant('Glpi\\UI\\IllustrationManager::DEFAULT_ILLUSTRATION') %}
+                        {{ fields.illustrationField(
+                            field['name'],
+                            item.fields[field['name']]|default(_default_illustration),
+                            field['label'],
+                        ) }}
                 {% elseif type == 'integer' %}
                     {% set fields_params = {
                         'value': item.fields[field['name']]
@@ -198,45 +221,58 @@
                     {% endset %}
                     {{ fields.field(field['name'], field_value, field['label'], fields_params) }}
                 {% endif %}
-            {% elseif field['name'] in picture_fields %}
-                {% set has_picture_field = true %}
             {% endif %}
         {% endfor %}
 
-        {% if has_picture_field %}
-            {{ fields.largeTitle(_n('Picture', 'Pictures', get_plural_number()), 'fas fa-image') }}
-        {% endif %}
-        {# Show pictures at the bottom of the form #}
-        {% for field in additional_fields %}
-            {% set type = field['type']|default('') %}
-            {% if field['name'] in picture_fields %}
-                {% if type == 'picture' %}
-                    {% if field['name'] == 'picture_front' %}
-                        {{ fields.smallTitle(__('Rack pictures'), 'Rack'|itemtype_icon) }}
-                    {% endif %}
-                    {% if item.fields[field['name']] is not empty %}
-                        {{ fields.imageField(field['name'], item.fields[field['name']]|picture_url, field['label'], base_fields_params|merge({
-                        'clearable': item.canUpdateItem()
-                    })) }}
-                    {% else %}
-                        {{ fields.fileField(field['name'], null, field['label'], {
-                        'onlyimages': true
-                    }) }}
-                    {% endif %}
-                {% elseif type == 'picture_gallery' %}
-                    {{ fields.smallTitle(__('Other pictures'), 'fas fa-images') }}
-                    {% set pictures = call('importArrayFromDB', [item.fields[field['name']]]) %}
-                    {% set picture_urls = [] %}
-                    {% for picture in pictures %}
-                        {% set picture_urls = picture_urls|merge([picture|picture_url]) %}
-                    {% endfor %}
-                    {{ fields.imageGalleryField(field['name'], picture_urls, '', base_fields_params|merge({
-                        'clearable': item.canUpdateItem(),
-                        'no_label': true
-                    })) }}
-                {% endif %}
+        {# if have pictures from it's model and current object not a model #}
+        {% if item_has_pictures and not is_device_model and has_device_model %}
+                        </div> {# .row #}
+                    </div> {# .row #}
+                </div> {# .flex-row #}
+            </div>
+            <div class="col-12 col-xxl-3 flex-column">
+                <div class="flex-row asset-pictures">
+                {{ include('components/form/pictures.html.twig', {'gallery_type': ''}) }}
+                </div>
+            </div>
+        {% else %}
+            {# Show pictures at the bottom of the form for current object if needed -> ie DropdownModel#}
+            {% if is_device_model or has_picture_field %}
+                {{ fields.largeTitle(_n('Picture', 'Pictures', get_plural_number()), 'ti ti-photo') }}
             {% endif %}
-        {% endfor %}
-    </div>
+            {% for field in additional_fields %}
+                {% set type = field['type']|default('') %}
+                {% if field['name'] in picture_fields %}
+                    {% if type == 'picture' %}
+                        {% if field['name'] == 'picture_front' and not is_device_model %}
+                            {{ fields.smallTitle(__('Rack pictures'), 'Rack'|itemtype_icon) }}
+                        {% endif %}
+                        {% if item.fields[field['name']] is not empty %}
+                            {{ fields.imageField(field['name'], item.fields[field['name']]|picture_url, field['label'], base_fields_params|merge({
+                            'clearable': item.canUpdateItem()
+                        })) }}
+                        {% else %}
+                            {{ fields.fileField(field['name'], null, field['label'], {
+                            'onlyimages': true
+                        }) }}
+                        {% endif %}
+                    {% elseif type == 'picture_gallery' %}
+                        {{ fields.smallTitle(__('Other pictures'), 'ti ti-library-photo') }}
+                        {% set pictures = call('importArrayFromDB', [item.fields[field['name']]]) %}
+                        {% set picture_urls = [] %}
+                        {% for picture in pictures %}
+                            {% set picture_urls = picture_urls|merge([picture|picture_url]) %}
+                        {% endfor %}
+                        {{ fields.imageGalleryField(field['name'], picture_urls, '', base_fields_params|merge({
+                            'clearable': item.canUpdateItem(),
+                            'no_label': true
+                        })) }}
+                    {% endif %}
+                {% endif %}
+            {% endfor %}
+            </div>
+        {% endif %}
+
+    {% endblock %}
     {{ include('components/form/buttons.html.twig') }}
 </div>

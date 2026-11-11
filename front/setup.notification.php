@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,20 +33,19 @@
  * ---------------------------------------------------------------------
  */
 
-/** @var array $CFG_GLPI */
+require_once(__DIR__ . '/_check_webserver_config.php');
+
 global $CFG_GLPI;
 
-include('../inc/includes.php');
-
 Session::checkSeveralRightsOr(['notification' => READ,
-    'config'       => UPDATE
+    'config'       => UPDATE,
 ]);
 
-Html::header(_n('Notification', 'Notifications', Session::getPluralNumber()), $_SERVER['PHP_SELF'], "config", "notification");
+Html::header(_n('Notification', 'Notifications', Session::getPluralNumber()), '', "config", "notification");
 
 if (
-    !Session::haveRight("config", READ)
-    && Session::haveRight("notification", READ)
+    !Session::haveRight(Config::$rightname, READ)
+    && Session::haveRight(Notification::$rightname, READ)
 ) {
     Html::redirect($CFG_GLPI["root_doc"] . '/front/notification.php');
 }

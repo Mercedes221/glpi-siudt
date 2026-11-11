@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,23 +33,43 @@
  * ---------------------------------------------------------------------
  */
 
+require_once(__DIR__ . '/_check_webserver_config.php');
+
 use Glpi\Event;
+use Glpi\Exception\Http\BadRequestHttpException;
+use Glpi\Exception\ItemLinkException;
 
-include('../inc/includes.php');
+Session::checkRight(Software::$rightname, UPDATE);
 
-Session::checkRight("software", UPDATE);
-$isl = new Item_SoftwareLicense();
+if (
+    isset($_POST["add"])
+    && (!isset($_POST['itemtype']) || !isset($_POST['items_id']) || $_POST['items_id'] <= 0)
+) {
+    $message = sprintf(
+        __('Mandatory fields are not filled. Please correct: %s'),
+        _n('Item', 'Items', 1)
+    );
+    Session::addMessageAfterRedirect(htmlescape($message), false, ERROR);
+    Html::back();
+}
+
+if (isset($_POST['itemtype']) && $_POST['itemtype'] == 'User') {
+    $isl = new SoftwareLicense_User();
+    // convert form data to match the SoftwareLicense_User case
+    $_POST['users_id'] = $_POST['items_id'];
+    unset($_POST['itemtype'], $_POST['items_id']);
+} else {
+    $isl = new Item_SoftwareLicense();
+}
 
 if (isset($_POST["add"])) {
-    if (!isset($_POST['itemtype']) || !isset($_POST['items_id']) || $_POST['items_id'] <= 0) {
-        $message = sprintf(
-            __('Mandatory fields are not filled. Please correct: %s'),
-            _n('Item', 'Items', 1)
-        );
-        Session::addMessageAfterRedirect($message, false, ERROR);
+    try {
+        $isl->check(-1, CREATE, $_POST);
+    } catch (ItemLinkException $e) {
         Html::back();
     }
-    if ($_POST['softwarelicenses_id'] > 0) {
+
+    if (isset($_POST['softwarelicenses_id']) && $_POST['softwarelicenses_id'] > 0) {
         if ($isl->add($_POST)) {
             Event::log(
                 $_POST['softwarelicenses_id'],
@@ -63,4 +83,5 @@ if (isset($_POST["add"])) {
     }
     Html::back();
 }
-Html::displayErrorAndDie('Lost');
+
+throw new BadRequestHttpException();

@@ -32,7 +32,7 @@ Complete documentation and more examples are available in [the wiki](https://git
 
 ## Requirements
 
-- PHP >= 5.6
+- PHP >= 7.3
 - [intl extension](http://php.net/manual/en/book.intl.php) is recommended for `humanReadable()` but not strictly required
 
 ## Installation
@@ -76,7 +76,7 @@ you `lno1wkst`). I tried to comment and explain as much of the algorithm as poss
 in this PHP port, so feel free to check the code if you're interested.
 
 The lib differs from the python version in various aspects, notably in the 
-respect of the RFC. This version is a bit strictier and will not accept many
+respect of the RFC. This version is a bit stricter and will not accept many
 non-compliant combinations of rule parts, that the python version otherwise accepts.
 There are also some additional features in this version.
 

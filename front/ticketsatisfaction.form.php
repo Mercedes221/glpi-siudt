@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,11 +33,10 @@
  * ---------------------------------------------------------------------
  */
 
+require_once(__DIR__ . '/_check_webserver_config.php');
+
 use Glpi\Event;
-
-include('../inc/includes.php');
-
-Session::checkLoginUser();
+use Glpi\Exception\Http\BadRequestHttpException;
 
 $inquest = new TicketSatisfaction();
 
@@ -46,7 +45,7 @@ if (isset($_POST["update"])) {
     $inquest->update($_POST);
 
     Event::log(
-        $inquest->getField('tickets_id'),
+        $inquest->fields['tickets_id'],
         "ticket",
         4,
         "tracking",
@@ -56,4 +55,4 @@ if (isset($_POST["update"])) {
     Html::back();
 }
 
-Html::displayErrorAndDie('Lost');
+throw new BadRequestHttpException();

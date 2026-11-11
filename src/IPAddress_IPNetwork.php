@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,6 +33,8 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\DBAL\QueryExpression;
+
 /**
  * Class IPAddress_IPNetwork : Connection between IPAddress and IPNetwork
  *
@@ -40,47 +42,48 @@
  **/
 class IPAddress_IPNetwork extends CommonDBRelation
 {
-   // From CommonDBRelation
-    public static $itemtype_1 = 'IPAddress';
-    public static $items_id_1 = 'ipaddresses_id';
+    // From CommonDBRelation
+    public static ?string $itemtype_1 = IPAddress::class;
+    public static ?string $items_id_1 = 'ipaddresses_id';
 
-    public static $itemtype_2 = 'IPNetwork';
-    public static $items_id_2 = 'ipnetworks_id';
+    public static ?string $itemtype_2 = IPNetwork::class;
+    public static ?string $items_id_2 = 'ipnetworks_id';
 
 
     /**
      * Update IPNetwork's dependency
      *
      * @param $network IPNetwork object
-     **/
+     *
+     * @return void
+     */
     public static function linkIPAddressFromIPNetwork(IPNetwork $network)
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         $linkObject    = new self();
         $linkTable     = $linkObject->getTable();
         $ipnetworks_id = $network->getID();
 
-       // First, remove all links of the current Network
+        // First, remove all links of the current Network
         $iterator = $DB->request([
             'SELECT' => 'id',
             'FROM'   => $linkTable,
-            'WHERE'  => ['ipnetworks_id' => $ipnetworks_id]
+            'WHERE'  => ['ipnetworks_id' => $ipnetworks_id],
         ]);
         foreach ($iterator as $link) {
             $linkObject->delete(['id' => $link['id']]);
         }
 
-       // Then, look each IP address contained inside current Network
+        // Then, look each IP address contained inside current Network
         $iterator = $DB->request([
             'SELECT' => [
-                new \QueryExpression($DB->quoteValue($ipnetworks_id) . ' AS ' . $DB->quoteName('ipnetworks_id')),
-                'id AS ipaddresses_id'
+                new QueryExpression($DB->quoteValue($ipnetworks_id) . ' AS ' . $DB->quoteName('ipnetworks_id')),
+                'id AS ipaddresses_id',
             ],
             'FROM'   => 'glpi_ipaddresses',
             'WHERE'  => $network->getCriteriaForMatchingElement('glpi_ipaddresses', 'binary', 'version'),
-            'GROUP'  => 'id'
+            'GROUP'  => 'id',
         ]);
         foreach ($iterator as $link) {
             $linkObject->add($link);
@@ -90,7 +93,9 @@ class IPAddress_IPNetwork extends CommonDBRelation
 
     /**
      * @param $ipaddress IPAddress object
-     **/
+     *
+     * @return void
+     */
     public static function addIPAddress(IPAddress $ipaddress)
     {
 
@@ -100,7 +105,7 @@ class IPAddress_IPNetwork extends CommonDBRelation
         $entity         = $ipaddress->getEntityID();
         $ipnetworks_ids = IPNetwork::searchNetworksContainingIP($ipaddress, $entity);
         if ($ipnetworks_ids !== false) {
-           // Beware that invalid IPaddresses don't have any valid address !
+            // Beware that invalid IPaddresses don't have any valid address !
             $entity = $ipaddress->getEntityID();
             foreach (IPNetwork::searchNetworksContainingIP($ipaddress, $entity) as $ipnetworks_id) {
                 $input['ipnetworks_id'] = $ipnetworks_id;

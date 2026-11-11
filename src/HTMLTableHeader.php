@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -35,23 +35,24 @@
 
 /**
  * @since 0.84
- **/
+ *
+ */
 abstract class HTMLTableHeader extends HTMLTableEntity
 {
-    private $name;
-    private $father;
-    private $itemtypes   = [];
-    private $colSpan     = 1;
-    private $numberCells = 0;
-
+    private string $name;
+    private ?HTMLTableHeader $father = null;
+    /** @var array<class-string<CommonDBTM>, string> */
+    private array $itemtypes   = [];
+    private int $colSpan     = 1;
+    private int $numberCells = 0;
+    public int $numberOfSubHeaders;
 
     /**
      * get the table of the header (for a subheader, it is the table of its super header)
      *
-     * @return HTMLTableMain the table owning the current header
+     * @return HTMLTableBase the table owning the current header
      **/
     abstract protected function getTable();
-
 
     /**
      * get its name and subname : usefull for instance to create an index for arrays
@@ -63,24 +64,23 @@ abstract class HTMLTableHeader extends HTMLTableEntity
      **/
     abstract public function getHeaderAndSubHeaderName(&$header_name, &$subheader_name);
 
-
     /**
      * check to see if it is a super header or not
      *
-     * @return boolean
-     **/
+     * @return bool
+     */
     abstract public function isSuperHeader();
 
-
     /**
-     * @param $itemtype
-     * @param $title         (default '')
-     **/
+     * @param class-string<CommonDBTM> $itemtype
+     * @param string $title         (default '')
+     *
+     * @return void
+     */
     public function setItemType($itemtype, $title = '')
     {
         $this->itemtypes[$itemtype] = $title;
     }
-
 
     /**
      * @param string               $name    the name of the header
@@ -89,78 +89,91 @@ abstract class HTMLTableHeader extends HTMLTableEntity
      */
     public function __construct($name, $content, ?HTMLTableHeader $father = null)
     {
-
         parent::__construct($content);
 
         $this->name           = $name;
         $this->father         = $father;
     }
 
-
     /**
-     * @param CommonDBTM $item
-     **/
+     * @param ?CommonDBTM $item
+     *
+     * @return void
+     *
+     * @throws Exception
+     */
     public function checkItemType(?CommonDBTM $item = null)
     {
-
         if (($item === null) && (count($this->itemtypes) > 0)) {
-            throw new \Exception('Implementation error: header requires an item');
+            throw new Exception('Implementation error: header requires an item');
         }
         if ($item !== null) {
-            if (!isset($this->itemtypes[$item->getType()])) {
-                throw new \Exception('Implementation error: type mismatch between header and cell');
+            if (!isset($this->itemtypes[$item::class])) {
+                throw new Exception('Implementation error: type mismatch between header and cell');
             }
-            $this->getTable()->addItemType($item->getType(), $this->itemtypes[$item->getType()]);
+            $table = $this->getTable();
+            if ($table instanceof HTMLTableMain) {
+                $table->addItemType($item::class, $this->itemtypes[$item::class]);
+            }
         }
     }
 
-
+    /**
+     * @return string
+     */
     public function getName()
     {
         return $this->name;
     }
 
-
     /**
-     * @param integer $colSpan
-     **/
+     * @param int $colSpan
+     *
+     * @return void
+     */
     public function setColSpan($colSpan)
     {
         $this->colSpan = $colSpan;
     }
 
-
+    /**
+     * @return void
+     */
     public function addCell()
     {
         $this->numberCells++;
     }
 
-
+    /**
+     * @return bool
+     */
     public function hasToDisplay()
     {
         return ($this->numberCells > 0);
     }
 
-
+    /**
+     * @return int
+     */
     public function getColSpan()
     {
         return $this->colSpan;
     }
 
-
     /**
-     * @param boolean $with_content do we display the content ?
-     * @param boolean $main_header  main header (from table) or secondary (from group) ? (true by default)
-     **/
+     * @param bool $with_content do we display the content ?
+     * @param bool $main_header  main header (from table) or secondary (from group) ? (true by default)
+     *
+     * @return void
+     */
     public function displayTableHeader($with_content, $main_header = true)
     {
-
         if ($main_header) {
             echo "<th";
         } else {
             echo "<td class='subheader'";
         }
-        echo " colspan='" . $this->colSpan . "'>";
+        echo " colspan='" . ((int) $this->colSpan) . "'>";
         if ($with_content) {
             $this->displayContent();
         } else {
@@ -173,7 +186,9 @@ abstract class HTMLTableHeader extends HTMLTableEntity
         }
     }
 
-
+    /**
+     * @return ?HTMLTableHeader
+     */
     public function getFather()
     {
         return $this->father;

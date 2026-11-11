@@ -5,8 +5,7 @@
  #
  # http://glpi-project.org
  #
- # @copyright 2015-2025 Teclib' and contributors.
- # @copyright 2003-2014 by the INDEPNET Development Team.
+ # @copyright 2015-2026 Teclib' and contributors.
  # @licence   https://www.gnu.org/licenses/gpl-3.0.html
  #
  # ---------------------------------------------------------------------
@@ -34,16 +33,7 @@
 {% extends "pages/setup/general/base_form.html.twig" %}
 {% import 'components/form/fields_macros.html.twig' as fields %}
 
-
-
 {% set field_options = {
-    'field_class': 'col-12 col-xxl-6 col-sm-6',
-    'label_class': 'col-xxl-8',
-    'input_class': 'col-xxl-4',
-} %}
-
-{% set field_options = {
-    'field_class': 'col-12 col-xxl-6 col-sm-6',
     'full_width': true,
 } %}
 
@@ -93,6 +83,7 @@
         inline_field_options|merge({
             'min': 1,
             'max': 4,
+            'required': true,
         })
     ) }}
 
@@ -103,40 +94,19 @@
         field_options
     ) }}
 
-</div>
-
-<div class="hr-text">
-    <i class="ti ti-language"></i>
-    <span>{{ __('Translations') }}</span>
-</div>
-
-<div class="row ps-4">
-
     {{ fields.checkboxField(
-        'translate_dropdowns',
-        config['translate_dropdowns'],
-        __("Translation of dropdowns"),
-        field_options
-    ) }}
-
-    {{ fields.checkboxField(
-        'translate_kb',
-        config['translate_kb'],
-        __("Knowledge base translation"),
-        field_options
-    ) }}
-
-    {{ fields.checkboxField(
-        'translate_reminders',
-        config['translate_reminders'],
-        __("Translation of reminders"),
-        field_options
+        'allow_unauthenticated_uploads',
+        config['allow_unauthenticated_uploads'] ?? false,
+        __('Allow unauthenticated uploads'),
+        field_options|merge({
+            helper: __("Do not use this option if your GLPI is reachable from the internet. Use at your own risk."),
+        })
     ) }}
 
 </div>
 
 <div class="hr-text">
-    <i class="ti ti-list"></i>
+    <i class="ti ti-list" aria-hidden="true"></i>
     <span>{{ __('Dynamic display') }}</span>
 </div>
 
@@ -149,6 +119,7 @@
         inline_field_options|merge({
             'min': 1,
             'max': 200,
+            'required': true,
         })
     ) }}
 
@@ -161,12 +132,13 @@
             'max': 200,
             'toadd': {'0': __('Never')},
             'width': 'auto',
+            'required': true,
         })
     ) }}
 </div>
 
 <div class="hr-text">
-    <i class="ti ti-search"></i>
+    <i class="ti ti-search" aria-hidden="true"></i>
     <span>{{ __('Search engine') }}</span>
 </div>
 
@@ -216,6 +188,7 @@
             'min': 5,
             'max': 200,
             'step': 5,
+            'required': true,
         })
     ) }}
 
@@ -225,6 +198,7 @@
         __('Default characters limit (summary text boxes)'),
         inline_field_options|merge({
             'step': 50,
+            'required': true,
         })
     ) }}
 
@@ -236,13 +210,14 @@
             'min': 20,
             'max': 80,
             'step': 5,
+            'required': true,
         })
     ) }}
 
 </div>
 
 <div class="hr-text">
-    <i class="ti ti-lock"></i>
+    <i class="ti ti-lock" aria-hidden="true"></i>
     <span>{{ __('Item locks') }}</span>
 </div>
 
@@ -306,7 +281,45 @@
 </div>
 
 <div class="hr-text">
-    <i class="ti ti-login"></i>
+    <i class="ti ti-layout-kanban" aria-hidden="true"></i>
+    <span>{{ __('Project Task State') }}</span>
+</div>
+
+<div class="row ps-4">
+
+    {{ fields.dropdownField(
+        'ProjectState',
+        'projecttask_unstarted_states_id',
+        config['projecttask_unstarted_states_id']|default('0'),
+        __('Status of unstarted tasks'),
+        inline_field_options|merge({
+            'width': 'auto',
+        })
+    ) }}
+
+    {{ fields.dropdownField(
+        'ProjectState',
+        'projecttask_inprogress_states_id',
+        config['projecttask_inprogress_states_id']|default('0'),
+        __('Status of tasks in progress'),
+        inline_field_options|merge({
+            'width': 'auto',
+        })
+    ) }}
+
+    {{ fields.dropdownField(
+        'ProjectState',
+        'projecttask_completed_states_id',
+        config['projecttask_completed_states_id']|default('0'),
+        __('Status of tasks done'),
+        inline_field_options|merge({
+            'width': 'auto',
+        })
+    ) }}
+</div>
+
+<div class="hr-text">
+    <i class="ti ti-login" aria-hidden="true"></i>
     <span>{{ __('Auto Login') }}</span>
 </div>
 

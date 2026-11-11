@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -38,9 +38,15 @@
  */
 class ChangeValidation extends CommonITILValidation
 {
-   // From CommonDBChild
-    public static $itemtype           = 'Change';
-    public static $items_id           = 'changes_id';
+    // From CommonDBChild
+    public static string $itemtype = Change::class;
+    public static string $items_id           = 'changes_id';
 
-    public static $rightname                 = 'changevalidation';
+    public static string $rightname                 = 'changevalidation';
+
+
+    public static function getTypeName($nb = 0)
+    {
+        return _n('Change approval', 'Change approvals', $nb);
+    }
 }

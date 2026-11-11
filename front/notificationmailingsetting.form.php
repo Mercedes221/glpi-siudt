@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,23 +33,16 @@
  * ---------------------------------------------------------------------
  */
 
-use Glpi\Application\ErrorHandler;
+require_once(__DIR__ . '/_check_webserver_config.php');
+
+use Glpi\Error\ErrorHandler;
 use Glpi\Event;
+use Glpi\Http\RedirectResponse;
 use Glpi\Mail\SMTP\OauthConfig;
-use Glpi\Toolbox\Sanitizer;
 
-include('../inc/includes.php');
+Session::checkRight(Config::$rightname, UPDATE);
 
-Session::checkRight("config", UPDATE);
-
-if (isset($_POST["test_smtp_send"])) {
-    NotificationMailing::testNotification();
-    Html::back();
-} else if (isset($_POST["update"])) {
-    if (array_key_exists('smtp_passwd', $_POST)) {
-        // Password must not be altered, it will be encrypted and never displayed, so sanitize is not necessary.
-        $_POST['smtp_passwd'] = Sanitizer::unsanitize($_POST['smtp_passwd']);
-    }
+if (isset($_POST["update"])) {
     $config = new Config();
     $config->update($_POST);
     Event::log(0, "system", 3, "setup", sprintf(
@@ -66,11 +59,11 @@ if (isset($_POST["test_smtp_send"])) {
             try {
                 $auth_url = $provider->getAuthorizationUrl();
                 $_SESSION['smtp_oauth2_state'] = $provider->getState();
-                Html::redirect($auth_url);
-            } catch (\Throwable $e) {
-                ErrorHandler::getInstance()->handleException($e, true);
+                return new RedirectResponse($auth_url);
+            } catch (Throwable $e) {
+                ErrorHandler::logCaughtException($e);
                 Session::addMessageAfterRedirect(
-                    sprintf(_x('oauth', 'Authorization failed with error: %s'), $e->getMessage()),
+                    htmlescape(sprintf(_x('oauth', 'Authorization failed with error: %s'), $e->getMessage())),
                     false,
                     ERROR
                 );
@@ -82,6 +75,6 @@ if (isset($_POST["test_smtp_send"])) {
     Html::back();
 }
 
-$menus = ["config", "notification", "config"];
+$menus = ["config", "notification", NotificationMailingSetting::class];
 $config_id = Config::getConfigIDForContext('core');
 NotificationMailingSetting::displayFullPageForItem($config_id, $menus);

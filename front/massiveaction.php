@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,31 +33,59 @@
  * ---------------------------------------------------------------------
  */
 
-/** @var array $CFG_GLPI */
+/**
+ * Used for massive action processing
+ */
+
+use Glpi\Exception\RedirectException;
+use Glpi\Security\ReAuth\ReAuthManager;
+
+require_once(__DIR__ . '/_check_webserver_config.php');
+
 global $CFG_GLPI;
-
-include('../inc/includes.php');
-
-Session::checkLoginUser();
 
 header("Content-Type: text/html; charset=UTF-8");
 Html::header_nocache();
 
 try {
     $ma = new MassiveAction($_POST, $_GET, 'process');
-} catch (\Throwable $e) {
-    Html::popHeader(__('Bulk modification error'), $_SERVER['PHP_SELF']);
+    $item_types = get_item_types_from_post();
 
-    echo "<div class='center'><img src='" . $CFG_GLPI["root_doc"] . "/pics/warning.png' alt='" .
-      __s('Warning') . "'><br><br>";
-    echo "<span class='b'>" . $e->getMessage() . "</span><br>";
+    $reauth_manager = ReAuthManager::getInstance();
+    if ($reauth_manager->atLeastOneItemTypesRequiresReauthentication($item_types)) {
+        // First pass (reauth needed): throws RedirectException.
+        $reauth_manager->checkReAuthenticationOrRedirect();
+
+        // Reauth is valid. Whether we are back from the reauth form (the ReAuth
+        // flow restores the calling page as the referer) or still within the
+        // active reauth window (real HTTP Referer = calling page), getBackUrl()
+        // returns the calling page.
+        $back_url = Html::getBackUrl();
+        if ($back_url) {
+            $ma->setRedirect($back_url);
+        }
+    }
+}
+// process redirect exceptions
+catch (RedirectException $e) {
+    throw $e;
+} catch (Throwable $e) {
+    Html::popHeader(__('Bulk modification error'));
+
+    echo "<div class='center'><img src='" . $CFG_GLPI["root_doc"] . "/pics/warning.png' alt='"
+      . __s('Warning') . "'><br><br>";
+    echo "<span class='b'>" . htmlescape($e->getMessage()) . "</span><br>";
     Html::displayBackLink();
     echo "</div>";
 
     Html::popFooter();
-    exit();
+    return;
 }
-Html::popHeader(__('Bulk modification'), $_SERVER['PHP_SELF']);
+Html::includeHeader(__('Bulk modification'));
+echo '<body><div id="page">';
+$ma->displayProgressBar();
+echo '</div></body></html>';
+flush(); // force displaying the output
 
 $results   = $ma->process();
 
@@ -68,26 +96,26 @@ $nbnoright  = $results['noright'];
 
 $msg_type = INFO;
 if ($nbnoaction > 0 && $nbok === 0 && $nbko === 0 && $nbnoright === 0) {
-    $message = __('Operation was done but no action was required');
-} else if ($nbok == 0) {
-    $message = __('Failed operation');
+    $message = __s('Operation was done but no action was required');
+} elseif ($nbok == 0) {
+    $message = __s('Failed operation');
     $msg_type = ERROR;
-} else if ($nbnoright || $nbko) {
-    $message = __('Operation performed partially successful');
+} elseif ($nbnoright || $nbko) {
+    $message = __s('Operation performed partially successful');
     $msg_type = WARNING;
 } else {
-    $message = __('Operation successful');
+    $message = __s('Operation successful');
     if ($nbnoaction > 0) {
-        $message .= "<br>" . sprintf(__('(%1$d items required no action)'), $nbnoaction);
+        $message .= "<br>" . htmlescape(sprintf(__('(%1$d items required no action)'), $nbnoaction));
     }
 }
 if ($nbnoright || $nbko) {
-   //TRANS: %$1d and %$2d are numbers
-    $message .= "<br>" . sprintf(
+    //TRANS: %$1d and %$2d are numbers
+    $message .= "<br>" . htmlescape(sprintf(
         __('(%1$d authorizations problems, %2$d failures)'),
         $nbnoright,
         $nbko
-    );
+    ));
 }
 Session::addMessageAfterRedirect($message, false, $msg_type);
 if (isset($results['messages']) && is_array($results['messages']) && count($results['messages'])) {
@@ -95,6 +123,21 @@ if (isset($results['messages']) && is_array($results['messages']) && count($resu
         Session::addMessageAfterRedirect($message, false, ERROR);
     }
 }
+
 Html::redirect($results['redirect']);
 
-Html::popFooter();
+/**
+ * Returns the item types from POST data, for re-authentication checks.
+ *
+ * @return array<class-string<CommonGLPI>>
+ */
+function get_item_types_from_post(): array
+{
+    /** @var array<class-string<CommonGLPI>> $items */
+    $items = isset($_POST['items']) ? array_keys($_POST['items']) : [];
+    // ensure item types are glpi class names - phpstan complains "will always evaluate to true"
+    // but this filtering is required for security -> forbiddynamicinstantiationrule
+    $items = array_filter($items, fn($item) => is_a($item, CommonGLPI::class, true));
+
+    return array_values($items);
+}

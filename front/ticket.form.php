@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,18 +33,15 @@
  * ---------------------------------------------------------------------
  */
 
-use Glpi\Event;
-use Glpi\Toolbox\Sanitizer;
+require_once(__DIR__ . '/_check_webserver_config.php');
 
-/**
- * @var array $CFG_GLPI
- * @var \DBmysql $DB
- */
+use Glpi\Event;
+use Glpi\Exception\Http\AccessDeniedHttpException;
+
+use function Safe\json_decode;
+
 global $CFG_GLPI, $DB;
 
-include('../inc/includes.php');
-
-Session::checkLoginUser();
 $track = new Ticket();
 
 if (!isset($_GET['id'])) {
@@ -54,11 +51,11 @@ if (!isset($_GET['id'])) {
 $date_fields = [
     'date',
     'due_date',
-    'time_to_own'
+    'time_to_own',
 ];
 
 foreach ($date_fields as $date_field) {
-   //handle not clean dates...
+    //handle not clean dates...
     if (
         isset($_POST["_$date_field"])
         && isset($_POST[$date_field])
@@ -69,13 +66,17 @@ foreach ($date_fields as $date_field) {
     }
 }
 
-if (isset($_UPOST['_actors'])) {
-    $_POST['_actors'] = Sanitizer::sanitize(json_decode($_UPOST['_actors'], true));
+// form submitted (add & update)
+// as _actors virtual field stores json, bypass automatic escaping
+if (isset($_POST['_actors'])) {
+    $_POST['_actors'] = json_decode($_POST['_actors'], true);
     $_REQUEST['_actors'] = $_POST['_actors'];
 }
 
 if (isset($_POST["add"])) {
+    // form submitted (add)
     $track->check(-1, CREATE, $_POST);
+    $_POST = $track->enforceReadonlyFields($_POST, true);
 
     if ($track->add($_POST)) {
         if ($_SESSION['glpibackcreated']) {
@@ -83,23 +84,27 @@ if (isset($_POST["add"])) {
         }
     }
     Html::back();
-} else if (isset($_POST['update'])) {
+} elseif (isset($_POST['update'])) {
+    // form submitted (update)
     if (!$track::canUpdate()) {
-        Html::displayRightError();
+        throw new AccessDeniedHttpException();
     }
+    // The global right is not enough, the ticket must also be accessible
+    $track->check($_POST['id'], READ);
+    $_POST = $track->enforceReadonlyFields($_POST);
     $track->update($_POST);
 
     if (isset($_POST['kb_linked_id'])) {
-       //if solution should be linked to selected KB entry
+        //if solution should be linked to selected KB entry
         $params = [
             'knowbaseitems_id' => $_POST['kb_linked_id'],
-            'itemtype'         => $track->getType(),
-            'items_id'         => $track->getID()
+            'itemtype'         => $track::class,
+            'items_id'         => $track->getID(),
         ];
-        $existing = $DB->request(
-            'glpi_knowbaseitems_items',
-            $params
-        );
+        $existing = $DB->request([
+            'FROM' => 'glpi_knowbaseitems_items',
+            'WHERE' => $params,
+        ]);
         if ($existing->numrows() == 0) {
             $kb_item_item = new KnowbaseItem_Item();
             $kb_item_item->add($params);
@@ -117,19 +122,21 @@ if (isset($_POST["add"])) {
 
     if ($track->can($_POST["id"], READ)) {
         $toadd = '';
-       // Copy solution to KB redirect to KB
+        // Copy solution to KB redirect to KB
         if (isset($_POST['_sol_to_kb']) && $_POST['_sol_to_kb']) {
             $toadd = "&_sol_to_kb=1";
         }
         Html::redirect(Ticket::getFormURLWithID($_POST["id"]) . $toadd);
     }
+
+    // in case user can update the ticket but not read it, redirect to the ticket list
     Session::addMessageAfterRedirect(
-        __('You have been redirected because you no longer have access to this ticket'),
+        __s('You have been redirected because you no longer have access to this ticket'),
         true,
         ERROR
     );
     Html::redirect($CFG_GLPI["root_doc"] . "/front/ticket.php");
-} else if (isset($_POST['delete'])) {
+} elseif (isset($_POST['delete'])) {
     $track->check($_POST['id'], DELETE);
     if ($track->delete($_POST)) {
         Event::log(
@@ -142,9 +149,9 @@ if (isset($_POST["add"])) {
         );
     }
     $track->redirectToList();
-} else if (isset($_POST['purge'])) {
+} elseif (isset($_POST['purge'])) {
     $track->check($_POST['id'], PURGE);
-    if ($track->delete($_POST, 1)) {
+    if ($track->delete($_POST, true)) {
         Event::log(
             $_POST["id"],
             "ticket",
@@ -155,7 +162,7 @@ if (isset($_POST["add"])) {
         );
     }
     $track->redirectToList();
-} else if (isset($_POST["restore"])) {
+} elseif (isset($_POST["restore"])) {
     $track->check($_POST['id'], DELETE);
     if ($track->restore($_POST)) {
         Event::log(
@@ -168,7 +175,7 @@ if (isset($_POST["add"])) {
         );
     }
     Html::back();
-} else if (isset($_POST['sla_delete'])) {
+} elseif (isset($_POST['sla_delete'])) {
     $track->check($_POST["id"], UPDATE);
 
     $track->deleteLevelAgreement("SLA", $_POST["id"], $_POST['type'], $_POST['delete_date']);
@@ -182,30 +189,16 @@ if (isset($_POST["add"])) {
     );
 
     Html::redirect(Ticket::getFormURLWithID($_POST["id"]));
-} else if (isset($_POST['ola_delete'])) {
-    $track->check($_POST["id"], UPDATE);
-
-    $track->deleteLevelAgreement("OLA", $_POST["id"], $_POST['type'], $_POST['delete_date']);
-    Event::log(
-        $_POST["id"],
-        "ticket",
-        4,
-        "tracking",
-        //TRANS: %s is the user login
-        sprintf(__('%s updates an item'), $_SESSION["glpiname"])
-    );
-
-    Html::redirect(Ticket::getFormURLWithID($_POST["id"]));
-} else if (isset($_POST['addme_as_actor'])) {
+} elseif (isset($_POST['addme_as_actor'])) {
     $id = (int) $_POST['id'];
     $track->check($id, READ);
-    $input = array_merge(Toolbox::addslashes_deep($track->fields), [
+    $input = array_merge($track->fields, [
         'id' => $id,
         '_itil_' . $_POST['actortype'] => [
             '_type' => "user",
             'users_id' => Session::getLoginUserID(),
             'use_notification' => 1,
-        ]
+        ],
     ]);
     $track->update($input);
     Event::log(
@@ -217,25 +210,27 @@ if (isset($_POST["add"])) {
         sprintf(__('%s adds an actor'), $_SESSION["glpiname"])
     );
     Html::redirect(Ticket::getFormURLWithID($id));
-} else if (isset($_POST['delete_document'])) {
-    $track->getFromDB((int)$_POST['tickets_id']);
+} elseif (isset($_POST['delete_document'])) {
+    $track->getFromDB((int) $_POST['tickets_id']);
     $doc = new Document();
-    $doc->getFromDB((int)$_POST['documents_id']);
+    $doc->getFromDB((int) $_POST['documents_id']);
     if ($doc->can($doc->getID(), UPDATE)) {
         $document_item = new Document_Item();
         $found_document_items = $document_item->find([
             $track->getAssociatedDocumentsCriteria(),
-            'documents_id' => $doc->getID()
+            'documents_id' => $doc->getID(),
         ]);
         foreach ($found_document_items as $item) {
-            $document_item->delete(Toolbox::addslashes_deep($item), true);
+            $document_item->delete($item, true);
         }
     }
     Html::back();
 }
 
-if (isset($_GET["id"]) && ($_GET["id"] > 0)) {
-    $available_options = ['load_kb_sol', '_openfollowup'];
+// show form when editing a ticket
+$id = (int) $_GET['id'];
+if ($id > 0) {
+    $available_options = ['_openfollowup'];
     $options = [];
 
     foreach ($available_options as $key) {
@@ -244,9 +239,15 @@ if (isset($_GET["id"]) && ($_GET["id"] > 0)) {
         }
     }
 
-    $url = KnowbaseItem::getFormURLWithParam($_GET) . '&_in_modal=1&item_itemtype=Ticket&item_items_id=' . $_GET['id'];
-    if (strpos($url, '_to_kb=') !== false) {
-        $options['after_display'] = Ajax::createIframeModalWindow(
+    $menus = [
+        'central'  => ['helpdesk', 'ticket'],
+        'helpdesk' => ["tickets", "ticket"],
+    ];
+    Ticket::displayFullPageForItem($_GET["id"], $menus, $options);
+
+    $url = KnowbaseItem::getFormURLWithParam($_GET) . '&_in_modal=1&item_itemtype=Ticket&item_items_id=' . $id;
+    if (str_contains($url, '_to_kb=')) {
+        echo Ajax::createIframeModalWindow(
             'savetokb',
             $url,
             [
@@ -257,16 +258,9 @@ if (isset($_GET["id"]) && ($_GET["id"] > 0)) {
             ]
         );
     }
-
-    $menus = [
-        'central'  => ['helpdesk', 'ticket'],
-        'helpdesk' => ["tickets", "ticket"],
-    ];
-    Ticket::displayFullPageForItem($_GET["id"], $menus, $options);
 } else {
     if (Session::getCurrentInterface() != 'central') {
-        Html::redirect($CFG_GLPI["root_doc"] . "/front/helpdesk.public.php?create_ticket=1");
-        die;
+        Html::redirect($CFG_GLPI["root_doc"] . "/ServiceCatalog");
     }
 
     unset($_REQUEST['id']);
@@ -284,7 +278,13 @@ if (isset($_GET["id"]) && ($_GET["id"] > 0)) {
         && isset($_REQUEST['itemtype'])
         && isset($_REQUEST['items_id'])
     ) {
-        $_REQUEST['items_id'] = [$_REQUEST['itemtype'] => [$_REQUEST['items_id']]];
+        if ($_REQUEST['itemtype'] === User::class) {
+            $_REQUEST['_users_id_requester'] = $_REQUEST['items_id'];
+            unset($_REQUEST['itemtype']);
+            unset($_REQUEST['items_id']);
+        } else {
+            $_REQUEST['items_id'] = [$_REQUEST['itemtype'] => [$_REQUEST['items_id']]];
+        }
     }
 
     if (isset($_GET['showglobalkanban']) && $_GET['showglobalkanban']) {

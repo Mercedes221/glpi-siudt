@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,70 +33,65 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\Application\View\TemplateRenderer;
+
 class NetworkPort_Vlan extends CommonDBRelation
 {
-   // From CommonDBRelation
-    public static $itemtype_1          = 'NetworkPort';
-    public static $items_id_1          = 'networkports_id';
+    // From CommonDBRelation
+    public static ?string $itemtype_1 = NetworkPort::class;
+    public static ?string $items_id_1          = 'networkports_id';
 
-    public static $itemtype_2          = 'Vlan';
-    public static $items_id_2          = 'vlans_id';
-    public static $checkItem_2_Rights  = self::HAVE_VIEW_RIGHT_ON_ITEM;
+    public static ?string $itemtype_2 = Vlan::class;
+    public static ?string $items_id_2          = 'vlans_id';
+    public static int $checkItem_2_Rights  = self::HAVE_VIEW_RIGHT_ON_ITEM;
 
-
-    /**
-     * @since 0.84
-     **/
     public function getForbiddenStandardMassiveAction()
     {
-
         $forbidden   = parent::getForbiddenStandardMassiveAction();
         $forbidden[] = 'update';
         return $forbidden;
     }
 
-
     /**
-     * @param $portID
-     * @param $vlanID
+     * @param int $portID
+     * @param int $vlanID
+     *
+     * @return bool
      **/
     public function unassignVlan($portID, $vlanID)
     {
-
         $this->getFromDBByCrit([
             'networkports_id' => $portID,
-            'vlans_id'        => $vlanID
+            'vlans_id'        => $vlanID,
         ]);
 
         return $this->delete($this->fields);
     }
 
-
     /**
-     * @param $port
-     * @param $vlan
-     * @param $tagged
+     * @param int $port
+     * @param int $vlan
+     * @param int $tagged
+     * @return bool|int
      **/
     public function assignVlan($port, $vlan, $tagged)
     {
-        $input = ['networkports_id' => $port,
+        $input = [
+            'networkports_id' => $port,
             'vlans_id'        => $vlan,
-            'tagged'          => $tagged
+            'tagged'          => $tagged,
         ];
 
         return $this->add($input);
     }
 
     /**
-     * @param $port   NetworkPort object
-     **/
+     * @param NetworkPort $port
+     * @return false|void
+     */
     public static function showForNetworkPort(NetworkPort $port)
     {
-        /**
-         * @var array $CFG_GLPI
-         * @var \DBmysql $DB
-         */
-        global $CFG_GLPI, $DB;
+        global $DB;
 
         $ID = $port->getID();
         if (!$port->can($ID, READ)) {
@@ -104,26 +99,24 @@ class NetworkPort_Vlan extends CommonDBRelation
         }
 
         $canedit = $port->canEdit($ID);
-        $rand    = mt_rand();
 
         $iterator = $DB->request([
             'SELECT'    => [
                 'glpi_networkports_vlans.id as assocID',
                 'glpi_networkports_vlans.tagged',
-                'glpi_vlans.*'
+                'glpi_vlans.*',
             ],
             'FROM'      => 'glpi_networkports_vlans',
             'LEFT JOIN' => [
                 'glpi_vlans'   => [
                     'ON' => [
                         'glpi_networkports_vlans'  => 'vlans_id',
-                        'glpi_vlans'               => 'id'
-                    ]
-                ]
+                        'glpi_vlans'               => 'id',
+                    ],
+                ],
             ],
-            'WHERE'     => ['networkports_id' => $ID]
+            'WHERE'     => ['networkports_id' => $ID],
         ]);
-        $number = count($iterator);
 
         $vlans  = [];
         $used   = [];
@@ -133,94 +126,83 @@ class NetworkPort_Vlan extends CommonDBRelation
         }
 
         if ($canedit) {
-            echo "<div class='firstbloc'>\n";
-            echo "<form method='post' action='" . static::getFormURL() . "'>\n";
-            echo "<table class='tab_cadre_fixe'>\n";
-            echo "<tr><th colspan='4'>" . __('Associate a VLAN') . "</th></tr>";
-
-            echo "<tr class='tab_bg_1'><td class='right'>";
-            echo "<input type='hidden' name='networkports_id' value='$ID'>";
-            Vlan::dropdown(['used' => $used]);
-            echo "</td>";
-            echo "<td class='right'>" . __('Tagged') . "</td>";
-            echo "<td class='left'><input type='checkbox' name='tagged' value='1'></td>";
-            echo "<td><input type='submit' name='add' value='" . _sx('button', 'Associate') .
-                    "' class='btn btn-primary'>";
-            echo "</td></tr>\n";
-
-            echo "</table>\n";
-            Html::closeForm();
-            echo "</div>\n";
-        }
-
-        echo "<div class='spaced'>";
-        if ($canedit && $number) {
-            Html::openMassiveActionsForm('mass' . __CLASS__ . $rand);
-            $massiveactionparams = ['num_displayed' => min($_SESSION['glpilist_limit'], $number),
-                'container'     => 'mass' . __CLASS__ . $rand
+            $twig_params = [
+                'id' => $ID,
+                'used' => $used,
+                'tagged_label' => __('Tagged'),
+                'btn_label' => _x('button', 'Associate'),
             ];
-            Html::showMassiveActions($massiveactionparams);
+            // language=Twig
+            echo TemplateRenderer::getInstance()->renderFromStringTemplate(<<<TWIG
+                {% import 'components/form/fields_macros.html.twig' as fields %}
+                <div class="mb-3">
+                    <form method="post" action="{{ 'NetworkPort_Vlan'|itemtype_form_path }}">
+                        <div class="d-flex">
+                            <input type="hidden" name="networkports_id" value="{{ id }}">
+                            {{ fields.dropdownField('Vlan', 'vlans_id', 0, null, {
+                                no_label: true,
+                                used: used
+                            }) }}
+                            {{ fields.checkboxField('tagged', 0, tagged_label) }}
+                        </div>
+                        <div class="d-flex flex-row-reverse">
+                            <button type="submit" name="add" class="btn btn-primary"><i class="ti ti-link" aria-hidden="true"></i><span>{{ btn_label }}</span></button>
+                        </div>
+                    </form>
+                </div>
+TWIG, $twig_params);
         }
-        echo "<table class='tab_cadre_fixehov'>";
 
-        $header_begin  = "<tr>";
-        $header_top    = '';
-        $header_bottom = '';
-        $header_end    = '';
-        if ($canedit && $number) {
-            $header_top    .= "<th width='10'>";
-            $header_top    .= Html::getCheckAllAsCheckbox('mass' . __CLASS__ . $rand) . "</th>";
-            $header_bottom .= "<th width='10'>";
-            $header_bottom .= Html::getCheckAllAsCheckbox('mass' . __CLASS__ . $rand) . "</th>";
-        }
-        $header_end .= "<th>" . __('Name') . "</th>";
-        $header_end .= "<th>" . Entity::getTypeName(1) . "</th>";
-        $header_end .= "<th>" . __('Tagged') . "</th>";
-        $header_end .= "<th>" . __('ID TAG') . "</th>";
-        $header_end .= "</tr>";
-        echo $header_begin . $header_top . $header_end;
-
-        $used = [];
+        $entries = [];
+        $entity_cache = [];
+        $vlan = new Vlan();
         foreach ($vlans as $data) {
-            echo "<tr class='tab_bg_1'>";
-            if ($canedit) {
-                echo "<td>";
-                Html::showMassiveActionCheckBox(__CLASS__, $data["assocID"]);
-                echo "</td>";
+            $vlan->getFromResultSet($data);
+
+            if (!isset($entity_cache[$data['entities_id']])) {
+                $entity_cache[$data['entities_id']] = Dropdown::getDropdownName("glpi_entities", $data["entities_id"]);
             }
-            $name = $data["name"];
-            if ($_SESSION["glpiis_ids_visible"] || empty($data["name"])) {
-                $name = sprintf(__('%1$s (%2$s)'), $name, $data["id"]);
-            }
-            echo "<td class='b'>
-               <a href='" . Vlan::getFormURLWithID($data['id']) . "'>" . $name .
-              "</a>";
-            echo "</td>";
-            echo "<td>" . Dropdown::getDropdownName("glpi_entities", $data["entities_id"]);
-            echo "</td><td>" . Dropdown::getYesNo($data["tagged"]) . "</td>";
-            echo "<td>" . $data["tag"] . "</td>";
-            echo "</tr>";
+            $entries[] = [
+                'itemtype'      => self::class,
+                'id'            => $data['assocID'],
+                'name'          => $vlan->getLink(),
+                'entities_id'   => $entity_cache[$data['entities_id']],
+                'tagged'        => Dropdown::getYesNo($data["tagged"]),
+                'tag'           => $data['tag'],
+            ];
         }
-        if ($number) {
-            echo $header_begin . $header_top . $header_end;
-        }
-        echo "</table>";
-        if ($canedit && $number) {
-            $massiveactionparams['ontop'] = false;
-            Html::showMassiveActions($massiveactionparams);
-            Html::closeForm();
-        }
-        echo "</div>";
+
+        TemplateRenderer::getInstance()->display('components/datatable.html.twig', [
+            'is_tab' => true,
+            'nofilter' => true,
+            'nosort' => true,
+            'columns' => [
+                'name' => __('Name'),
+                'entities_id' => Entity::getTypeName(1),
+                'tagged' => __('Tagged'),
+                'tag' => __('ID TAG'),
+            ],
+            'formatters' => [
+                'name' => 'raw_html',
+            ],
+            'entries' => $entries,
+            'total_number' => count($entries),
+            'showmassiveactions' => $canedit,
+            'massiveactionparams' => [
+                'num_displayed' => count($entries),
+                'container'     => 'mass' . static::class . mt_rand(),
+            ],
+        ]);
     }
 
-
+    /**
+     * @param Vlan $vlan
+     *
+     * @return false|void
+     */
     public static function showForVlan(Vlan $vlan)
     {
-        /**
-         * @var array $CFG_GLPI
-         * @var \DBmysql $DB
-         */
-        global $CFG_GLPI, $DB;
+        global $DB;
 
         $ID = $vlan->getID();
         if (!$vlan->can($ID, READ)) {
@@ -228,102 +210,75 @@ class NetworkPort_Vlan extends CommonDBRelation
         }
 
         $canedit = $vlan->canEdit($ID);
-        $rand    = mt_rand();
 
         $iterator = $DB->request([
             'SELECT'    => [
                 'glpi_networkports_vlans.id as assocID',
                 'glpi_networkports_vlans.tagged',
-                'glpi_networkports.*'
+                'glpi_networkports.*',
             ],
             'FROM'      => 'glpi_networkports_vlans',
             'LEFT JOIN' => [
                 'glpi_networkports'   => [
                     'ON' => [
                         'glpi_networkports_vlans'  => 'networkports_id',
-                        'glpi_networkports'        => 'id'
-                    ]
-                ]
+                        'glpi_networkports'        => 'id',
+                    ],
+                ],
             ],
-            'WHERE'     => ['vlans_id' => $ID]
+            'WHERE'     => ['vlans_id' => $ID],
         ]);
-        $number = count($iterator);
 
-        $vlans  = [];
-        $used   = [];
-        foreach ($iterator as $line) {
-            $used[$line["id"]]       = $line["id"];
-            $vlans[$line["assocID"]] = $line;
-        }
-
-        echo "<div class='spaced'>";
-        if ($canedit && $number) {
-            Html::openMassiveActionsForm('mass' . __CLASS__ . $rand);
-            $massiveactionparams = ['num_displayed' => min($_SESSION['glpilist_limit'], $number),
-                'container'     => 'mass' . __CLASS__ . $rand
+        $entries = [];
+        $entity_cache = [];
+        $netport = new NetworkPort();
+        foreach ($iterator as $data) {
+            $netport->getFromResultSet($data);
+            if (!isset($entity_cache[$data['entities_id']])) {
+                $entity_cache[$data['entities_id']] = Dropdown::getDropdownName("glpi_entities", $data["entities_id"]);
+            }
+            $entries[] = [
+                'itemtype'      => self::class,
+                'id'            => $data['assocID'],
+                'name'          => $netport->getLink(),
+                'entities_id'   => $entity_cache[$data['entities_id']],
             ];
-            Html::showMassiveActions($massiveactionparams);
         }
-        echo "<table class='tab_cadre_fixehov'>";
 
-        $header_begin  = "<tr>";
-        $header_top    = '';
-        $header_bottom = '';
-        $header_end    = '';
-        if ($canedit && $number) {
-            $header_top    .= "<th width='10'>";
-            $header_top    .= Html::getCheckAllAsCheckbox('mass' . __CLASS__ . $rand) . "</th>";
-            $header_bottom .= "<th width='10'>";
-            $header_bottom .= Html::getCheckAllAsCheckbox('mass' . __CLASS__ . $rand) . "</th>";
-        }
-        $header_end .= "<th>" . __('Name') . "</th>";
-        $header_end .= "<th>" . Entity::getTypeName(1) . "</th>";
-        $header_end .= "</tr>";
-        echo $header_begin . $header_top . $header_end;
-
-        $used = [];
-        foreach ($vlans as $data) {
-            echo "<tr class='tab_bg_1'>";
-            if ($canedit) {
-                echo "<td>";
-                Html::showMassiveActionCheckBox(__CLASS__, $data["assocID"]);
-                echo "</td>";
-            }
-            $name = $data["name"];
-            if ($_SESSION["glpiis_ids_visible"] || empty($data["name"])) {
-                $name = sprintf(__('%1$s (%2$s)'), $name, $data["id"]);
-            }
-            echo "<td class='b'>
-               <a href='" . NetworkPort::getFormURLWithID($data['id']) . "'>" . $name .
-              "</a>";
-            echo "</td>";
-            echo "<td>" . Dropdown::getDropdownName("glpi_entities", $data["entities_id"]);
-            echo "</tr>";
-        }
-        if ($number) {
-            echo $header_begin . $header_top . $header_end;
-        }
-        echo "</table>";
-        if ($canedit && $number) {
-            $massiveactionparams['ontop'] = false;
-            Html::showMassiveActions($massiveactionparams);
-            Html::closeForm();
-        }
-        echo "</div>";
+        TemplateRenderer::getInstance()->display('components/datatable.html.twig', [
+            'is_tab' => true,
+            'nofilter' => true,
+            'nosort' => true,
+            'columns' => [
+                'name' => __('Name'),
+                'entities_id' => Entity::getTypeName(1),
+            ],
+            'formatters' => [
+                'name' => 'raw_html',
+            ],
+            'entries' => $entries,
+            'total_number' => count($entries),
+            'showmassiveactions' => $canedit,
+            'massiveactionparams' => [
+                'num_displayed' => count($entries),
+                'container'     => 'mass' . static::class . mt_rand(),
+            ],
+        ]);
     }
+
     /**
-     * @param $portID
-     **/
+     * @param int $portID
+     * @return array
+     */
     public static function getVlansForNetworkPort($portID)
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         $vlans = [];
         $iterator = $DB->request([
             'SELECT' => 'vlans_id',
             'FROM'   => 'glpi_networkports_vlans',
-            'WHERE'  => ['networkports_id' => $portID]
+            'WHERE'  => ['networkports_id' => $portID],
         ]);
 
         foreach ($iterator as $data) {
@@ -333,73 +288,58 @@ class NetworkPort_Vlan extends CommonDBRelation
         return $vlans;
     }
 
-
     public function getTabNameForItem(CommonGLPI $item, $withtemplate = 0)
     {
-
         if (!$withtemplate) {
             $nb = 0;
-            switch (get_class($item)) {
+            switch ($item::class) {
                 case NetworkPort::class:
                     if ($_SESSION['glpishow_count_on_tabs']) {
                         $nb = countElementsInTable(
-                            $this->getTable(),
+                            static::getTable(),
                             ["networkports_id" => $item->getID()]
                         );
                     }
-                    return self::createTabEntry(Vlan::getTypeName(), $nb);
+                    return self::createTabEntry(Vlan::getTypeName(), $nb, $item::class);
                 case Vlan::class:
                     if ($_SESSION['glpishow_count_on_tabs']) {
                         $nb = countElementsInTable(
-                            $this->getTable(),
+                            static::getTable(),
                             ["vlans_id" => $item->getID()]
                         );
                     }
-                    return self::createTabEntry(NetworkPort::getTypeName(), $nb);
+                    return self::createTabEntry(NetworkPort::getTypeName(), $nb, $item::class);
             }
         }
         return '';
     }
 
-
     public static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0)
     {
-
-        switch (get_class($item)) {
-            case NetworkPort::class:
-                return self::showForNetworkPort($item);
-            case Vlan::class:
-                return self::showForVlan($item);
-        }
-        return true;
+        return match ($item::class) {
+            NetworkPort::class => self::showForNetworkPort($item),
+            Vlan::class => self::showForVlan($item),
+            default => true,
+        };
     }
 
-
-    /**
-     * @since 0.85
-     *
-     * @see CommonDBRelation::getRelationMassiveActionsSpecificities()
-     **/
     public static function getRelationMassiveActionsSpecificities()
     {
         $specificities = parent::getRelationMassiveActionsSpecificities();
 
-       // Set the labels for add_item and remove_item
+        // Set the labels for add_item and remove_item
         $specificities['button_labels']['add']    = _sx('button', 'Associate');
         $specificities['button_labels']['remove'] = _sx('button', 'Dissociate');
 
         return $specificities;
     }
 
-
     public static function showRelationMassiveActionsSubForm(MassiveAction $ma, $peer_number)
     {
-
-        if ($ma->getAction() == 'add') {
-            echo "<br><br>" . __('Tagged') . Html::getCheckbox(['name' => 'tagged']);
+        if ($ma->getAction() === 'add') {
+            echo "<br><br>" . __s('Tagged') . Html::getCheckbox(['name' => 'tagged']);
         }
     }
-
 
     public static function getRelationInputForProcessingOfMassiveActions(
         $action,
@@ -407,7 +347,7 @@ class NetworkPort_Vlan extends CommonDBRelation
         array $ids,
         array $input
     ) {
-        if ($action == 'add') {
+        if ($action === 'add') {
             return ['tagged' => $input['tagged']];
         }
         return [];

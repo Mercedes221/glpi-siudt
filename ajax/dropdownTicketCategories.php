@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,13 +33,8 @@
  * ---------------------------------------------------------------------
  */
 
-if (strpos($_SERVER['PHP_SELF'], "dropdownTicketCategories.php")) {
-    include('../inc/includes.php');
-    header("Content-Type: text/html; charset=UTF-8");
-    Html::header_nocache();
-} else if (!defined('GLPI_ROOT')) {
-    die("Sorry. You can't access this file directly");
-}
+header("Content-Type: text/html; charset=UTF-8");
+Html::header_nocache();
 
 $opt = ['entity' => Session::getMatchingActiveEntities($_POST['entity_restrict'])];
 $condition  = [];
@@ -55,14 +50,14 @@ if ($_POST["type"]) {
     switch ($_POST['type']) {
         case Ticket::INCIDENT_TYPE:
             $condition['is_incident'] = 1;
-            if ($currentcateg->getField('is_incident') == 1) {
+            if (($currentcateg->fields['is_incident'] ?? 0) == 1) {
                 $opt['value'] = $_POST['value'];
             }
             break;
 
         case Ticket::DEMAND_TYPE:
             $condition['is_request'] = 1;
-            if ($currentcateg->getField('is_request') == 1) {
+            if (($currentcateg->fields['is_request'] ?? 0) == 1) {
                 $opt['value'] = $_POST['value'];
             }
             break;

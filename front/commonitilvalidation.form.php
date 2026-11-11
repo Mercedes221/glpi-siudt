@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,6 +33,12 @@
  * ---------------------------------------------------------------------
  */
 
+require_once(__DIR__ . '/_check_webserver_config.php');
+
+use Glpi\Event;
+use Glpi\Exception\Http\AccessDeniedHttpException;
+use Glpi\Exception\Http\BadRequestHttpException;
+
 /**
  * @since 0.85
  */
@@ -42,37 +48,40 @@
  * @var CommonITILValidation $validation
  */
 
-use Glpi\Event;
-
-// autoload include in objecttask.form (ticketvalidation, changevalidation,...)
-if (!defined('GLPI_ROOT')) {
-    die("Sorry. You can't access this file directly");
-}
-
-Session::checkLoginUser();
-
 if (!($validation instanceof CommonITILValidation)) {
-    Html::displayErrorAndDie('');
+    throw new BadRequestHttpException();
 }
 if (!$validation->canView()) {
-    Html::displayRightError();
+    throw new AccessDeniedHttpException();
 }
 
-$itemtype = $validation->getItilObjectItemType();
+$itemtype = $validation::getItilObjectItemType();
 $fk       = getForeignKeyFieldForItemType($itemtype);
 
 if (isset($_POST["add"])) {
+    if (isset($_POST['users_id_validate'])) {
+        Toolbox::deprecated('Usage of "users_id_validate" parameter is deprecated in "front/commonitilvalidation.form.php". Use "items_id_target" instead.');
+        $_POST['items_id_target'] = $_POST['users_id_validate'];
+        $_POST['itemtype_target'] = User::class;
+        unset($_POST['users_id_validate']);
+    }
+
     $validation->check(-1, CREATE, $_POST);
-    if (
-        isset($_POST['users_id_validate'])
-        && (count($_POST['users_id_validate']) > 0)
-    ) {
-        $users = $_POST['users_id_validate'];
-        foreach ($users as $user) {
-            $_POST['users_id_validate'] = $user;
+
+    if (!isset($_POST['items_id_target'])) {
+        Html::back();
+    }
+    if (!is_array($_POST['items_id_target'])) {
+        $_POST['items_id_target'] = [$_POST['items_id_target']];
+    }
+
+    if (count($_POST['items_id_target']) > 0) {
+        $targets = $_POST['items_id_target'];
+        foreach ($targets as $target) {
+            $_POST['items_id_target'] = $target;
             $validation->add($_POST);
             Event::log(
-                $validation->getField($fk),
+                $validation->fields[$fk],
                 strtolower($itemtype),
                 4,
                 "tracking",
@@ -82,11 +91,11 @@ if (isset($_POST["add"])) {
         }
     }
     Html::back();
-} else if (isset($_POST["update"])) {
+} elseif (isset($_POST["update"])) {
     $validation->check($_POST['id'], UPDATE);
     $validation->update($_POST);
     Event::log(
-        $validation->getField($fk),
+        $validation->fields[$fk],
         strtolower($itemtype),
         4,
         "tracking",
@@ -94,12 +103,12 @@ if (isset($_POST["add"])) {
         sprintf(__('%s updates an approval'), $_SESSION["glpiname"])
     );
     Html::back();
-} else if (isset($_POST["purge"])) {
+} elseif (isset($_POST["purge"])) {
     $validation->check($_POST['id'], PURGE);
-    $validation->delete($_POST, 1);
+    $validation->delete($_POST, true);
 
     Event::log(
-        $validation->getField($fk),
+        $validation->fields[$fk],
         strtolower($itemtype),
         4,
         "tracking",
@@ -107,12 +116,13 @@ if (isset($_POST["add"])) {
         sprintf(__('%s purges an approval'), $_SESSION["glpiname"])
     );
     Html::back();
-} else if (isset($_POST['approval_action'])) {
-    if ($_POST['users_id_validate'] == Session::getLoginUserID()) {
+} elseif (isset($_POST['approval_action'])) {
+    if ($validation->getFromDB($_POST['id']) && $validation->canAnswer()) {
         $validation->update($_POST + [
-            'status' => ($_POST['approval_action'] === 'approve') ? CommonITILValidation::ACCEPTED : CommonITILValidation::REFUSED
+            'status' => ($_POST['approval_action'] === 'approve') ? CommonITILValidation::ACCEPTED : CommonITILValidation::REFUSED,
         ]);
         Html::back();
     }
 }
-Html::displayErrorAndDie('Lost');
+
+throw new BadRequestHttpException();

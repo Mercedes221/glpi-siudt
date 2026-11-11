@@ -24,68 +24,55 @@ use Symfony\Component\CssSelector\CssSelectorConverter;
 class Crawler implements \Countable, \IteratorAggregate
 {
     /**
-     * @var string|null
-     */
-    protected $uri;
-
-    /**
      * The default namespace prefix to be used with XPath and CSS expressions.
-     *
-     * @var string
      */
-    private $defaultNamespacePrefix = 'default';
+    private string $defaultNamespacePrefix = 'default';
 
     /**
      * A map of manually registered namespaces.
      *
      * @var array<string, string>
      */
-    private $namespaces = [];
+    private array $namespaces = [];
 
     /**
      * A map of cached namespaces.
      *
-     * @var \ArrayObject
+     * @var \ArrayObject<string, string|null>
      */
-    private $cachedNamespaces;
+    private \ArrayObject $cachedNamespaces;
 
-    /**
-     * The base href value.
-     *
-     * @var string|null
-     */
-    private $baseHref;
+    private ?string $baseHref;
 
-    /**
-     * @var \DOMDocument|null
-     */
-    private $document;
+    private ?\DOMDocument $document = null;
 
     /**
      * @var list<\DOMNode>
      */
-    private $nodes = [];
+    private array $nodes = [];
 
     /**
      * Whether the Crawler contains HTML or XML content (used when converting CSS to XPath).
-     *
-     * @var bool
      */
-    private $isHtml = true;
+    private bool $isHtml = true;
+
+    private ?HTML5 $html5Parser = null;
 
     /**
-     * @var HTML5|null
+     * @param \DOMNodeList<\DOMNode>|\DOMNode|\DOMNode[]|string|null $node A Node to use as the base for the crawling
      */
-    private $html5Parser;
+    public function __construct(
+        \DOMNodeList|\DOMNode|array|string|null $node = null,
+        protected ?string $uri = null,
+        ?string $baseHref = null,
+        private bool $useHtml5Parser = true,
+    ) {
+        if (\PHP_VERSION_ID >= 80400 && !$useHtml5Parser) {
+            trigger_deprecation('symfony/dom-crawler', '7.4', 'Disabling HTML5 parsing is deprecated. Symfony 8 will unconditionally use the native HTML5 parser.');
+        }
 
-    /**
-     * @param \DOMNodeList|\DOMNode|\DOMNode[]|string|null $node A Node to use as the base for the crawling
-     */
-    public function __construct($node = null, ?string $uri = null, ?string $baseHref = null)
-    {
-        $this->uri = $uri;
         $this->baseHref = $baseHref ?: $uri;
-        $this->html5Parser = class_exists(HTML5::class) ? new HTML5(['disable_html_ns' => true]) : null;
+        $this->html5Parser = \PHP_VERSION_ID < 80400 && $useHtml5Parser ? new HTML5(['disable_html_ns' => true]) : null;
         $this->cachedNamespaces = new \ArrayObject();
 
         $this->add($node);
@@ -93,20 +80,16 @@ class Crawler implements \Countable, \IteratorAggregate
 
     /**
      * Returns the current URI.
-     *
-     * @return string|null
      */
-    public function getUri()
+    public function getUri(): ?string
     {
         return $this->uri;
     }
 
     /**
      * Returns base href.
-     *
-     * @return string|null
      */
-    public function getBaseHref()
+    public function getBaseHref(): ?string
     {
         return $this->baseHref;
     }
@@ -114,7 +97,7 @@ class Crawler implements \Countable, \IteratorAggregate
     /**
      * Removes all the nodes.
      */
-    public function clear()
+    public function clear(): void
     {
         $this->nodes = [];
         $this->document = null;
@@ -127,11 +110,9 @@ class Crawler implements \Countable, \IteratorAggregate
      * This method uses the appropriate specialized add*() method based
      * on the type of the argument.
      *
-     * @param \DOMNodeList|\DOMNode|\DOMNode[]|string|null $node A node
-     *
-     * @throws \InvalidArgumentException when node is not the expected type
+     * @param \DOMNodeList<\DOMNode>|\DOMNode|\DOMNode[]|string|null $node
      */
-    public function add($node)
+    public function add(\DOMNodeList|\DOMNode|array|string|null $node): void
     {
         if ($node instanceof \DOMNodeList) {
             $this->addNodeList($node);
@@ -141,8 +122,6 @@ class Crawler implements \Countable, \IteratorAggregate
             $this->addNodes($node);
         } elseif (\is_string($node)) {
             $this->addContent($node);
-        } elseif (null !== $node) {
-            throw new \InvalidArgumentException(sprintf('Expecting a DOMNodeList or DOMNode instance, an array, a string, or null, but got "%s".', get_debug_type($node)));
         }
     }
 
@@ -153,9 +132,9 @@ class Crawler implements \Countable, \IteratorAggregate
      * or ISO-8859-1 as a fallback, which is the default charset defined by the
      * HTTP 1.1 specification.
      */
-    public function addContent(string $content, ?string $type = null)
+    public function addContent(string $content, ?string $type = null): void
     {
-        if (empty($type)) {
+        if (!$type) {
             $type = str_starts_with($content, '<?xml') ? 'application/xml' : 'text/html';
         }
 
@@ -168,7 +147,7 @@ class Crawler implements \Countable, \IteratorAggregate
 
         // http://www.w3.org/TR/encoding/#encodings
         // http://www.w3.org/TR/REC-xml/#NT-EncName
-        $content = preg_replace_callback('/(charset *= *["\']?)([a-zA-Z\-0-9_:.]+)/i', function ($m) use (&$charset) {
+        $content = preg_replace_callback('/(<meta[^>]+charset *= *["\']?)([a-zA-Z\-0-9_:.]+)/i', function ($m) use (&$charset) {
             if ('charset=' === $this->convertToHtmlEntities('charset=', $m[2])) {
                 $charset = $m[2];
             }
@@ -193,7 +172,7 @@ class Crawler implements \Countable, \IteratorAggregate
      * and then, get the errors via libxml_get_errors(). Be
      * sure to clear errors with libxml_clear_errors() afterward.
      */
-    public function addHtmlContent(string $content, string $charset = 'UTF-8')
+    public function addHtmlContent(string $content, string $charset = 'UTF-8'): void
     {
         $dom = $this->parseHtmlString($content, $charset);
         $this->addDocument($dom);
@@ -201,7 +180,7 @@ class Crawler implements \Countable, \IteratorAggregate
         $base = $this->filterRelativeXPath('descendant-or-self::base')->extract(['href']);
 
         $baseHref = current($base);
-        if (\count($base) && !empty($baseHref)) {
+        if ($base && $baseHref) {
             if ($this->baseHref) {
                 $linkNode = $dom->createElement('a');
                 $linkNode->setAttribute('href', $baseHref);
@@ -227,29 +206,22 @@ class Crawler implements \Countable, \IteratorAggregate
      *                     LIBXML_PARSEHUGE is dangerous, see
      *                     http://symfony.com/blog/security-release-symfony-2-0-17-released
      */
-    public function addXmlContent(string $content, string $charset = 'UTF-8', int $options = \LIBXML_NONET)
+    public function addXmlContent(string $content, string $charset = 'UTF-8', int $options = \LIBXML_NONET): void
     {
         // remove the default namespace if it's the only namespace to make XPath expressions simpler
-        if (!preg_match('/xmlns:/', $content)) {
+        if (!str_contains($content, 'xmlns:')) {
             $content = str_replace('xmlns', 'ns', $content);
         }
 
         $internalErrors = libxml_use_internal_errors(true);
-        if (\LIBXML_VERSION < 20900) {
-            $disableEntities = libxml_disable_entity_loader(true);
-        }
 
         $dom = new \DOMDocument('1.0', $charset);
-        $dom->validateOnParse = true;
 
         if ('' !== trim($content)) {
             @$dom->loadXML($content, $options);
         }
 
         libxml_use_internal_errors($internalErrors);
-        if (\LIBXML_VERSION < 20900) {
-            libxml_disable_entity_loader($disableEntities);
-        }
 
         $this->addDocument($dom);
 
@@ -258,10 +230,8 @@ class Crawler implements \Countable, \IteratorAggregate
 
     /**
      * Adds a \DOMDocument to the list of nodes.
-     *
-     * @param \DOMDocument $dom A \DOMDocument instance
      */
-    public function addDocument(\DOMDocument $dom)
+    public function addDocument(\DOMDocument $dom): void
     {
         if ($dom->documentElement) {
             $this->addNode($dom->documentElement);
@@ -271,9 +241,9 @@ class Crawler implements \Countable, \IteratorAggregate
     /**
      * Adds a \DOMNodeList to the list of nodes.
      *
-     * @param \DOMNodeList $nodes A \DOMNodeList instance
+     * @param \DOMNodeList<\DOMNode> $nodes
      */
-    public function addNodeList(\DOMNodeList $nodes)
+    public function addNodeList(\DOMNodeList $nodes): void
     {
         foreach ($nodes as $node) {
             if ($node instanceof \DOMNode) {
@@ -285,9 +255,9 @@ class Crawler implements \Countable, \IteratorAggregate
     /**
      * Adds an array of \DOMNode instances to the list of nodes.
      *
-     * @param \DOMNode[] $nodes An array of \DOMNode instances
+     * @param \DOMNode[] $nodes
      */
-    public function addNodes(array $nodes)
+    public function addNodes(array $nodes): void
     {
         foreach ($nodes as $node) {
             $this->add($node);
@@ -296,10 +266,8 @@ class Crawler implements \Countable, \IteratorAggregate
 
     /**
      * Adds a \DOMNode instance to the list of nodes.
-     *
-     * @param \DOMNode $node A \DOMNode instance
      */
-    public function addNode(\DOMNode $node)
+    public function addNode(\DOMNode $node): void
     {
         if ($node instanceof \DOMDocument) {
             $node = $node->documentElement;
@@ -309,9 +277,7 @@ class Crawler implements \Countable, \IteratorAggregate
             throw new \InvalidArgumentException('Attaching DOM nodes from multiple documents in the same crawler is forbidden.');
         }
 
-        if (null === $this->document) {
-            $this->document = $node->ownerDocument;
-        }
+        $this->document ??= $node->ownerDocument;
 
         // Don't add duplicate nodes in the Crawler
         if (\in_array($node, $this->nodes, true)) {
@@ -323,10 +289,8 @@ class Crawler implements \Countable, \IteratorAggregate
 
     /**
      * Returns a node given its position in the node list.
-     *
-     * @return static
      */
-    public function eq(int $position)
+    public function eq(int $position): static
     {
         if (isset($this->nodes[$position])) {
             return $this->createSubCrawler($this->nodes[$position]);
@@ -343,15 +307,15 @@ class Crawler implements \Countable, \IteratorAggregate
      *
      * Example:
      *
-     *     $crawler->filter('h1')->each(function ($node, $i) {
-     *         return $node->text();
-     *     });
+     *     $crawler->filter('h1')->each(fn ($node, $i) => $node->text());
      *
-     * @param \Closure $closure An anonymous function
+     * @template R of mixed
      *
-     * @return array An array of values returned by the anonymous function
+     * @param \Closure(static, int):R $closure
+     *
+     * @return list<R> An array of values returned by the anonymous function
      */
-    public function each(\Closure $closure)
+    public function each(\Closure $closure): array
     {
         $data = [];
         foreach ($this->nodes as $i => $node) {
@@ -363,10 +327,8 @@ class Crawler implements \Countable, \IteratorAggregate
 
     /**
      * Slices the list of nodes by $offset and $length.
-     *
-     * @return static
      */
-    public function slice(int $offset = 0, ?int $length = null)
+    public function slice(int $offset = 0, ?int $length = null): static
     {
         return $this->createSubCrawler(\array_slice($this->nodes, $offset, $length));
     }
@@ -376,11 +338,9 @@ class Crawler implements \Countable, \IteratorAggregate
      *
      * To remove a node from the list, the anonymous function must return false.
      *
-     * @param \Closure $closure An anonymous function
-     *
-     * @return static
+     * @param \Closure(static, int):bool $closure
      */
-    public function reduce(\Closure $closure)
+    public function reduce(\Closure $closure): static
     {
         $nodes = [];
         foreach ($this->nodes as $i => $node) {
@@ -394,20 +354,16 @@ class Crawler implements \Countable, \IteratorAggregate
 
     /**
      * Returns the first node of the current selection.
-     *
-     * @return static
      */
-    public function first()
+    public function first(): static
     {
         return $this->eq(0);
     }
 
     /**
      * Returns the last node of the current selection.
-     *
-     * @return static
      */
-    public function last()
+    public function last(): static
     {
         return $this->eq(\count($this->nodes) - 1);
     }
@@ -415,11 +371,9 @@ class Crawler implements \Countable, \IteratorAggregate
     /**
      * Returns the siblings nodes of the current selection.
      *
-     * @return static
-     *
-     * @throws \InvalidArgumentException When current node is empty
+     * @throws \InvalidArgumentException When the current node is empty
      */
-    public function siblings()
+    public function siblings(): static
     {
         if (!$this->nodes) {
             throw new \InvalidArgumentException('The current node list is empty.');
@@ -434,16 +388,23 @@ class Crawler implements \Countable, \IteratorAggregate
             return false;
         }
 
-        $converter = $this->createCssSelectorConverter();
-        $xpath = $converter->toXPath($selector, 'self::');
+        $node = $this->getNode(0);
 
-        return 0 !== $this->filterRelativeXPath($xpath)->count();
+        foreach ($this->matchingNodes($selector, $this->rootNode($node)) as $candidate) {
+            if ($candidate->isSameNode($node)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
      * Return first parents (heading toward the document root) of the Element that matches the provided selector.
      *
      * @see https://developer.mozilla.org/en-US/docs/Web/API/Element/closest#Polyfill
+     *
+     * @return ?static
      *
      * @throws \InvalidArgumentException When current node is empty
      */
@@ -454,14 +415,16 @@ class Crawler implements \Countable, \IteratorAggregate
         }
 
         $domNode = $this->getNode(0);
+        $matching = $this->matchingNodes($selector, $this->rootNode($domNode));
 
-        while (\XML_ELEMENT_NODE === $domNode->nodeType) {
-            $node = $this->createSubCrawler($domNode);
-            if ($node->matches($selector)) {
-                return $node;
+        while (null !== $domNode && \XML_ELEMENT_NODE === $domNode->nodeType) {
+            foreach ($matching as $candidate) {
+                if ($candidate->isSameNode($domNode)) {
+                    return $this->createSubCrawler($domNode);
+                }
             }
 
-            $domNode = $node->getNode(0)->parentNode;
+            $domNode = $domNode->parentNode;
         }
 
         return null;
@@ -470,11 +433,9 @@ class Crawler implements \Countable, \IteratorAggregate
     /**
      * Returns the next siblings nodes of the current selection.
      *
-     * @return static
-     *
      * @throws \InvalidArgumentException When current node is empty
      */
-    public function nextAll()
+    public function nextAll(): static
     {
         if (!$this->nodes) {
             throw new \InvalidArgumentException('The current node list is empty.');
@@ -486,11 +447,9 @@ class Crawler implements \Countable, \IteratorAggregate
     /**
      * Returns the previous sibling nodes of the current selection.
      *
-     * @return static
-     *
-     * @throws \InvalidArgumentException
+     * @throws \InvalidArgumentException When current node is empty
      */
-    public function previousAll()
+    public function previousAll(): static
     {
         if (!$this->nodes) {
             throw new \InvalidArgumentException('The current node list is empty.');
@@ -500,27 +459,11 @@ class Crawler implements \Countable, \IteratorAggregate
     }
 
     /**
-     * Returns the parent nodes of the current selection.
-     *
-     * @return static
-     *
-     * @throws \InvalidArgumentException When current node is empty
-     */
-    public function parents()
-    {
-        trigger_deprecation('symfony/dom-crawler', '5.3', 'The %s() method is deprecated, use ancestors() instead.', __METHOD__);
-
-        return $this->ancestors();
-    }
-
-    /**
      * Returns the ancestors of the current selection.
-     *
-     * @return static
      *
      * @throws \InvalidArgumentException When the current node is empty
      */
-    public function ancestors()
+    public function ancestors(): static
     {
         if (!$this->nodes) {
             throw new \InvalidArgumentException('The current node list is empty.');
@@ -541,22 +484,34 @@ class Crawler implements \Countable, \IteratorAggregate
     /**
      * Returns the children nodes of the current selection.
      *
-     * @return static
-     *
-     * @throws \InvalidArgumentException When current node is empty
+     * @throws \InvalidArgumentException When the current node is empty
      * @throws \RuntimeException         If the CssSelector Component is not available and $selector is provided
      */
-    public function children(?string $selector = null)
+    public function children(?string $selector = null): static
     {
         if (!$this->nodes) {
             throw new \InvalidArgumentException('The current node list is empty.');
         }
 
         if (null !== $selector) {
-            $converter = $this->createCssSelectorConverter();
-            $xpath = $converter->toXPath($selector, 'child::');
+            $parents = [];
+            $roots = [];
+            foreach ($this->nodes as $node) {
+                $parents[spl_object_id($node)] = true;
+                $roots[spl_object_id($root = $this->rootNode($node))] = $root;
+            }
 
-            return $this->filterRelativeXPath($xpath);
+            $crawler = $this->createSubCrawler(null);
+
+            foreach ($roots as $root) {
+                foreach ($this->matchingNodes($selector, $root) as $candidate) {
+                    if (null !== $candidate->parentNode && isset($parents[spl_object_id($candidate->parentNode)])) {
+                        $crawler->add($candidate);
+                    }
+                }
+            }
+
+            return $crawler;
         }
 
         $node = $this->getNode(0)->firstChild;
@@ -567,29 +522,31 @@ class Crawler implements \Countable, \IteratorAggregate
     /**
      * Returns the attribute value of the first node of the list.
      *
-     * @return string|null
+     * @param string|null $default When not null: the value to return when the node or attribute is empty
      *
      * @throws \InvalidArgumentException When current node is empty
      */
-    public function attr(string $attribute)
+    public function attr(string $attribute, ?string $default = null): ?string
     {
         if (!$this->nodes) {
+            if (null !== $default) {
+                return $default;
+            }
+
             throw new \InvalidArgumentException('The current node list is empty.');
         }
 
         $node = $this->getNode(0);
 
-        return $node->hasAttribute($attribute) ? $node->getAttribute($attribute) : null;
+        return $node->hasAttribute($attribute) ? $node->getAttribute($attribute) : $default;
     }
 
     /**
      * Returns the node name of the first node of the list.
      *
-     * @return string
-     *
-     * @throws \InvalidArgumentException When current node is empty
+     * @throws \InvalidArgumentException When the current node is empty
      */
-    public function nodeName()
+    public function nodeName(): string
     {
         if (!$this->nodes) {
             throw new \InvalidArgumentException('The current node list is empty.');
@@ -606,11 +563,9 @@ class Crawler implements \Countable, \IteratorAggregate
      * @param string|null $default             When not null: the value to return when the current node is empty
      * @param bool        $normalizeWhitespace Whether whitespaces should be trimmed and normalized to single spaces
      *
-     * @return string
-     *
      * @throws \InvalidArgumentException When current node is empty
      */
-    public function text(?string $default = null, bool $normalizeWhitespace = true)
+    public function text(?string $default = null, bool $normalizeWhitespace = true): string
     {
         if (!$this->nodes) {
             if (null !== $default) {
@@ -623,7 +578,7 @@ class Crawler implements \Countable, \IteratorAggregate
         $text = $this->getNode(0)->nodeValue;
 
         if ($normalizeWhitespace) {
-            return trim(preg_replace("/(?:[ \n\r\t\x0C]{2,}+|[\n\r\t\x0C])/", ' ', $text), " \n\r\t\x0C");
+            return $this->normalizeWhitespace($text);
         }
 
         return $text;
@@ -631,10 +586,24 @@ class Crawler implements \Countable, \IteratorAggregate
 
     /**
      * Returns only the inner text that is the direct descendent of the current node, excluding any child nodes.
+     *
+     * @param bool $normalizeWhitespace Whether whitespaces should be trimmed and normalized to single spaces
      */
-    public function innerText(): string
+    public function innerText(bool $normalizeWhitespace = true): string
     {
-        return $this->filterXPath('.//text()')->text();
+        foreach ($this->getNode(0)->childNodes as $childNode) {
+            if (\XML_TEXT_NODE !== $childNode->nodeType && \XML_CDATA_SECTION_NODE !== $childNode->nodeType) {
+                continue;
+            }
+            if (!$normalizeWhitespace) {
+                return $childNode->nodeValue;
+            }
+            if ('' !== trim($childNode->nodeValue)) {
+                return $this->normalizeWhitespace($childNode->nodeValue);
+            }
+        }
+
+        return '';
     }
 
     /**
@@ -642,11 +611,9 @@ class Crawler implements \Countable, \IteratorAggregate
      *
      * @param string|null $default When not null: the value to return when the current node is empty
      *
-     * @return string
-     *
-     * @throws \InvalidArgumentException When current node is empty
+     * @throws \InvalidArgumentException When the current node is empty
      */
-    public function html(?string $default = null)
+    public function html(?string $default = null): string
     {
         if (!$this->nodes) {
             if (null !== $default) {
@@ -659,7 +626,7 @@ class Crawler implements \Countable, \IteratorAggregate
         $node = $this->getNode(0);
         $owner = $node->ownerDocument;
 
-        if (null !== $this->html5Parser && '<!DOCTYPE html>' === $owner->saveXML($owner->childNodes[0])) {
+        if ($this->html5Parser && '<!DOCTYPE html>' === $owner->saveXML($owner->childNodes[0])) {
             $owner = $this->html5Parser;
         }
 
@@ -671,6 +638,9 @@ class Crawler implements \Countable, \IteratorAggregate
         return $html;
     }
 
+    /**
+     * @throws \InvalidArgumentException When the current node is empty
+     */
     public function outerHtml(): string
     {
         if (!\count($this)) {
@@ -680,7 +650,7 @@ class Crawler implements \Countable, \IteratorAggregate
         $node = $this->getNode(0);
         $owner = $node->ownerDocument;
 
-        if (null !== $this->html5Parser && '<!DOCTYPE html>' === $owner->saveXML($owner->childNodes[0])) {
+        if ($this->html5Parser && '<!DOCTYPE html>' === $owner->saveXML($owner->childNodes[0])) {
             $owner = $this->html5Parser;
         }
 
@@ -693,9 +663,9 @@ class Crawler implements \Countable, \IteratorAggregate
      * Since an XPath expression might evaluate to either a simple type or a \DOMNodeList,
      * this method will return either an array of simple types or a new Crawler instance.
      *
-     * @return array|Crawler
+     * @return array|static
      */
-    public function evaluate(string $xpath)
+    public function evaluate(string $xpath): array|self
     {
         if (null === $this->document) {
             throw new \LogicException('Cannot evaluate the expression on an uninitialized crawler.');
@@ -723,10 +693,8 @@ class Crawler implements \Countable, \IteratorAggregate
      * Example:
      *
      *     $crawler->filter('h1 a')->extract(['_text', 'href']);
-     *
-     * @return array
      */
-    public function extract(array $attributes)
+    public function extract(array $attributes): array
     {
         $count = \count($attributes);
 
@@ -756,10 +724,8 @@ class Crawler implements \Countable, \IteratorAggregate
      * is considered as a fake parent of the elements inside it.
      * This means that a child selector "div" or "./div" will match only
      * the div elements of the current crawler, not their children.
-     *
-     * @return static
      */
-    public function filterXPath(string $xpath)
+    public function filterXPath(string $xpath): static
     {
         $xpath = $this->relativize($xpath);
 
@@ -776,11 +742,9 @@ class Crawler implements \Countable, \IteratorAggregate
      *
      * This method only works if you have installed the CssSelector Symfony Component.
      *
-     * @return static
-     *
      * @throws \LogicException if the CssSelector Component is not available
      */
-    public function filter(string $selector)
+    public function filter(string $selector): static
     {
         $converter = $this->createCssSelectorConverter();
 
@@ -790,48 +754,40 @@ class Crawler implements \Countable, \IteratorAggregate
 
     /**
      * Selects links by name or alt value for clickable images.
-     *
-     * @return static
      */
-    public function selectLink(string $value)
+    public function selectLink(string $value): static
     {
         return $this->filterRelativeXPath(
-            sprintf('descendant-or-self::a[contains(concat(\' \', normalize-space(string(.)), \' \'), %1$s) or ./img[contains(concat(\' \', normalize-space(string(@alt)), \' \'), %1$s)]]', static::xpathLiteral(' '.$value.' '))
+            \sprintf('descendant-or-self::a[contains(concat(\' \', normalize-space(string(.)), \' \'), %1$s) or ./img[contains(concat(\' \', normalize-space(string(@alt)), \' \'), %1$s)]]', static::xpathLiteral(' '.$value.' '))
         );
     }
 
     /**
      * Selects images by alt value.
-     *
-     * @return static
      */
-    public function selectImage(string $value)
+    public function selectImage(string $value): static
     {
-        $xpath = sprintf('descendant-or-self::img[contains(normalize-space(string(@alt)), %s)]', static::xpathLiteral($value));
+        $xpath = \sprintf('descendant-or-self::img[contains(normalize-space(string(@alt)), %s)]', static::xpathLiteral($value));
 
         return $this->filterRelativeXPath($xpath);
     }
 
     /**
-     * Selects a button by name or alt value for images.
-     *
-     * @return static
+     * Selects a button by its text content, id, value, name or alt attribute.
      */
-    public function selectButton(string $value)
+    public function selectButton(string $value): static
     {
         return $this->filterRelativeXPath(
-            sprintf('descendant-or-self::input[((contains(%1$s, "submit") or contains(%1$s, "button")) and contains(concat(\' \', normalize-space(string(@value)), \' \'), %2$s)) or (contains(%1$s, "image") and contains(concat(\' \', normalize-space(string(@alt)), \' \'), %2$s)) or @id=%3$s or @name=%3$s] | descendant-or-self::button[contains(concat(\' \', normalize-space(string(.)), \' \'), %2$s) or @id=%3$s or @name=%3$s]', 'translate(@type, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")', static::xpathLiteral(' '.$value.' '), static::xpathLiteral($value))
+            \sprintf('descendant-or-self::input[((contains(%1$s, "submit") or contains(%1$s, "button")) and contains(concat(\' \', normalize-space(string(@value)), \' \'), %2$s)) or (contains(%1$s, "image") and contains(concat(\' \', normalize-space(string(@alt)), \' \'), %2$s)) or @id=%3$s or @name=%3$s] | descendant-or-self::button[contains(concat(\' \', normalize-space(string(.)), \' \'), %2$s) or contains(concat(\' \', normalize-space(string(@value)), \' \'), %2$s) or @id=%3$s or @name=%3$s]', 'translate(@type, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")', static::xpathLiteral(' '.$value.' '), static::xpathLiteral($value))
         );
     }
 
     /**
      * Returns a Link object for the first node in the list.
      *
-     * @return Link
-     *
      * @throws \InvalidArgumentException If the current node list is empty or the selected node is not instance of DOMElement
      */
-    public function link(string $method = 'get')
+    public function link(string $method = 'get'): Link
     {
         if (!$this->nodes) {
             throw new \InvalidArgumentException('The current node list is empty.');
@@ -840,7 +796,7 @@ class Crawler implements \Countable, \IteratorAggregate
         $node = $this->getNode(0);
 
         if (!$node instanceof \DOMElement) {
-            throw new \InvalidArgumentException(sprintf('The selected node should be instance of DOMElement, got "%s".', get_debug_type($node)));
+            throw new \InvalidArgumentException(\sprintf('The selected node should be instance of DOMElement, got "%s".', get_debug_type($node)));
         }
 
         return new Link($node, $this->baseHref, $method);
@@ -853,12 +809,12 @@ class Crawler implements \Countable, \IteratorAggregate
      *
      * @throws \InvalidArgumentException If the current node list contains non-DOMElement instances
      */
-    public function links()
+    public function links(): array
     {
         $links = [];
         foreach ($this->nodes as $node) {
             if (!$node instanceof \DOMElement) {
-                throw new \InvalidArgumentException(sprintf('The current node list should contain only DOMElement instances, "%s" found.', get_debug_type($node)));
+                throw new \InvalidArgumentException(\sprintf('The current node list should contain only DOMElement instances, "%s" found.', get_debug_type($node)));
             }
 
             $links[] = new Link($node, $this->baseHref, 'get');
@@ -870,11 +826,9 @@ class Crawler implements \Countable, \IteratorAggregate
     /**
      * Returns an Image object for the first node in the list.
      *
-     * @return Image
-     *
      * @throws \InvalidArgumentException If the current node list is empty
      */
-    public function image()
+    public function image(): Image
     {
         if (!\count($this)) {
             throw new \InvalidArgumentException('The current node list is empty.');
@@ -883,7 +837,7 @@ class Crawler implements \Countable, \IteratorAggregate
         $node = $this->getNode(0);
 
         if (!$node instanceof \DOMElement) {
-            throw new \InvalidArgumentException(sprintf('The selected node should be instance of DOMElement, got "%s".', get_debug_type($node)));
+            throw new \InvalidArgumentException(\sprintf('The selected node should be instance of DOMElement, got "%s".', get_debug_type($node)));
         }
 
         return new Image($node, $this->baseHref);
@@ -894,12 +848,12 @@ class Crawler implements \Countable, \IteratorAggregate
      *
      * @return Image[]
      */
-    public function images()
+    public function images(): array
     {
         $images = [];
         foreach ($this as $node) {
             if (!$node instanceof \DOMElement) {
-                throw new \InvalidArgumentException(sprintf('The current node list should contain only DOMElement instances, "%s" found.', get_debug_type($node)));
+                throw new \InvalidArgumentException(\sprintf('The current node list should contain only DOMElement instances, "%s" found.', get_debug_type($node)));
             }
 
             $images[] = new Image($node, $this->baseHref);
@@ -911,11 +865,9 @@ class Crawler implements \Countable, \IteratorAggregate
     /**
      * Returns a Form object for the first node in the list.
      *
-     * @return Form
-     *
      * @throws \InvalidArgumentException If the current node list is empty or the selected node is not instance of DOMElement
      */
-    public function form(?array $values = null, ?string $method = null)
+    public function form(?array $values = null, ?string $method = null): Form
     {
         if (!$this->nodes) {
             throw new \InvalidArgumentException('The current node list is empty.');
@@ -924,7 +876,7 @@ class Crawler implements \Countable, \IteratorAggregate
         $node = $this->getNode(0);
 
         if (!$node instanceof \DOMElement) {
-            throw new \InvalidArgumentException(sprintf('The selected node should be instance of DOMElement, got "%s".', get_debug_type($node)));
+            throw new \InvalidArgumentException(\sprintf('The selected node should be instance of DOMElement, got "%s".', get_debug_type($node)));
         }
 
         $form = new Form($node, $this->uri, $method, $this->baseHref);
@@ -939,12 +891,12 @@ class Crawler implements \Countable, \IteratorAggregate
     /**
      * Overloads a default namespace prefix to be used with XPath and CSS expressions.
      */
-    public function setDefaultNamespacePrefix(string $prefix)
+    public function setDefaultNamespacePrefix(string $prefix): void
     {
         $this->defaultNamespacePrefix = $prefix;
     }
 
-    public function registerNamespace(string $prefix, string $namespace)
+    public function registerNamespace(string $prefix, string $namespace): void
     {
         $this->namespaces[$prefix] = $namespace;
     }
@@ -964,24 +916,22 @@ class Crawler implements \Countable, \IteratorAggregate
      *
      *     echo Crawler::xpathLiteral('a\'b"c');
      *     //prints concat('a', "'", 'b"c')
-     *
-     * @return string
      */
-    public static function xpathLiteral(string $s)
+    public static function xpathLiteral(string $s): string
     {
         if (!str_contains($s, "'")) {
-            return sprintf("'%s'", $s);
+            return \sprintf("'%s'", $s);
         }
 
         if (!str_contains($s, '"')) {
-            return sprintf('"%s"', $s);
+            return \sprintf('"%s"', $s);
         }
 
         $string = $s;
         $parts = [];
         while (true) {
             if (false !== $pos = strpos($string, "'")) {
-                $parts[] = sprintf("'%s'", substr($string, 0, $pos));
+                $parts[] = \sprintf("'%s'", substr($string, 0, $pos));
                 $parts[] = "\"'\"";
                 $string = substr($string, $pos + 1);
             } else {
@@ -990,17 +940,15 @@ class Crawler implements \Countable, \IteratorAggregate
             }
         }
 
-        return sprintf('concat(%s)', implode(', ', $parts));
+        return \sprintf('concat(%s)', implode(', ', $parts));
     }
 
     /**
      * Filters the list of nodes with an XPath expression.
      *
      * The XPath expression should already be processed to apply it in the context of each node.
-     *
-     * @return static
      */
-    private function filterRelativeXPath(string $xpath): object
+    private function filterRelativeXPath(string $xpath): static
     {
         $crawler = $this->createSubCrawler(null);
         if (null === $this->document) {
@@ -1106,19 +1054,12 @@ class Crawler implements \Countable, \IteratorAggregate
         return $xpath; // The XPath expression is invalid
     }
 
-    /**
-     * @return \DOMNode|null
-     */
-    public function getNode(int $position)
+    public function getNode(int $position): ?\DOMNode
     {
         return $this->nodes[$position] ?? null;
     }
 
-    /**
-     * @return int
-     */
-    #[\ReturnTypeWillChange]
-    public function count()
+    public function count(): int
     {
         return \count($this->nodes);
     }
@@ -1126,16 +1067,12 @@ class Crawler implements \Countable, \IteratorAggregate
     /**
      * @return \ArrayIterator<int, \DOMNode>
      */
-    #[\ReturnTypeWillChange]
-    public function getIterator()
+    public function getIterator(): \ArrayIterator
     {
         return new \ArrayIterator($this->nodes);
     }
 
-    /**
-     * @return array
-     */
-    protected function sibling(\DOMNode $node, string $siblingDir = 'nextSibling')
+    protected function sibling(\DOMNode $node, string $siblingDir = 'nextSibling'): array
     {
         $nodes = [];
 
@@ -1163,35 +1100,46 @@ class Crawler implements \Countable, \IteratorAggregate
     {
         try {
             return '' === @mb_convert_encoding('', $encoding, 'UTF-8');
-        } catch (\Throwable $e) {
+        } catch (\Throwable) {
             return false;
         }
     }
 
     private function parseXhtml(string $htmlContent, string $charset = 'UTF-8'): \DOMDocument
     {
-        if ('UTF-8' === $charset && preg_match('//u', $htmlContent)) {
-            $htmlContent = '<?xml encoding="UTF-8">'.$htmlContent;
-        } else {
-            $htmlContent = $this->convertToHtmlEntities($htmlContent, $charset);
+        if (\PHP_VERSION_ID < 80400 || !$this->useHtml5Parser) {
+            if ('UTF-8' === $charset && preg_match('//u', $htmlContent)) {
+                $htmlContent = '<?xml encoding="UTF-8">'.$htmlContent;
+            } else {
+                $htmlContent = $this->convertToHtmlEntities($htmlContent, $charset);
+            }
+
+            $internalErrors = libxml_use_internal_errors(true);
+
+            $dom = new \DOMDocument('1.0', $charset);
+            $dom->validateOnParse = true;
+
+            if ('' !== trim($htmlContent)) {
+                @$dom->loadHTML($htmlContent);
+            }
+
+            libxml_use_internal_errors($internalErrors);
+
+            return $dom;
         }
 
         $internalErrors = libxml_use_internal_errors(true);
-        if (\LIBXML_VERSION < 20900) {
-            $disableEntities = libxml_disable_entity_loader(true);
-        }
 
-        $dom = new \DOMDocument('1.0', $charset);
-        $dom->validateOnParse = true;
-
-        if ('' !== trim($htmlContent)) {
-            @$dom->loadHTML($htmlContent);
+        try {
+            $document = \Dom\HTMLDocument::createFromString($htmlContent, \Dom\HTML_NO_DEFAULT_NS, $charset);
+        } catch (\ValueError) {
+            $document = \Dom\HTMLDocument::createFromString($htmlContent, \Dom\HTML_NO_DEFAULT_NS);
         }
 
         libxml_use_internal_errors($internalErrors);
-        if (\LIBXML_VERSION < 20900) {
-            libxml_disable_entity_loader($disableEntities);
-        }
+
+        $dom = new \DOMDocument('1.0', $document->inputEncoding);
+        $this->copyFromHtml5ToDom($document->documentElement, $dom);
 
         return $dom;
     }
@@ -1201,15 +1149,15 @@ class Crawler implements \Countable, \IteratorAggregate
      */
     private function convertToHtmlEntities(string $htmlContent, string $charset = 'UTF-8'): string
     {
-        set_error_handler(function () { throw new \Exception(); });
+        set_error_handler(static fn () => throw new \Exception());
 
         try {
             return mb_encode_numericentity($htmlContent, [0x80, 0x10FFFF, 0, 0x1FFFFF], $charset);
-        } catch (\Exception|\ValueError $e) {
+        } catch (\Exception|\ValueError) {
             try {
                 $htmlContent = iconv($charset, 'UTF-8', $htmlContent);
                 $htmlContent = mb_encode_numericentity($htmlContent, [0x80, 0x10FFFF, 0, 0x1FFFFF], 'UTF-8');
-            } catch (\Exception|\ValueError $e) {
+            } catch (\Exception|\ValueError) {
             }
 
             return $htmlContent;
@@ -1249,9 +1197,9 @@ class Crawler implements \Countable, \IteratorAggregate
         }
 
         // ask for one namespace, otherwise we'd get a collection with an item for each node
-        $namespaces = $domxpath->query(sprintf('(//namespace::*[name()="%s"])[last()]', $this->defaultNamespacePrefix === $prefix ? '' : $prefix));
+        $namespaces = $domxpath->query(\sprintf('(//namespace::*[name()="%s"])[last()]', $this->defaultNamespacePrefix === $prefix ? '' : $prefix));
 
-        return $this->cachedNamespaces[$prefix] = ($node = $namespaces->item(0)) ? $node->nodeValue : null;
+        return $this->cachedNamespaces[$prefix] = $namespaces->item(0)?->nodeValue;
     }
 
     private function findNamespacePrefixes(string $xpath): array
@@ -1266,11 +1214,9 @@ class Crawler implements \Countable, \IteratorAggregate
     /**
      * Creates a crawler for some subnodes.
      *
-     * @param \DOMNodeList|\DOMNode|\DOMNode[]|string|null $nodes
-     *
-     * @return static
+     * @param \DOMNodeList<\DOMNode>|\DOMNode|\DOMNode[]|string|null $nodes
      */
-    private function createSubCrawler($nodes): object
+    private function createSubCrawler(\DOMNodeList|\DOMNode|array|string|null $nodes): static
     {
         $crawler = new static($nodes, $this->uri, $this->baseHref);
         $crawler->isHtml = $this->isHtml;
@@ -1295,6 +1241,40 @@ class Crawler implements \Countable, \IteratorAggregate
     }
 
     /**
+     * Returns every node matching the selector in the tree the given node belongs to.
+     *
+     * The whole tree is searched because a selector can constrain the ancestors or
+     * the siblings of the node it selects. The root is the topmost ancestor rather
+     * than the document, so that a node detached from the document still matches.
+     *
+     * @return \DOMNode[]
+     */
+    private function matchingNodes(string $selector, \DOMNode $root): array
+    {
+        if (null === $this->document) {
+            return [];
+        }
+
+        $converter = $this->createCssSelectorConverter();
+        $xpath = $converter->toXPath($selector);
+        $domxpath = $this->createDOMXPath($this->document, $this->findNamespacePrefixes($xpath));
+
+        return iterator_to_array($domxpath->query($xpath, $root), false);
+    }
+
+    /**
+     * Returns the topmost ancestor of the node, which is the document unless the node is detached from it.
+     */
+    private function rootNode(\DOMNode $node): \DOMNode
+    {
+        while (null !== $parent = $node->parentNode) {
+            $node = $parent;
+        }
+
+        return $node;
+    }
+
+    /**
      * Parse string into DOMDocument object using HTML5 parser if the content is HTML5 and the library is available.
      * Use libxml parser otherwise.
      */
@@ -1309,12 +1289,14 @@ class Crawler implements \Countable, \IteratorAggregate
 
     private function canParseHtml5String(string $content): bool
     {
-        if (null === $this->html5Parser) {
+        if (!$this->html5Parser) {
             return false;
         }
-        if (false === ($pos = stripos($content, '<!doctype html>'))) {
+
+        if (false === $pos = stripos($content, '<!doctype html>')) {
             return false;
         }
+
         $header = substr($content, 0, $pos);
 
         return '' === $header || $this->isValidHtml5Heading($header);
@@ -1323,5 +1305,57 @@ class Crawler implements \Countable, \IteratorAggregate
     private function isValidHtml5Heading(string $heading): bool
     {
         return 1 === preg_match('/^\x{FEFF}?\s*(<!--[^>]*?-->\s*)*$/u', $heading);
+    }
+
+    private function copyFromHtml5ToDom(\Dom\Node $source, \DOMDocument $target): void
+    {
+        /** @var list<array{0: iterable<\Dom\Node>, 1: \DOMNode}> $stack */
+        $stack = [[[$source], $target]];
+
+        while ($stack) {
+            [$children, $parent] = array_pop($stack);
+
+            foreach ($children as $source) {
+                if ($source instanceof \Dom\CharacterData) {
+                    $parent->appendChild(match (true) {
+                        $source instanceof \Dom\Text => $target->createTextNode($source->data),
+                        $source instanceof \Dom\Comment => $target->createComment($source->data),
+                        $source instanceof \Dom\CDATASection => $target->createCDATASection($source->data),
+                        $source instanceof \Dom\ProcessingInstruction => $target->createProcessingInstruction($source->target, $source->data),
+                    });
+                    continue;
+                }
+
+                if (!$source instanceof \Dom\Element) {
+                    continue;
+                }
+
+                try {
+                    $element = $target->createElement($source->tagName);
+                } catch (\DOMException) {
+                    continue;
+                }
+
+                foreach ($source->attributes as $attr) {
+                    try {
+                        $element->setAttribute($attr->name, $attr->value);
+                    } catch (\DOMException) {
+                        // ignore invalid attribute name
+                    }
+                    if ('id' === $attr->name) {
+                        $element->setIdAttribute('id', true);
+                    }
+                }
+
+                $parent->appendChild($element);
+
+                $stack[] = [$source->childNodes, $element];
+            }
+        }
+    }
+
+    private function normalizeWhitespace(string $string): string
+    {
+        return trim(preg_replace("/(?:[ \n\r\t\x0C]{2,}+|[\n\r\t\x0C])/", ' ', $string), " \n\r\t\x0C");
     }
 }

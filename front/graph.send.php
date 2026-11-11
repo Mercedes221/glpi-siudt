@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,22 +33,22 @@
  * ---------------------------------------------------------------------
  */
 
+require_once(__DIR__ . '/_check_webserver_config.php');
+
 use Glpi\Csv\CsvResponse;
 use Glpi\Csv\StatCsvExport;
-use Glpi\Http\Response;
+use Glpi\Exception\Http\BadRequestHttpException;
 use Glpi\Stat\StatData;
 
-include('../inc/includes.php');
-
 // Check rights
-Session::checkRight("statistic", READ);
+Session::checkRight(Stat::$rightname, READ);
 
 // Read params
-$statdata_itemtype = $_UGET['statdata_itemtype'] ?? null;
+$statdata_itemtype = $_GET['statdata_itemtype'] ?? null;
 
 // Validate stats itemtype
 if (!is_a($statdata_itemtype, StatData::class, true)) {
-    Response::sendError(400, "Invalid stats itemtype", Response::CONTENT_TYPE_TEXT_PLAIN);
+    throw new BadRequestHttpException("Invalid stats itemtype");
 }
 
 // Get data and output csv

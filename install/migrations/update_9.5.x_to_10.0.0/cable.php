@@ -7,8 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
- * @copyright 2003-2014 by the INDEPNET Development Team.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
  * ---------------------------------------------------------------------
@@ -36,10 +35,9 @@
 use Glpi\Socket;
 
 /**
- * @var \DBmysql $DB
- * @var \Migration $migration
+ * @var DBmysql $DB
+ * @var Migration $migration
  */
-
 $default_charset = DBConnection::getDefaultCharset();
 $default_collation = DBConnection::getDefaultCollation();
 $default_key_sign = DBConnection::getDefaultPrimaryKeySignOption();
@@ -56,7 +54,7 @@ if (!$DB->tableExists('glpi_cabletypes')) {
       KEY `date_mod` (`date_mod`),
       KEY `date_creation` (`date_creation`)
     ) ENGINE=InnoDB DEFAULT CHARSET = {$default_charset} COLLATE = {$default_collation} ROW_FORMAT=DYNAMIC;";
-    $DB->doQueryOrDie($query, "10.0 add table glpi_cabletypes");
+    $DB->doQuery($query);
 }
 
 if (!$DB->tableExists('glpi_cablestrands')) {
@@ -71,7 +69,7 @@ if (!$DB->tableExists('glpi_cablestrands')) {
       KEY `date_mod` (`date_mod`),
       KEY `date_creation` (`date_creation`)
     ) ENGINE=InnoDB DEFAULT CHARSET = {$default_charset} COLLATE = {$default_collation} ROW_FORMAT=DYNAMIC;";
-    $DB->doQueryOrDie($query, "10.0 add table glpi_cablestrands");
+    $DB->doQuery($query);
 }
 
 if (!$DB->tableExists('glpi_socketmodels')) {
@@ -86,7 +84,7 @@ if (!$DB->tableExists('glpi_socketmodels')) {
       KEY `date_mod` (`date_mod`),
       KEY `date_creation` (`date_creation`)
     ) ENGINE=InnoDB DEFAULT CHARSET= {$default_charset} COLLATE = {$default_collation} ROW_FORMAT=DYNAMIC;";
-    $DB->doQueryOrDie($query, "10.0 add table glpi_socketmodels");
+    $DB->doQuery($query);
 }
 
 if (!$DB->tableExists('glpi_cables')) {
@@ -131,16 +129,16 @@ if (!$DB->tableExists('glpi_cables')) {
       KEY `date_mod` (`date_mod`),
       KEY `date_creation` (`date_creation`)
     ) ENGINE=InnoDB DEFAULT CHARSET = {$default_charset} COLLATE = {$default_collation} ROW_FORMAT=DYNAMIC;";
-    $DB->doQueryOrDie($query, "10.0 add table glpi_cables");
+    $DB->doQuery($query);
 }
 $migration->addField('glpi_states', 'is_visible_cable', 'bool', [
     'value' => 1,
-    'after' => 'is_visible_appliance'
+    'after' => 'is_visible_appliance',
 ]);
 $migration->addKey('glpi_states', 'is_visible_cable');
 
 if (!$DB->tableExists('glpi_sockets')) {
-   //create socket table
+    //create socket table
     $query = "CREATE TABLE `glpi_sockets` (
       `id` int {$default_key_sign} NOT NULL AUTO_INCREMENT,
       `position` int NOT NULL DEFAULT '0',
@@ -164,13 +162,13 @@ if (!$DB->tableExists('glpi_sockets')) {
       KEY `date_mod` (`date_mod`),
       KEY `date_creation` (`date_creation`)
     ) ENGINE=InnoDB DEFAULT CHARSET = {$default_charset} COLLATE = {$default_collation} ROW_FORMAT=DYNAMIC;";
-    $DB->doQueryOrDie($query, "10.0 add table glpi_sockets");
+    $DB->doQuery($query);
 }
 
 if ($DB->tableExists('glpi_netpoints')) {
-   //migrate link between NetworkPort and Socket
-   // BEFORE : supported by NetworkPortEthernet / NetworkPortFiberchannel with 'netpoints_id' foreign key
-   // AFTER  : supported by Socket with (itemtype, items_id, networkports_id)
+    //migrate link between NetworkPort and Socket
+    // BEFORE : supported by NetworkPortEthernet / NetworkPortFiberchannel with 'netpoints_id' foreign key
+    // AFTER  : supported by Socket with (itemtype, items_id, networkports_id)
     $tables_to_migrate = ['glpi_networkportethernets', 'glpi_networkportfiberchannels'];
     foreach ($tables_to_migrate as $table) {
         if (!$DB->fieldExists($table, 'netpoints_id')) {
@@ -194,21 +192,20 @@ if ($DB->tableExists('glpi_netpoints')) {
                     'FKEY' => [
                         'glpi_networkports'     => 'id',
                         $table   => 'networkports_id',
-                    ]
+                    ],
                 ],
                 'glpi_netpoints' => [
                     'FKEY' => [
                         'glpi_netpoints'        => 'id',
                         $table   => 'netpoints_id',
-                    ]
+                    ],
                 ],
-            ]
+            ],
         ];
 
         $iterator = $DB->request($criteria);
 
         foreach ($iterator as $data) {
-            $socket = new Socket();
             $input = [
                 'name'            => $data['name'],
                 'locations_id'    => $data['locations_id'],
@@ -219,11 +216,10 @@ if ($DB->tableExists('glpi_netpoints')) {
                 'date_creation'   => $data['date_creation'],
                 'date_mod'        => $data['date_mod'],
             ];
-
-            $socket->add($input);
+            $DB->insert('glpi_sockets', $input);
         }
     }
-   //remove "useless "netpoints_id" field
+    //remove "useless "netpoints_id" field
     $migration->dropField('glpi_networkportethernets', 'netpoints_id');
     $migration->dropField('glpi_networkportfiberchannels', 'netpoints_id');
 }
@@ -243,7 +239,7 @@ if (!$DB->tableExists('glpi_networkportfiberchanneltypes')) {
       KEY `date_mod` (`date_mod`),
       KEY `date_creation` (`date_creation`)
       ) ENGINE = InnoDB DEFAULT CHARSET = {$default_charset} COLLATE = {$default_collation} ROW_FORMAT=DYNAMIC;";
-    $DB->doQueryOrDie($query, "10.0 add table glpi_networkportfiberchanneltypes");
+    $DB->doQuery($query);
 }
 
 $migration->addField('glpi_networkportfiberchannels', 'networkportfiberchanneltypes_id', "int {$default_key_sign} NOT NULL DEFAULT '0'", ['after' => 'items_devicenetworkcards_id']);

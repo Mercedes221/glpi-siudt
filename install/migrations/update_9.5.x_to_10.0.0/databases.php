@@ -7,8 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
- * @copyright 2003-2014 by the INDEPNET Development Team.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
  * ---------------------------------------------------------------------
@@ -34,11 +33,10 @@
  */
 
 /**
- * @var \DBmysql $DB
- * @var \Migration $migration
+ * @var DBmysql $DB
+ * @var Migration $migration
  * @var array $ADDTODISPLAYPREF
  */
-
 $default_charset = DBConnection::getDefaultCharset();
 $default_collation = DBConnection::getDefaultCollation();
 $default_key_sign = DBConnection::getDefaultPrimaryKeySignOption();
@@ -55,7 +53,7 @@ if (!$DB->tableExists('glpi_databaseinstancetypes')) {
          KEY `date_mod` (`date_mod`),
          KEY `date_creation` (`date_creation`)
       ) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARSET = {$default_charset} COLLATE = {$default_collation};";
-    $DB->doQueryOrDie($query, "10.0 add table glpi_databaseinstancetypes");
+    $DB->doQuery($query);
 }
 
 if (!$DB->tableExists('glpi_databaseinstancecategories')) {
@@ -70,7 +68,7 @@ if (!$DB->tableExists('glpi_databaseinstancecategories')) {
          KEY `date_mod` (`date_mod`),
          KEY `date_creation` (`date_creation`)
       ) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARSET = {$default_charset} COLLATE = {$default_collation};";
-    $DB->doQueryOrDie($query, "10.0 add table glpi_databaseinstancecategoriess");
+    $DB->doQuery($query);
 }
 
 if (!$DB->tableExists('glpi_databaseinstances')) {
@@ -121,17 +119,17 @@ if (!$DB->tableExists('glpi_databaseinstances')) {
          KEY `is_helpdesk_visible` (`is_helpdesk_visible`),
          KEY `is_dynamic` (`is_dynamic`)
       ) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARSET = {$default_charset} COLLATE = {$default_collation};";
-    $DB->doQueryOrDie($query, "10.0 add table glpi_databaseinstances");
+    $DB->doQuery($query);
 }
 
 // Create glpi_databaseinstances itemtype/items_id if they are not existing (datamodel changed during v10.0 development)
 if (!$DB->fieldExists('glpi_databaseinstances', 'itemtype') || !$DB->fieldExists('glpi_databaseinstances', 'items_id')) {
-   //1- migrate glpi_databaseinstances table
+    //1- migrate glpi_databaseinstances table
     $migration->addField('glpi_databaseinstances', 'itemtype', 'string', [
-        'after' => 'states_id'
+        'after' => 'states_id',
     ]);
     $migration->addField('glpi_databaseinstances', 'items_id', "int {$default_key_sign} NOT NULL DEFAULT '0'", [
-        'after' => 'itemtype'
+        'after' => 'itemtype',
     ]);
     $migration->addKey('glpi_databaseinstances', ['itemtype', 'items_id'], 'item');
     $migration->migrationOneTable('glpi_databaseinstances');
@@ -168,17 +166,17 @@ if (!$DB->tableExists('glpi_databases')) {
          KEY `date_mod` (`date_mod`),
          KEY `databaseinstances_id` (`databaseinstances_id`)
       ) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARSET = {$default_charset} COLLATE = {$default_collation};";
-    $DB->doQueryOrDie($query, "10.0 add table glpi_databases");
+    $DB->doQuery($query);
 }
 
 if ($DB->fieldExists('glpi_states', 'is_visible_database')) {
     // Dev migration
     $migration->changeField('glpi_states', 'is_visible_database', 'is_visible_databaseinstance', 'bool', ['value' => 1]);
     $migration->dropKey('glpi_states', 'is_visible_database');
-} else if (!$DB->fieldExists('glpi_states', 'is_visible_databaseinstance')) {
+} elseif (!$DB->fieldExists('glpi_states', 'is_visible_databaseinstance')) {
     $migration->addField('glpi_states', 'is_visible_databaseinstance', 'bool', [
         'value' => 1,
-        'after' => 'is_visible_appliance'
+        'after' => 'is_visible_appliance',
     ]);
 }
 $migration->addKey('glpi_states', 'is_visible_databaseinstance');
@@ -186,7 +184,7 @@ $migration->addKey('glpi_states', 'is_visible_databaseinstance');
 // Create glpi_databases is_dynamic if not exist (datamodel changed during v10.0 development)
 if (!$DB->fieldExists('glpi_databases', 'is_dynamic')) {
     $migration->addField('glpi_databases', 'is_dynamic', "tinyint NOT NULL DEFAULT '0'", [
-        'after' => 'is_deleted'
+        'after' => 'is_deleted',
     ]);
     $migration->addKey('glpi_databases', 'is_dynamic');
     $migration->migrationOneTable('glpi_databases');

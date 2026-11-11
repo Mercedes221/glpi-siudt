@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,372 +33,116 @@
  * ---------------------------------------------------------------------
  */
 
-/// Class KnowbaseItem_Comment
-/// since version 9.2
-class KnowbaseItem_Comment extends CommonDBTM
+use Glpi\Knowbase\CommentsThread;
+
+/**
+ * Class KnowbaseItem_Comment
+ * @since 9.2.0
+ */
+final class KnowbaseItem_Comment extends CommonDBTM
 {
-    public static function getTypeName($nb = 0)
+    // TODO: extends CommonDBChild and uncomment these lines.
+    // Note: doing so seems to break the HL API
+    // public static string $itemtype = KnowbaseItem::class;
+    // public static string $items_id = 'knowbaseitems_id';
+
+    /** Longest quotable passage, in characters. */
+    public const MAX_ANCHOR_LENGTH = 1000;
+
+    /** Longest context kept around the quote, in characters. */
+    public const MAX_ANCHOR_CONTEXT_LENGTH = 255;
+
+    #[Override]
+    public static function getTypeName($nb = 0): string
     {
         return _n('Comment', 'Comments', $nb);
     }
 
-    public function getTabNameForItem(CommonGLPI $item, $withtemplate = 0)
+    #[Override]
+    public static function getIcon(): string
     {
-        if (!($item instanceof KnowbaseItem) || !$item->canComment()) {
-            return '';
-        }
-
-        $nb = 0;
-        if ($_SESSION['glpishow_count_on_tabs']) {
-            $where = [];
-            if ($item->getType() == KnowbaseItem::getType()) {
-                $where = [
-                    'knowbaseitems_id' => $item->getID(),
-                    'language'         => null
-                ];
-            } else {
-                $where = [
-                    'knowbaseitems_id' => $item->fields['knowbaseitems_id'],
-                    'language'         => $item->fields['language']
-                ];
-            }
-
-            $nb = countElementsInTable(
-                'glpi_knowbaseitems_comments',
-                $where
-            );
-        }
-        return self::createTabEntry(self::getTypeName($nb), $nb);
+        return 'ti ti-message-circle';
     }
 
-    public static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0)
+    #[Override]
+    public static function canCreate(): bool
     {
-        self::showForItem($item, $withtemplate);
-        return true;
+        return Session::haveRight(KnowbaseItem::$rightname, KnowbaseItem::COMMENTS);
     }
 
-    /**
-     * Show linked items of a knowbase item
-     *
-     * @param $item                     CommonDBTM object
-     * @param $withtemplate    integer  withtemplate param (default 0)
-     **/
-    public static function showForItem(CommonDBTM $item, $withtemplate = 0)
+    #[Override]
+    public static function canView(): bool
     {
-        /** @var array $CFG_GLPI */
-        global $CFG_GLPI;
-
-       // Total Number of comments
-        if ($item->getType() == KnowbaseItem::getType()) {
-            $where = [
-                'knowbaseitems_id' => $item->getID(),
-                'language'         => null
-            ];
-        } else {
-            $where = [
-                'knowbaseitems_id' => $item->fields['knowbaseitems_id'],
-                'language'         => $item->fields['language']
-            ];
-        }
-
-        $kbitem_id = $where['knowbaseitems_id'];
-        $kbitem = new KnowbaseItem();
-        $kbitem->getFromDB($kbitem_id);
-
-        $number = countElementsInTable(
-            'glpi_knowbaseitems_comments',
-            $where
-        );
-
-        $cancomment = $kbitem->canComment();
-        if ($cancomment) {
-            echo "<div class='firstbloc'>";
-
-            $lang = null;
-            if ($item->getType() == KnowbaseItemTranslation::getType()) {
-                $lang = $item->fields['language'];
-            }
-
-            echo self::getCommentForm($kbitem_id, $lang);
-            echo "</div>";
-        }
-
-       // No comments in database
-        if ($number < 1) {
-            $no_txt = __('No comments');
-            echo "<div class='center'>";
-            echo "<table class='tab_cadre_fixe'>";
-            echo "<tr><th>$no_txt</th></tr>";
-            echo "</table>";
-            echo "</div>";
-            return;
-        }
-
-       // Output events
-        echo "<div class='forcomments timeline_history'>";
-        echo "<ul class='comments left'>";
-        $comments = self::getCommentsForKbItem($where['knowbaseitems_id'], $where['language']);
-        $html = self::displayComments($comments, $cancomment);
-        echo $html;
-
-        echo "</ul>";
-        echo "<script type='text/javascript'>
-              $(function() {
-                 var _bindForm = function(form) {
-                     form.find('input[type=reset]').on('click', function(e) {
-                        e.preventDefault();
-                        form.remove();
-                        $('.displayed_content').show();
-                     });
-                 };
-
-                 $('.add_answer').on('click', function() {
-                    var _this = $(this);
-                    var _data = {
-                       'kbitem_id': _this.data('kbitem_id'),
-                       'answer'   : _this.data('id')
-                    };
-
-                    if (_this.data('language') != undefined) {
-                       _data.language = _this.data('language');
-                    }
-
-                    if (_this.parents('.comment').find('#newcomment' + _this.data('id')).length > 0) {
-                       return;
-                    }
-
-                    $.ajax({
-                       url: '{$CFG_GLPI["root_doc"]}/ajax/getKbComment.php',
-                       method: 'post',
-                       cache: false,
-                       data: _data,
-                       success: function(data) {
-                          var _form = $('<div class=\"newcomment ms-3\" id=\"newcomment'+_this.data('id')+'\">' + data + '</div>');
-                          _bindForm(_form);
-                          _this.parents('.h_item').after(_form);
-                       },
-                       error: function() { " .
-                          Html::jsAlertCallback(__('Contact your GLPI admin!'), __('Unable to load revision!')) . "
-                       }
-                    });
-                 });
-
-                 $('.edit_item').on('click', function() {
-                    var _this = $(this);
-                    var _data = {
-                       'kbitem_id': _this.data('kbitem_id'),
-                       'edit'     : _this.data('id')
-                    };
-
-                    if (_this.data('language') != undefined) {
-                       _data.language = _this.data('language');
-                    }
-
-                    if (_this.parents('.comment').find('#editcomment' + _this.data('id')).length > 0) {
-                       return;
-                    }
-
-                    $.ajax({
-                       url: '{$CFG_GLPI["root_doc"]}/ajax/getKbComment.php',
-                       method: 'post',
-                       cache: false,
-                       data: _data,
-                       success: function(data) {
-                          var _form = $('<div class=\"editcomment\" id=\"editcomment'+_this.data('id')+'\">' + data + '</div>');
-                          _bindForm(_form);
-                          _this
-                           .parents('.displayed_content').hide()
-                           .parent()
-                           .append(_form);
-                       },
-                       error: function() { " .
-                          Html::jsAlertCallback(__('Contact your GLPI admin!'), __('Unable to load revision!')) . "
-                       }
-                    });
-                 });
-
-
-              });
-            </script>";
-
-            echo "</div>";
+        return Session::haveRight(KnowbaseItem::$rightname, KnowbaseItem::COMMENTS);
     }
 
-    /**
-     * Gat all comments for specified KB entry
-     *
-     * @param integer $kbitem_id KB entry ID
-     * @param string  $lang      Requested language
-     * @param integer $parent    Parent ID (defaults to 0)
-     *
-     * @return array
-     */
-    public static function getCommentsForKbItem($kbitem_id, $lang, $parent = null)
+    #[Override]
+    public static function canUpdate(): bool
     {
-        /** @var \DBmysql $DB */
-        global $DB;
-
-        $where = [
-            'knowbaseitems_id'  => $kbitem_id,
-            'language'          => $lang,
-            'parent_comment_id' => $parent
-        ];
-
-        $db_comments = $DB->request(
-            'glpi_knowbaseitems_comments',
-            $where + ['ORDER' => 'id ASC']
-        );
-
-        $comments = [];
-        foreach ($db_comments as $db_comment) {
-            $db_comment['answers'] = self::getCommentsForKbItem($kbitem_id, $lang, $db_comment['id']);
-            $comments[] = $db_comment;
-        }
-
-        return $comments;
+        return Session::haveRight(KnowbaseItem::$rightname, KnowbaseItem::COMMENTS);
     }
 
-    /**
-     * Display comments
-     *
-     * @param array   $comments   Comments
-     * @param boolean $cancomment Whether user can comment or not
-     * @param integer $level      Current level, defaults to 0
-     *
-     * @return string
-     */
-    public static function displayComments($comments, $cancomment, $level = 0)
+    #[Override]
+    public static function canDelete(): bool
     {
-        $html = '';
-        foreach ($comments as $comment) {
-            $user = new User();
-            $user->getFromDB($comment['users_id']);
-
-            $html .= "<li class='comment" . ($level > 0 ? ' subcomment' : '') . "' id='kbcomment{$comment['id']}'>";
-            $html .= "<div class='h_item left d-flex'>";
-            if ($level === 0) {
-                $html .= '<hr/>';
-            }
-            $html .= "<div class='h_info'>";
-            $html .= "<div class='h_date'>" . Html::convDateTime($comment['date_creation']) . "</div>";
-            $html .= "<div class='h_user'>";
-            $thumbnail_url = User::getThumbnailURLForPicture($user->fields['picture']);
-            $style = !empty($thumbnail_url) ? "background-image: url(\"$thumbnail_url\"); background-color: inherit;" : ("background-color: " . $user->getUserInitialsBgColor());
-            $html .= '<a href="' . $user->getLinkURL() . '">';
-            $html .= "<span class='avatar avatar-md rounded' style='{$style}'>";
-            if (empty($thumbnail_url)) {
-                $html .= $user->getUserInitials();
-            }
-            $html .= '</span></a>';
-            $html .= "</div>"; // h_user
-            $html .= "</div>"; //h_info
-
-            $html .= "<div class='h_content KnowbaseItemComment'>";
-            $html .= "<div class='displayed_content ms-2'>";
-
-            if ($cancomment) {
-                if (Session::getLoginUserID() == $comment['users_id']) {
-                    $html .= "<span class='ti ti-edit edit_item pointer'
-                  data-kbitem_id='{$comment['knowbaseitems_id']}'
-                  data-lang='{$comment['language']}'
-                  data-id='{$comment['id']}'></span>";
-                }
-            }
-
-            $html .= "<div class='item_content'>";
-            $html .= "<p>{$comment['comment']}</p>";
-            $html .= "</div>";
-            $html .= "</div>"; // displayed_content
-
-            if ($cancomment) {
-                $html .= "<span class='add_answer' title='" . __('Add an answer') . "'
-               data-kbitem_id='{$comment['knowbaseitems_id']}'
-               data-lang='{$comment['language']}'
-               data-id='{$comment['id']}'></span>";
-            }
-
-            $html .= "</div>"; //end h_content
-            $html .= "</div>";
-
-            if (isset($comment['answers']) && count($comment['answers']) > 0) {
-                $html .= "<input type='checkbox' id='toggle_{$comment['id']}'
-                             class='toggle_comments' checked='checked'>";
-                $html .= "<label for='toggle_{$comment['id']}' class='toggle_label'>&nbsp;</label>";
-                $html .= "<ul>";
-                $html .= self::displayComments($comment['answers'], $cancomment, $level + 1);
-                $html .= "</ul>";
-            }
-
-            $html .= "</li>";
-        }
-        return $html;
+        // Soft delete is not supported on this item
+        return false;
     }
 
-    /**
-     * Get comment form
-     *
-     * @param integer       $kbitem_id Knowbase item ID
-     * @param string        $lang      Related item language
-     * @param false|integer $edit      Comment id to edit, or false
-     * @param false|integer $answer    Comment id to answer to, or false
-     * @return string
-     */
-    public static function getCommentForm($kbitem_id, $lang = null, $edit = false, $answer = false)
+    #[Override]
+    public static function canPurge(): bool
     {
-        $rand   = mt_rand();
-
-        $content = '';
-        if ($edit !== false) {
-            $comment = new KnowbaseItem_Comment();
-            $comment->getFromDB($edit);
-            $content = $comment->fields['comment'];
-        }
-
-        $html = '';
-        $html .= "<form name='kbcomment_form$rand' id='kbcomment_form$rand'
-                      class='comment_form' method='post'
-            action='" . Toolbox::getItemTypeFormURL(__CLASS__) . "'>";
-
-        $html .= "<table class='tab_cadre_fixe'>";
-
-        $form_title = ($edit === false ? __('New comment') : __('Edit comment'));
-        $html .= "<tr class='tab_bg_2'><th colspan='3'>$form_title</th></tr>";
-
-        $html .= "<tr class='tab_bg_1'><td><label for='comment'>" . _n('Comment', 'Comments', 1) . "</label>
-         &nbsp;<span class='red'>*</span></td><td>";
-        $html .= "<textarea name='comment' id='comment' required='required'>{$content}</textarea>";
-        $html .= "</td><td class='center'>";
-
-        $btn_text = _sx('button', 'Add');
-        $btn_name = 'add';
-
-        if ($edit !== false) {
-            $btn_text = _sx('button', 'Edit');
-            $btn_name = 'edit';
-        }
-        $html .= "<input type='submit' name='$btn_name' value='{$btn_text}' class='btn btn-primary'>";
-        if ($edit !== false || $answer !== false) {
-            $html .= "<input type='reset' name='cancel' value='" . __('Cancel') . "' class='btn btn-primary'>";
-        }
-
-        $html .= "<input type='hidden' name='knowbaseitems_id' value='$kbitem_id'>";
-        if ($lang !== null) {
-            $html .= "<input type='hidden' name='language' value='$lang'>";
-        }
-        if ($answer !== false) {
-            $html .= "<input type='hidden' name='parent_comment_id' value='{$answer}'/>";
-        }
-        if ($edit !== false) {
-            $html .= "<input type='hidden' name='id' value='{$edit}'/>";
-        }
-        $html .= "</td></tr>";
-        $html .= "</table>";
-        $html .= Html::closeForm(false);
-        return $html;
+        return Session::haveRight(KnowbaseItem::$rightname, KnowbaseItem::COMMENTS);
     }
 
-    public function prepareInputForAdd($input)
+    #[Override]
+    public function canCreateItem(): bool
     {
+        return $this->canComment();
+    }
+
+    #[Override]
+    public function canViewItem(): bool
+    {
+        return $this->canComment();
+    }
+
+    #[Override]
+    public function canUpdateItem(): bool
+    {
+        if (!$this->canComment()) {
+            return false;
+        }
+
+        // Users can edit their own comments and admins can edit all comments
+        return $this->isAuthor() || $this->isKnowbaseAdmin();
+    }
+
+    #[Override]
+    public function canDeleteItem(): bool
+    {
+        // Soft delete is not supported on this item
+        return false;
+    }
+
+    #[Override]
+    public function canPurgeItem(): bool
+    {
+        if (!$this->canComment()) {
+            return false;
+        }
+
+        // Users can delete their own comments and admins can delete all comments
+        return $this->isAuthor() || $this->isKnowbaseAdmin();
+    }
+
+    #[Override]
+    public function prepareInputForAdd($input): array|false
+    {
+        if (trim((string) ($input['comment'] ?? '')) === '') {
+            return false;
+        }
+
         if (!isset($input["users_id"])) {
             $input["users_id"] = 0;
             if ($uid = Session::getLoginUserID()) {
@@ -406,6 +150,223 @@ class KnowbaseItem_Comment extends CommonDBTM
             }
         }
 
+        // A reply belongs to its thread's anchor; it never carries its own.
+        if (!empty($input['parent_comment_id'])) {
+            unset(
+                $input['anchor_prefix'],
+                $input['anchor_exact'],
+                $input['anchor_suffix'],
+                $input['anchor_occurrence'],
+            );
+        } elseif (!$this->hasValidAnchorLengths($input)) {
+            return false;
+        }
+
         return $input;
+    }
+
+    #[Override]
+    public function prepareInputForUpdate($input): array|false
+    {
+        if (!$this->hasValidAnchorLengths($input)) {
+            return false;
+        }
+
+        return $input;
+    }
+
+    /**
+     * The quote duplicates article content; unbounded, it is an abuse vector.
+     *
+     * @param array<string, mixed> $input
+     */
+    public function hasValidAnchorLengths(array $input): bool
+    {
+        $limits = [
+            'anchor_prefix' => self::MAX_ANCHOR_CONTEXT_LENGTH,
+            'anchor_exact'  => self::MAX_ANCHOR_LENGTH,
+            'anchor_suffix' => self::MAX_ANCHOR_CONTEXT_LENGTH,
+        ];
+
+        foreach ($limits as $field => $limit) {
+            if (mb_strlen((string) ($input[$field] ?? '')) > $limit) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public function hasAnchor(): bool
+    {
+        return !empty($this->fields['anchor_exact'] ?? null);
+    }
+
+    /**
+     * Drop the anchors of the given comments; ids belonging elsewhere are ignored.
+     *
+     * @param array<mixed> $comment_ids
+     */
+    public function clearAnchorsForItem(KnowbaseItem $article, array $comment_ids): void
+    {
+        $updates = [];
+        foreach ($comment_ids as $comment_id) {
+            if (!is_scalar($comment_id)) {
+                continue;
+            }
+            $updates[(int) $comment_id] = [
+                'anchor_prefix'     => null,
+                'anchor_exact'      => null,
+                'anchor_suffix'     => null,
+                'anchor_occurrence' => null,
+            ];
+        }
+
+        self::writeAnchors($article, $updates, only_anchored: false);
+    }
+
+    /**
+     * Move the given comments' anchors onto the quote the saved content now carries, so
+     * an edited passage stays anchored. Ids belonging elsewhere are ignored, and an
+     * anchor is only ever moved, never created: dropping one goes through
+     * clearAnchorsForItem().
+     *
+     * @param array<mixed> $anchors
+     */
+    public function refreshAnchorsForItem(KnowbaseItem $article, array $anchors): void
+    {
+        $updates = [];
+        foreach ($anchors as $anchor) {
+            if (!is_array($anchor) || !is_scalar($anchor['id'] ?? null)) {
+                continue;
+            }
+
+            $prefix     = $anchor['prefix'] ?? '';
+            $exact      = $anchor['exact'] ?? '';
+            $suffix     = $anchor['suffix'] ?? '';
+            $occurrence = $anchor['occurrence'] ?? 0;
+            if (
+                !is_scalar($prefix) || !is_scalar($exact)
+                || !is_scalar($suffix) || !is_scalar($occurrence)
+                || trim((string) $exact) === ''
+            ) {
+                continue;
+            }
+
+            $updates[(int) $anchor['id']] = [
+                'anchor_prefix'     => (string) $prefix,
+                'anchor_exact'      => (string) $exact,
+                'anchor_suffix'     => (string) $suffix,
+                'anchor_occurrence' => (int) $occurrence,
+            ];
+        }
+
+        self::writeAnchors($article, $updates, only_anchored: true);
+    }
+
+    /**
+     * Apply anchor columns to the given comments, loaded in one query. Ids
+     * belonging to another article are ignored.
+     *
+     * @param array<int, array<string, string|int|null>> $updates Keyed by comment id.
+     * @param bool $only_anchored Skip comments that carry no anchor yet.
+     */
+    private static function writeAnchors(KnowbaseItem $article, array $updates, bool $only_anchored): void
+    {
+        // Anchors track position in the article's content, not comment ownership,
+        // but still require the comment feature itself to be enabled for the user.
+        if ($updates === [] || !$article->can($article->getID(), UPDATE) || !$article->canComment()) {
+            return;
+        }
+
+        $comments = self::getSeveralFromDBByCrit([
+            'id'               => array_keys($updates),
+            'knowbaseitems_id' => $article->getID(),
+        ]);
+
+        foreach ($comments as $comment) {
+            if ($only_anchored && !$comment->hasAnchor()) {
+                continue;
+            }
+            $comment->update(
+                ['id' => $comment->getID()] + $updates[(int) $comment->fields['id']]
+            );
+        }
+    }
+
+    /**
+     * @return list<array{id: int, prefix: string, exact: string, suffix: string, occurrence: int}>
+     */
+    public static function getAnchorsForItem(KnowbaseItem $article): array
+    {
+        $comments = self::getSeveralFromDBByCrit([
+            'knowbaseitems_id'  => $article->getID(),
+            'parent_comment_id' => null,
+        ]);
+
+        $anchors = [];
+        foreach ($comments as $comment) {
+            if (!$comment->hasAnchor()) {
+                continue;
+            }
+            $anchors[] = [
+                'id'         => (int) $comment->fields['id'],
+                'prefix'     => (string) $comment->fields['anchor_prefix'],
+                'exact'      => (string) $comment->fields['anchor_exact'],
+                'suffix'     => (string) $comment->fields['anchor_suffix'],
+                'occurrence' => (int) $comment->fields['anchor_occurrence'],
+            ];
+        }
+
+        return $anchors;
+    }
+
+    /** @return CommentsThread[] */
+    public static function getCommentsThreads(KnowbaseItem $article): array
+    {
+        $threads = [];
+        $comments = KnowbaseItem_Comment::getSeveralFromDBByCrit([
+            'knowbaseitems_id'  => $article->getID(),
+            'parent_comment_id' => null,
+        ], ['id ASC']);
+
+        foreach ($comments as $comment) {
+            $thread = new CommentsThread();
+            $thread->addComment($comment);
+
+            $answers = KnowbaseItem_Comment::getSeveralFromDBByCrit([
+                'knowbaseitems_id'  => $article->getID(),
+                'parent_comment_id' => $comment->getID(),
+            ], ['id ASC']);
+            foreach ($answers as $answer) {
+                $thread->addComment($answer);
+            }
+
+            $threads[] = $thread;
+        }
+
+        return $threads;
+    }
+
+    private function canComment(): bool
+    {
+        $kbitem = new KnowbaseItem();
+        if (!$kbitem->getFromDB($this->fields['knowbaseitems_id'])) {
+            return false;
+        }
+        return $kbitem->canComment();
+    }
+
+    private function isKnowbaseAdmin(): bool
+    {
+        return Session::haveRight(
+            KnowbaseItem::$rightname,
+            KnowbaseItem::KNOWBASEADMIN
+        );
+    }
+
+    private function isAuthor(): bool
+    {
+        return Session::getLoginUserID() === $this->fields['users_id'];
     }
 }

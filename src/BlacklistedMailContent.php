@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,6 +33,8 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\Features\Clonable;
+
 /**
  * BlacklistedMailContent Class
  *
@@ -40,12 +42,15 @@
  **/
 class BlacklistedMailContent extends CommonDropdown
 {
-   // From CommonDBTM
-    public $dohistory       = false;
+    /** @use Clonable<static> */
+    use Clonable;
 
-    public static $rightname       = 'config';
+    // From CommonDBTM
+    public bool $dohistory       = false;
 
-    public $can_be_translated = false;
+    public static string $rightname       = 'config';
+
+    public bool $can_be_translated = false;
 
 
     public static function getTypeName($nb = 0)
@@ -54,13 +59,13 @@ class BlacklistedMailContent extends CommonDropdown
     }
 
 
-    public static function canCreate()
+    public static function canCreate(): bool
     {
         return static::canUpdate();
     }
 
 
-    public static function canPurge()
+    public static function canPurge(): bool
     {
         return static::canUpdate();
     }
@@ -74,8 +79,8 @@ class BlacklistedMailContent extends CommonDropdown
             'type'  => 'textarea',
             'rows'  => 20,
             'list'  => true,
-            'enable_richtext' => false
-        ]
+            'enable_richtext' => false,
+        ],
         ];
     }
 
@@ -90,7 +95,7 @@ class BlacklistedMailContent extends CommonDropdown
             'field'              => 'content',
             'name'               => __('Content'),
             'datatype'           => 'text',
-            'massiveaction'      => false
+            'massiveaction'      => false,
         ];
 
         return $tab;
@@ -98,6 +103,11 @@ class BlacklistedMailContent extends CommonDropdown
 
     public static function getIcon()
     {
-        return "fas fa-envelope-square";
+        return "ti ti-mail-x";
+    }
+
+    public function getCloneRelations(): array
+    {
+        return [];
     }
 }

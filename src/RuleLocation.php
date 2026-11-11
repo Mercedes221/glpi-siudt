@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @copyright 2010-2022 by the FusionInventory Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
@@ -36,8 +36,7 @@
 
 class RuleLocation extends Rule
 {
-    public static $rightname = 'rule_location';
-    public $can_sort  = true;
+    public static string $rightname = 'rule_location';
 
     public function getTitle()
     {
@@ -52,7 +51,7 @@ class RuleLocation extends Rule
                     $output[$action->fields["field"]] = $action->fields["value"];
                     break;
                 case 'regex_result':
-                    if ($action->fields["field"] == "locations_id") {
+                    if ($action->fields["field"] === "locations_id") {
                         foreach ($this->regex_results as $regex_result) {
                             $regexvalue          = RuleAction::getRegexResultById(
                                 $action->fields["value"],
@@ -108,11 +107,10 @@ class RuleLocation extends Rule
                 'name'            => __("Serial number"),
             ],
             'oscomment' => [
-                'name'            => sprintf('%s > %s', OperatingSystem::getTypeName(1), __('Comments')),
+                'name'            => sprintf('%s > %s', OperatingSystem::getTypeName(1), _n('Comment', 'Comments', Session::getPluralNumber())),
             ],
         ];
     }
-
 
     public function getActions()
     {
@@ -124,11 +122,10 @@ class RuleLocation extends Rule
                 'force_actions' => [
                     'assign',
                     'regex_result',
-                ]
-            ]
+                ],
+            ],
         ];
     }
-
 
     public static function getIcon()
     {

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,16 +33,21 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\Features\Clonable;
+
 /**
  * TaskCategory class
  **/
 class TaskCategory extends CommonTreeDropdown
 {
-   // From CommonDBTM
-    public $dohistory          = true;
-    public $can_be_translated  = true;
+    /** @use Clonable<static> */
+    use Clonable;
 
-    public static $rightname          = 'taskcategory';
+    // From CommonDBTM
+    public bool $dohistory          = true;
+    public bool $can_be_translated  = true;
+
+    public static string $rightname          = 'taskcategory';
 
     public function getAdditionalFields()
     {
@@ -51,13 +56,13 @@ class TaskCategory extends CommonTreeDropdown
 
         $tab[] = ['name'  => 'is_active',
             'label' => __('Active'),
-            'type'  => 'bool'
+            'type'  => 'bool',
         ];
 
-        $tab[] = ['name'  => 'knowbaseitemcategories_id',
-            'label' => KnowbaseItemCategory::getTypeName(),
+        $tab[] = ['name'  => 'knowbaseitems_id',
+            'label' => KnowbaseItem::getTypeName(),
             'type'  => 'dropdownValue',
-            'list'  => true
+            'list'  => true,
         ];
 
         return $tab;
@@ -73,7 +78,16 @@ class TaskCategory extends CommonTreeDropdown
             'table'              => $this->getTable(),
             'field'              => 'is_active',
             'name'               => __('Active'),
-            'datatype'           => 'bool'
+            'datatype'           => 'bool',
+        ];
+
+        $tab[] = [
+            'id'                 => '9',
+            'table'              => 'glpi_knowbaseitems',
+            'field'              => 'name',
+            'linkfield'          => 'knowbaseitems_id',
+            'name'               => __('Knowledge base'),
+            'datatype'           => 'dropdown',
         ];
 
         return $tab;
@@ -87,6 +101,11 @@ class TaskCategory extends CommonTreeDropdown
 
     public static function getIcon()
     {
-        return "fas fa-tags";
+        return "ti ti-tags";
+    }
+
+    public function getCloneRelations(): array
+    {
+        return [];
     }
 }

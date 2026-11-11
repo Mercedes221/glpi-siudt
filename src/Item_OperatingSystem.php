@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -37,13 +37,13 @@ use Glpi\Application\View\TemplateRenderer;
 
 class Item_OperatingSystem extends CommonDBRelation
 {
-    public static $itemtype_1 = 'OperatingSystem';
-    public static $items_id_1 = 'operatingsystems_id';
-    public static $itemtype_2 = 'itemtype';
-    public static $items_id_2 = 'items_id';
-    public static $checkItem_1_Rights = self::DONT_CHECK_ITEM_RIGHTS;
+    public static ?string $itemtype_1 = OperatingSystem::class;
+    public static ?string $items_id_1 = 'operatingsystems_id';
+    public static ?string $itemtype_2 = 'itemtype';
+    public static ?string $items_id_2 = 'items_id';
+    public static int $checkItem_1_Rights = self::DONT_CHECK_ITEM_RIGHTS;
 
-    public static $mustBeAttached_1 = false;
+    public static bool $mustBeAttached_1 = false;
 
 
     public static function getTypeName($nb = 0)
@@ -54,20 +54,25 @@ class Item_OperatingSystem extends CommonDBRelation
 
     public function getTabNameForItem(CommonGLPI $item, $withtemplate = 0)
     {
+        if (!$item instanceof CommonDBTM) {
+            return '';
+        }
+
         $nb = 0;
-        switch ($item->getType()) {
+        switch ($item::class) {
             default:
                 if ($_SESSION['glpishow_count_on_tabs']) {
                     $nb = self::countForItem($item);
                 }
-                return self::createTabEntry(OperatingSystem::getTypeName(Session::getPluralNumber()), $nb);
+                return self::createTabEntry(OperatingSystem::getTypeName(Session::getPluralNumber()), $nb, $item::class);
         }
-        return '';
     }
 
     public static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0)
     {
-
+        if (!$item instanceof CommonDBTM) {
+            return false;
+        }
         self::showForItem($item, $withtemplate);
         return true;
     }
@@ -83,7 +88,6 @@ class Item_OperatingSystem extends CommonDBRelation
      */
     public static function getFromItem(CommonDBTM $item, $sort = null, $order = null): DBmysqlIterator
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         if ($sort === null) {
@@ -99,40 +103,40 @@ class Item_OperatingSystem extends CommonDBRelation
                 'glpi_operatingsystems.name',
                 'glpi_operatingsystemversions.name AS version',
                 'glpi_operatingsystemarchitectures.name AS architecture',
-                'glpi_operatingsystemservicepacks.name AS servicepack'
+                'glpi_operatingsystemservicepacks.name AS servicepack',
             ],
             'FROM'      => 'glpi_items_operatingsystems',
             'LEFT JOIN' => [
                 'glpi_operatingsystems'             => [
                     'ON' => [
                         'glpi_items_operatingsystems' => 'operatingsystems_id',
-                        'glpi_operatingsystems'       => 'id'
-                    ]
+                        'glpi_operatingsystems'       => 'id',
+                    ],
                 ],
                 'glpi_operatingsystemservicepacks'  => [
                     'ON' => [
                         'glpi_items_operatingsystems'       => 'operatingsystemservicepacks_id',
-                        'glpi_operatingsystemservicepacks'  => 'id'
-                    ]
+                        'glpi_operatingsystemservicepacks'  => 'id',
+                    ],
                 ],
                 'glpi_operatingsystemarchitectures' => [
                     'ON' => [
                         'glpi_items_operatingsystems'       => 'operatingsystemarchitectures_id',
-                        'glpi_operatingsystemarchitectures' => 'id'
-                    ]
+                        'glpi_operatingsystemarchitectures' => 'id',
+                    ],
                 ],
                 'glpi_operatingsystemversions'      => [
                     'ON' => [
                         'glpi_items_operatingsystems'    => 'operatingsystemversions_id',
-                        'glpi_operatingsystemversions'   => 'id'
-                    ]
-                ]
+                        'glpi_operatingsystemversions'   => 'id',
+                    ],
+                ],
             ],
             'WHERE'     => [
-                'glpi_items_operatingsystems.itemtype' => $item->getType(),
-                'glpi_items_operatingsystems.items_id' => $item->getID()
+                'glpi_items_operatingsystems.itemtype' => $item::class,
+                'glpi_items_operatingsystems.items_id' => $item->getID(),
             ],
-            'ORDERBY'   => "$sort $order"
+            'ORDERBY'   => "$sort $order",
         ]);
         return $iterator;
     }
@@ -141,6 +145,7 @@ class Item_OperatingSystem extends CommonDBRelation
      * Print the item's operating system form
      *
      * @param CommonDBTM $item Item instance
+     * @param int $withtemplate
      *
      * @since 9.2
      *
@@ -148,17 +153,16 @@ class Item_OperatingSystem extends CommonDBRelation
      **/
     public static function showForItem(CommonDBTM $item, $withtemplate = 0)
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
-       //default options
+        //default options
         $params = ['rand' => mt_rand()];
 
         $columns = [
             __('Name'),
             _n('Version', 'Versions', 1),
             _n('Architecture', 'Architectures', 1),
-            OperatingSystemServicePack::getTypeName(1)
+            OperatingSystemServicePack::getTypeName(1),
         ];
 
         if (isset($_GET["order"]) && ($_GET["order"] == "ASC")) {
@@ -191,31 +195,21 @@ class Item_OperatingSystem extends CommonDBRelation
 
         $canedit = $item->canEdit($item->getID());
 
-       //multi OS for an item is not an existing feature right now.
-       /*if ($canedit && $number >= 1
-          && !(!empty($withtemplate) && ($withtemplate == 2))) {
-         echo "<div class='center firstbloc'>".
-            "<a class='btn btn-primary' href='" . Toolbox::getItemTypeFormURL(self::getType()) . "?items_id=" . $item->getID() .
-            "&amp;itemtype=" . $item->getType() . "&amp;withtemplate=" . $withtemplate."'>";
-         echo __('Add an operating system');
-         echo "</a></div>\n";
-       }*/
-
         if ($number <= 1) {
             $id = -1;
             $instance = new self();
             if ($number > 0) {
                 $id = array_keys($os)[0];
             } else {
-               //set itemtype and items_id
-                $instance->fields['itemtype']       = $item->getType();
+                //set itemtype and items_id
+                $instance->fields['itemtype']       = $item::class;
                 $instance->fields['items_id']       = $item->getID();
                 $instance->fields['install_date']   = $item->fields['install_date'] ?? '';
                 $instance->fields['entities_id']    = $item->fields['entities_id'];
             }
             $instance->showForm($id, [
                 'canedit' => $canedit,
-                'candel'  => $canedit
+                'candel'  => $canedit,
             ]);
             return;
         }
@@ -223,12 +217,11 @@ class Item_OperatingSystem extends CommonDBRelation
         echo "<div class='spaced'>";
         if (
             $canedit
-            && $number
             && ($withtemplate < 2)
         ) {
-            Html::openMassiveActionsForm('mass' . __CLASS__ . $params['rand']);
+            Html::openMassiveActionsForm('mass' . self::class . $params['rand']);
             $massiveactionparams = ['num_displayed'  => min($_SESSION['glpilist_limit'], $number),
-                'container'      => 'mass' . __CLASS__ . $params['rand']
+                'container'      => 'mass' . self::class . $params['rand'],
             ];
             Html::showMassiveActions($massiveactionparams);
         }
@@ -241,55 +234,56 @@ class Item_OperatingSystem extends CommonDBRelation
         $header_end    = '';
         if (
             $canedit
-            && $number
             && ($withtemplate < 2)
         ) {
-            $header_top    .= "<th width='11'>" . Html::getCheckAllAsCheckbox('mass' . __CLASS__ . $params['rand']);
+            $header_top    .= "<th width='11'>" . Html::getCheckAllAsCheckbox('mass' . self::class . $params['rand']);
             $header_top    .= "</th>";
-            $header_bottom .= "<th width='11'>" . Html::getCheckAllAsCheckbox('mass' . __CLASS__ . $params['rand']);
+            $header_bottom .= "<th width='11'>" . Html::getCheckAllAsCheckbox('mass' . self::class . $params['rand']);
             $header_bottom .= "</th>";
         }
 
         foreach ($columns as $key => $val) {
-            $header_end .= "<th" . ($sort == $key ? " class='order_$order'" : '') . ">" .
-                        "<a href='javascript:reloadTab(\"sort=$key&amp;order=" .
-                          (($order == "ASC") ? "DESC" : "ASC") . "&amp;start=0\");'>$val</a></th>";
+            $val = htmlescape($val);
+            $header_end .= "<th" . ($sort == $key ? " class='order_$order'" : '') . ">"
+                        . "<a href='javascript:reloadTab(\"sort=$key&amp;order="
+                          . (($order == "ASC") ? "DESC" : "ASC") . "&amp;start=0\");'>$val</a></th>";
         }
 
         $header_end .= "</tr>";
         echo $header_begin . $header_top . $header_end;
 
-        if ($number) {
-            foreach ($os as $data) {
-                $linkname = $data['name'];
-                if ($_SESSION["glpiis_ids_visible"] || empty($data["name"])) {
-                    $linkname = sprintf(__('%1$s (%2$s)'), $linkname, $data["assocID"]);
-                }
-                $link = Toolbox::getItemTypeFormURL(self::getType());
-                $name = "<a href=\"" . $link . "?id=" . $data["assocID"] . "\">" . $linkname . "</a>";
-
-                echo "<tr class='tab_bg_1'>";
-                if (
-                    $canedit
-                    && ($withtemplate < 2)
-                ) {
-                    echo "<td width='10'>";
-                    Html::showMassiveActionCheckBox(__CLASS__, $data["assocID"]);
-                    echo "</td>";
-                }
-                echo "<td class='center'>{$name}</td>";
-                echo "<td class='center'>{$data['version']}</td>";
-                echo "<td class='center'>{$data['architecture']}</td>";
-                echo "<td class='center'>{$data['servicepack']}</td>";
-
-                echo "</tr>";
-                $i++;
+        foreach ($os as $data) {
+            $linkname = $data['name'];
+            if ($_SESSION["glpiis_ids_visible"] || empty($data["name"])) {
+                $linkname = sprintf(__('%1$s (%2$s)'), $linkname, $data["assocID"]);
             }
-            echo $header_begin . $header_bottom . $header_end;
+            $link = Toolbox::getItemTypeFormURL(static::class);
+            $name = "<a href=\"" . htmlescape($link) . "?id=" . (int) $data["assocID"] . "\">" . htmlescape($linkname) . "</a>";
+
+            echo "<tr class='tab_bg_1'>";
+            if (
+                $canedit
+                && ($withtemplate < 2)
+            ) {
+                echo "<td width='10'>";
+                Html::showMassiveActionCheckBox(self::class, $data["assocID"]);
+                echo "</td>";
+            }
+            $version = htmlescape($data['version']);
+            $architecture = htmlescape($data['architecture']);
+            $servicepack = htmlescape($data['servicepack']);
+            echo "<td class='center'>{$name}</td>";
+            echo "<td class='center'>{$version}</td>";
+            echo "<td class='center'>{$architecture}</td>";
+            echo "<td class='center'>{$servicepack}</td>";
+
+            echo "</tr>";
+            $i++;
         }
+        echo $header_begin . $header_bottom . $header_end;
 
         echo "</table>";
-        if ($canedit && $number && ($withtemplate < 2)) {
+        if ($canedit && ($withtemplate < 2)) {
             $massiveactionparams['ontop'] = false;
             Html::showMassiveActions($massiveactionparams);
             Html::closeForm();
@@ -304,7 +298,7 @@ class Item_OperatingSystem extends CommonDBRelation
         $getEmpty = true,
         $getFromDBOrEmpty = true
     ) {
-       //overrided to set $getFromDBOrEmpty to true
+        //overrided to set $getFromDBOrEmpty to true
         return parent::getConnexityItem($itemtype, $items_id, $getFromDB, $getEmpty, $getFromDBOrEmpty);
     }
 
@@ -335,7 +329,7 @@ class Item_OperatingSystem extends CommonDBRelation
 
         $tab[] = [
             'id'                 => 'common',
-            'name'               => __('Characteristics')
+            'name'               => __('Characteristics'),
         ];
 
         $tab[] = [
@@ -359,12 +353,17 @@ class Item_OperatingSystem extends CommonDBRelation
         return $tab;
     }
 
+    /**
+     * @param class-string<CommonDBTM> $itemtype
+     *
+     * @return array
+     */
     public static function rawSearchOptionsToAdd($itemtype)
     {
         $tab = [];
         $tab[] = [
             'id'                => 'operatingsystem',
-            'name'              => __('Operating System')
+            'name'              => __('Operating System'),
         ];
 
         $tab[] = [
@@ -380,10 +379,10 @@ class Item_OperatingSystem extends CommonDBRelation
                     'table'              => 'glpi_items_operatingsystems',
                     'joinparams'         => [
                         'jointype'           => 'itemtype_item',
-                        'specific_itemtype'  => $itemtype
-                    ]
-                ]
-            ]
+                        'specific_itemtype'  => $itemtype,
+                    ],
+                ],
+            ],
         ];
 
         $tab[] = [
@@ -399,10 +398,10 @@ class Item_OperatingSystem extends CommonDBRelation
                     'table'              => 'glpi_items_operatingsystems',
                     'joinparams'         => [
                         'jointype'           => 'itemtype_item',
-                        'specific_itemtype'  => $itemtype
-                    ]
-                ]
-            ]
+                        'specific_itemtype'  => $itemtype,
+                    ],
+                ],
+            ],
         ];
 
         $tab[] = [
@@ -418,10 +417,10 @@ class Item_OperatingSystem extends CommonDBRelation
                     'table'              => 'glpi_items_operatingsystems',
                     'joinparams'         => [
                         'jointype'           => 'itemtype_item',
-                        'specific_itemtype'  => $itemtype
-                    ]
-                ]
-            ]
+                        'specific_itemtype'  => $itemtype,
+                    ],
+                ],
+            ],
         ];
 
         $tab[] = [
@@ -434,8 +433,8 @@ class Item_OperatingSystem extends CommonDBRelation
             'massiveaction'      => false,
             'joinparams'         => [
                 'jointype'           => 'itemtype_item',
-                'specific_itemtype'  => $itemtype
-            ]
+                'specific_itemtype'  => $itemtype,
+            ],
         ];
 
         $tab[] = [
@@ -448,8 +447,8 @@ class Item_OperatingSystem extends CommonDBRelation
             'massiveaction'      => false,
             'joinparams'         => [
                 'jointype'           => 'itemtype_item',
-                'specific_itemtype'  => $itemtype
-            ]
+                'specific_itemtype'  => $itemtype,
+            ],
         ];
 
         $tab[] = [
@@ -462,8 +461,8 @@ class Item_OperatingSystem extends CommonDBRelation
             'massiveaction'      => false,
             'joinparams'         => [
                 'jointype'           => 'itemtype_item',
-                'specific_itemtype'  => $itemtype
-            ]
+                'specific_itemtype'  => $itemtype,
+            ],
         ];
 
         $tab[] = [
@@ -479,10 +478,10 @@ class Item_OperatingSystem extends CommonDBRelation
                     'table'              => 'glpi_items_operatingsystems',
                     'joinparams'         => [
                         'jointype'           => 'itemtype_item',
-                        'specific_itemtype'  => $itemtype
-                    ]
-                ]
-            ]
+                        'specific_itemtype'  => $itemtype,
+                    ],
+                ],
+            ],
         ];
 
         $tab[] = [
@@ -501,12 +500,12 @@ class Item_OperatingSystem extends CommonDBRelation
                             'table'        => 'glpi_items_operatingsystems',
                             'joinparams'   => [
                                 'jointype'           => 'itemtype_item',
-                                'specific_itemtype'  => $itemtype
-                            ]
-                        ]
-                    ]
-                ]
-            ]
+                                'specific_itemtype'  => $itemtype,
+                            ],
+                        ],
+                    ],
+                ],
+            ],
         ];
 
         $tab[] = [
@@ -522,10 +521,10 @@ class Item_OperatingSystem extends CommonDBRelation
                     'table'              => 'glpi_items_operatingsystems',
                     'joinparams'         => [
                         'jointype'           => 'itemtype_item',
-                        'specific_itemtype'  => $itemtype
-                    ]
-                ]
-            ]
+                        'specific_itemtype'  => $itemtype,
+                    ],
+                ],
+            ],
         ];
 
         $tab[] = [
@@ -541,10 +540,10 @@ class Item_OperatingSystem extends CommonDBRelation
                     'table'              => 'glpi_items_operatingsystems',
                     'joinparams'         => [
                         'jointype'           => 'itemtype_item',
-                        'specific_itemtype'  => $itemtype
-                    ]
-                ]
-            ]
+                        'specific_itemtype'  => $itemtype,
+                    ],
+                ],
+            ],
         ];
 
         return $tab;
@@ -553,7 +552,6 @@ class Item_OperatingSystem extends CommonDBRelation
 
     public static function getRelationMassiveActionsSpecificities()
     {
-        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $specificities              = parent::getRelationMassiveActionsSpecificities();
@@ -573,9 +571,13 @@ class Item_OperatingSystem extends CommonDBRelation
         return parent::showMassiveActionsSubForm($ma);
     }
 
+    /**
+     * @param MassiveAction $ma
+     *
+     * @return void
+     */
     public static function showFormMassiveUpdate($ma)
     {
-        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $rand = mt_rand();
@@ -587,22 +589,22 @@ class Item_OperatingSystem extends CommonDBRelation
                 'OperatingSystemArchitecture' => _n('Architecture', 'Architectures', 1),
                 'OperatingSystemKernel'       => OperatingSystemKernel::getTypeName(1),
                 'OperatingSystemKernelVersion' => OperatingSystemKernelVersion::getTypeName(1),
-                'OperatingSystemEdition'      => _n('Edition', 'Editions', 1)
+                'OperatingSystemEdition'      => _n('Edition', 'Editions', 1),
             ],
             [
                 'display_emptychoice'   => true,
-                'rand'                  => $rand
+                'rand'                  => $rand,
             ]
         );
 
         Ajax::updateItemOnSelectEvent(
             "dropdown_os_field$rand",
             "results_os_field$rand",
-            $CFG_GLPI["root_doc"] .
-            "/ajax/dropdownMassiveActionOs.php",
+            $CFG_GLPI["root_doc"]
+            . "/ajax/dropdownMassiveActionOs.php",
             [
                 'itemtype'  => '__VALUE__',
-                'rand'      => $rand
+                'rand'      => $rand,
             ]
         );
         echo "<span id='results_os_field$rand'></span> \n";
@@ -622,30 +624,39 @@ class Item_OperatingSystem extends CommonDBRelation
                 $ios = new Item_OperatingSystem();
                 foreach ($ids as $id) {
                     if ($item->getFromDB($id)) {
-                        if ($item->can($id, UPDATE, $input)) {
-                            $exists = $ios->getFromDBByCrit([
-                                'itemtype'  => $item->getType(),
-                                'items_id'  => $item->getID()
-                            ]);
-                            $ok = false;
-                            if ($exists) {
-                                   $ok = $ios->update(['id'  => $ios->getID()] + $input);
-                            } else {
-                                 $ok = $ios->add(['itemtype' => $item->getType(), 'items_id' => $item->getID()] + $input);
-                            }
+                        $exists = $ios->getFromDBByCrit([
+                            'itemtype'  => $item::class,
+                            'items_id'  => $item->getID(),
+                        ]);
 
-                            if ($ok != false) {
-                                $ma->itemDone($item->getType(), $id, MassiveAction::ACTION_OK);
-                            } else {
-                                $ma->itemDone($item->getType(), $id, MassiveAction::ACTION_KO);
-                                $ma->addMessage($item->getErrorMessage(ERROR_ON_ACTION));
-                            }
+                        $item_input = $exists
+                            ? ['id'  => $ios->getID()] + $input
+                            : ['itemtype' => $item::class, 'items_id' => $item->getID()] + $input;
+
+                        if (
+                            ($exists && !$ios->can($ios->getID(), UPDATE, $item_input))
+                            || (!$exists && !$ios->can(-1, CREATE, $item_input))
+                        ) {
+                            $ma->itemDone($item::class, $id, MassiveAction::ACTION_KO);
+                            $ma->addMessage($item->getErrorMessage(ERROR_RIGHT));
+                            continue;
+                        }
+
+                        $ok = false;
+                        if ($exists) {
+                            $ok = $ios->update($item_input);
                         } else {
-                            $ma->itemDone($item->getType(), $id, MassiveAction::ACTION_KO);
-                            $ma->addMessage($item->getErrorMessage(ERROR_NOT_FOUND));
+                            $ok = $ios->add($item_input);
+                        }
+
+                        if ($ok != false) {
+                            $ma->itemDone($item::class, $id, MassiveAction::ACTION_OK);
+                        } else {
+                            $ma->itemDone($item::class, $id, MassiveAction::ACTION_KO);
+                            $ma->addMessage($item->getErrorMessage(ERROR_ON_ACTION));
                         }
                     } else {
-                        $ma->itemDone($item->getType(), $id, MassiveAction::ACTION_KO);
+                        $ma->itemDone($item::class, $id, MassiveAction::ACTION_KO);
                         $ma->addMessage($item->getErrorMessage(ERROR_NOT_FOUND));
                     }
                 }

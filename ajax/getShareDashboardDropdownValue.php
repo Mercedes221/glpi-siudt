@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,10 +33,12 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\Dashboard\Dashboard;
+
 include(__DIR__ . '/getAbstractRightDropdownValue.php');
 
 // Only users who can update dashboards are allowed to use the "share dashboard" feature
 // Users without this right shouldn't be allowed to read this dropdown values
-Session::checkRight('dashboard', UPDATE);
+Session::checkRight(Dashboard::$rightname, UPDATE);
 
 show_rights_dropdown(ShareDashboardDropdown::class);

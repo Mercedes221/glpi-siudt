@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,11 +33,14 @@
  * ---------------------------------------------------------------------
  */
 
-$AJAX_INCLUDE = 1;
-include('../inc/includes.php');
-header("Content-Type: text/html; charset=UTF-8");
+header("Content-Type: application/json; charset=UTF-8");
 Html::header_nocache();
 
-Session::checkLoginUser();
+/**
+ * Safe JSON response.
+ * @psalm-taint-escape has_quotes
+ * @psalm-taint-escape html
+ */
+$response = json_encode(Html::getMenuFuzzySearchList(), JSON_THROW_ON_ERROR);
 
-echo Html::fuzzySearch($_REQUEST['action']);
+echo $response;

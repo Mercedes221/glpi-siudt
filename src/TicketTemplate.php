@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,6 +33,8 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\Features\Clonable;
+
 /**
  * Ticket Template class
  *
@@ -40,14 +42,23 @@
  **/
 class TicketTemplate extends ITILTemplate
 {
-    use Glpi\Features\Clonable;
+    /** @use Clonable<static> */
+    use Clonable;
 
-    public $second_level_menu         = "ticket";
-    public $third_level_menu          = "TicketTemplate";
+    #[Override]
+    public static function getPredefinedFields(): ITILTemplatePredefinedField
+    {
+        return new TicketTemplatePredefinedField();
+    }
 
     public static function getTypeName($nb = 0)
     {
         return _n('Ticket template', 'Ticket templates', $nb);
+    }
+
+    public static function getSectorizedDetails(): array
+    {
+        return ['helpdesk', Ticket::class, self::class];
     }
 
     public function getCloneRelations(): array
@@ -56,7 +67,19 @@ class TicketTemplate extends ITILTemplate
             TicketTemplateHiddenField::class,
             TicketTemplateMandatoryField::class,
             TicketTemplatePredefinedField::class,
+            TicketTemplateReadonlyField::class,
         ];
+    }
+
+    public function cleanDBonPurge()
+    {
+        $this->deleteChildrenAndRelationsFromDb(
+            [
+                TicketTemplateHiddenField::class,
+                TicketTemplateMandatoryField::class,
+                TicketTemplatePredefinedField::class,
+            ]
+        );
     }
 
     public static function getExtraAllowedFields($withtypeandcategory = false, $withitemtype = false)
@@ -79,31 +102,17 @@ class TicketTemplate extends ITILTemplate
                 'slas_id_ttr',
                 'glpi_slas'
             )      => 'slas_id_ttr',
-            $itil_object->getSearchOptionIDByField(
-                'field',
-                'olas_id_tto',
-                'glpi_olas'
-            )      => 'olas_id_tto',
-            $itil_object->getSearchOptionIDByField(
-                'field',
-                'olas_id_ttr',
-                'glpi_olas'
-            )      => 'olas_id_ttr',
+
+            // hardcoded, cannot use $itil_object->getSearchOptionIDByField()
+            // since both search options share common specs
+            190      => '_olas_id_tto',
+            191      => '_olas_id_ttr',
+
             $itil_object->getSearchOptionIDByField(
                 'field',
                 'time_to_own',
                 'glpi_tickets'
             )   => 'time_to_own',
-            $itil_object->getSearchOptionIDByField(
-                'field',
-                'internal_time_to_resolve',
-                'glpi_tickets'
-            )   => 'internal_time_to_resolve',
-            $itil_object->getSearchOptionIDByField(
-                'field',
-                'internal_time_to_own',
-                'glpi_tickets'
-            )   => 'internal_time_to_own',
             $itil_object->getSearchOptionIDByField(
                 'field',
                 'global_validation',
@@ -114,7 +123,16 @@ class TicketTemplate extends ITILTemplate
                 'name',
                 'glpi_contracts'
             )   => '_contracts_id',
-
+            $itil_object->getSearchOptionIDByField(
+                'field',
+                'type',
+                'glpi_tickets'
+            )   => 'type',
+            $itil_object->getSearchOptionIDByField(
+                'field',
+                'externalid',
+                'glpi_tickets'
+            )   => 'externalid',
         ];
 
         if ($withtypeandcategory) {
@@ -126,41 +144,5 @@ class TicketTemplate extends ITILTemplate
         }
 
         return $tab;
-    }
-
-    public static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0)
-    {
-        if ($item instanceof ITILTemplate) {
-            switch ($tabnum) {
-                case 1:
-                    $item->showCentralPreview($item);
-                    return true;
-
-                case 2:
-                    static::showHelpdeskPreview($item);
-                    return true;
-            }
-        }
-        return false;
-    }
-
-
-    /**
-     * Print preview for Ticket template
-     *
-     * @param $tt ITILTemplate object
-     *
-     * @return void
-     **/
-    public static function showHelpdeskPreview(ITILTemplate $tt)
-    {
-
-        if (!$tt->getID()) {
-            return false;
-        }
-        if ($tt->getFromDBWithData($tt->getID())) {
-            $ticket = new  Ticket();
-            $ticket->showFormHelpdesk(Session::getLoginUserID(), $tt->getID());
-        }
     }
 }

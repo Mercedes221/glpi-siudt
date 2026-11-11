@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,18 +33,17 @@
  * ---------------------------------------------------------------------
  */
 
+require_once(__DIR__ . '/_check_webserver_config.php');
+
 /**
  * @since 0.84
  */
 
 use Glpi\Event;
 
-/** @var array $CFG_GLPI */
 global $CFG_GLPI;
 
-include('../inc/includes.php');
-
-Session::checkRight("networking", READ);
+Session::checkRightsOr(NetworkPort::$rightname, [READ, CREATE, UPDATE]);
 
 $np  = new NetworkPort();
 $nn  = new NetworkPort_NetworkPort();
@@ -54,7 +53,7 @@ if (!isset($_GET["id"])) {
 }
 
 if (isset($_POST["add"])) {
-   // Is a preselected mac adress selected ?
+    // Is a preselected mac adress selected ?
     if (isset($_POST['pre_mac'])) {
         if (!empty($_POST['pre_mac'])) {
             $_POST['mac'] = $_POST['pre_mac'];
@@ -75,12 +74,21 @@ if (isset($_POST["add"])) {
         );
         Html::back();
     } else {
-        Session::checkRight("networking", UPDATE);
+        Session::checkRight(NetworkPort::$rightname, UPDATE);
 
         $input = $_POST;
         unset($input['several']);
         unset($input['from_logical_number']);
         unset($input['to_logical_number']);
+
+        if ($_POST["to_logical_number"] < $_POST["from_logical_number"]) {
+            Session::addMessageAfterRedirect(
+                __s("'To' should not be smaller than 'From'"),
+                false,
+                ERROR
+            );
+            Html::back();
+        }
 
         for ($i = $_POST["from_logical_number"]; $i <= $_POST["to_logical_number"]; $i++) {
             $add = "";
@@ -105,9 +113,9 @@ if (isset($_POST["add"])) {
         );
         Html::back();
     }
-} else if (isset($_POST["purge"])) {
+} elseif (isset($_POST["purge"])) {
     $np->check($_POST['id'], PURGE);
-    $np->delete($_POST, 1);
+    $np->delete($_POST, true);
     Event::log(
         $_POST['id'],
         "networkport",
@@ -121,9 +129,9 @@ if (isset($_POST["add"])) {
         Html::redirect($item->getFormURLWithID($np->fields['items_id']));
     }
     Html::redirect($CFG_GLPI["root_doc"] . "/front/central.php");
-} else if (isset($_POST["delete"])) {
+} elseif (isset($_POST["delete"])) {
     $np->check($_POST['id'], DELETE);
-    $np->delete($_POST, 0);
+    $np->delete($_POST);
     Event::log(
         $_POST['id'],
         "networkport",
@@ -137,7 +145,7 @@ if (isset($_POST["add"])) {
         Html::redirect($item->getFormURLWithID($np->fields['items_id']));
     }
     Html::redirect($CFG_GLPI["root_doc"] . "/front/central.php");
-} else if (isset($_POST["update"])) {
+} elseif (isset($_POST["update"])) {
     $np->check($_POST['id'], UPDATE);
 
     $np->update($_POST);
@@ -150,14 +158,14 @@ if (isset($_POST["add"])) {
         sprintf(__('%s updates an item'), $_SESSION["glpiname"])
     );
     Html::back();
-} else if (isset($_POST["disconnect"])) {
+} elseif (isset($_POST["disconnect"])) {
     $nn->check($_POST['id'], DELETE);
 
     if (isset($_POST["id"])) {
         $nn->delete($_POST);
     }
     Html::back();
-} else if (isset($_POST["restore"])) {
+} elseif (isset($_POST["restore"])) {
     $np->check($_POST["id"], DELETE);
 
     if ($np->restore($_POST)) {

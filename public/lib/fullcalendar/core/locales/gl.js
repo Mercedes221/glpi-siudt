@@ -1,30 +1,42 @@
-(function (global, factory) {
-    typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
-    typeof define === 'function' && define.amd ? define(factory) :
-    (global = global || self, (global.FullCalendarLocales = global.FullCalendarLocales || {}, global.FullCalendarLocales.gl = factory()));
-}(this, function () { 'use strict';
-
-    var gl = {
-        code: "gl",
-        week: {
-            dow: 1,
-            doy: 4 // The week that contains Jan 4th is the first week of the year.
+var l32 = {
+    code: 'gl',
+    week: {
+        dow: 1,
+        doy: 4, // The week that contains Jan 4th is the first week of the year.
+    },
+    buttonText: {
+        prev: 'Ant',
+        next: 'Seg',
+        today: 'Hoxe',
+        year: 'Ano',
+        month: 'Mes',
+        week: 'Semana',
+        day: 'Día',
+        list: 'Axenda',
+    },
+    buttonHints: {
+        prev: '$0 antes',
+        next: '$0 seguinte',
+        today(buttonText) {
+            return (buttonText === 'Día') ? 'Hoxe' :
+                ((buttonText === 'Semana') ? 'Esta' : 'Este') + ' ' + buttonText.toLocaleLowerCase();
         },
-        buttonText: {
-            prev: "Ant",
-            next: "Seg",
-            today: "Hoxe",
-            month: "Mes",
-            week: "Semana",
-            day: "Día",
-            list: "Axenda"
-        },
-        weekLabel: "Sm",
-        allDayHtml: "Todo<br/>o día",
-        eventLimitText: "máis",
-        noEventsMessage: "Non hai eventos para amosar"
-    };
+    },
+    viewHint(buttonText) {
+        return 'Vista ' + (buttonText === 'Semana' ? 'da' : 'do') + ' ' + buttonText.toLocaleLowerCase();
+    },
+    weekText: 'Sm',
+    weekTextLong: 'Semana',
+    allDayText: 'Todo o día',
+    moreLinkText: 'máis',
+    moreLinkHint(eventCnt) {
+        return `Amosar ${eventCnt} eventos máis`;
+    },
+    noEventsText: 'Non hai eventos para amosar',
+    navLinkHint: 'Ir ao $0',
+    closeHint: 'Pechar',
+    timeHint: 'A hora',
+    eventHint: 'Evento',
+};
 
-    return gl;
-
-}));
+export { l32 as default };

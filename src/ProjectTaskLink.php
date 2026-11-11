@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -42,40 +42,51 @@
  */
 class ProjectTaskLink extends CommonDBRelation
 {
-   // From CommonDBRelation
-    public static $itemtype_1 = 'ProjectTask';
-    public static $items_id_1 = 'projecttasks_id_source';
+    // From CommonDBRelation
+    public static ?string $itemtype_1 = ProjectTask::class;
+    public static ?string $items_id_1 = 'projecttasks_id_source';
 
-    public static $itemtype_2 = 'ProjectTask';
-    public static $items_id_2 = 'projecttasks_id_target';
+    public static ?string $itemtype_2 = ProjectTask::class;
+    public static ?string $items_id_2 = 'projecttasks_id_target';
 
-    public function getFromDBForItemIDs($projecttaskIds)
+    /**
+     * @param int[] $projecttaskIds List of project task IDs
+     * @return DBmysqlIterator
+     * @used-by gantt plugin
+     */
+    public function getFromDBForItemIDs(array $projecttaskIds)
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
-            'SELECT' => ['glpi_projecttasklinks.*'],
-            'FROM' => 'glpi_projecttasklinks',
-            'WHERE' => "projecttasks_id_source IN (" . $projecttaskIds . ") AND projecttasks_id_target IN (" . $projecttaskIds . ")"
+            'FROM' => self::getTable(),
+            'WHERE' => [
+                'AND' => [
+                    'projecttasks_id_source' => $projecttaskIds,
+                    'projecttasks_id_target' => $projecttaskIds,
+                ],
+            ],
         ]);
 
         return $iterator;
     }
 
+    /**
+     * @param array{projecttasks_id_source: int, projecttasks_id_target: int, type: int} $taskLink
+     * @return bool
+     */
     public function checkIfExist($taskLink)
     {
-        /** @var \DBmysql $DB */
         global $DB;
         $iterator = $DB->request([
             'SELECT' => 'id',
             'FROM' => self::getTable(),
             'WHERE' => [
-                'AND' => ['projecttasks_id_source' => $taskLink['projecttasks_id_source']
+                'AND' => ['projecttasks_id_source' => $taskLink['projecttasks_id_source'],
                 ],
                 ['projecttasks_id_target' => $taskLink['projecttasks_id_target']],
-                ['type' => $taskLink['type']]
-            ]
+                ['type' => $taskLink['type']],
+            ],
         ]);
         return count($iterator) > 0;
     }

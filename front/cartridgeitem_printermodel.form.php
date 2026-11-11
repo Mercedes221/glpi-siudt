@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,17 +33,24 @@
  * ---------------------------------------------------------------------
  */
 
+require_once(__DIR__ . '/_check_webserver_config.php');
+
+use Glpi\Event;
+use Glpi\Exception\Http\BadRequestHttpException;
+use Glpi\Exception\ItemLinkException;
+
 /**
  * @since 0.84
  */
 
-use Glpi\Event;
-
-include('../inc/includes.php');
-
 $cipm = new CartridgeItem_PrinterModel();
 if (isset($_POST["add"])) {
-    $cipm->check(-1, CREATE, $_POST);
+    try {
+        $cipm->check(-1, CREATE, $_POST);
+    } catch (ItemLinkException $e) {
+        Html::back();
+    }
+
     if ($cipm->add($_POST)) {
         Event::log(
             $_POST["cartridgeitems_id"],
@@ -56,4 +63,5 @@ if (isset($_POST["add"])) {
     }
     Html::back();
 }
-Html::displayErrorAndDie('Lost');
+
+throw new BadRequestHttpException();

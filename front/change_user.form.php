@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,33 +33,30 @@
  * ---------------------------------------------------------------------
  */
 
+require_once(__DIR__ . '/_check_webserver_config.php');
+
+use Glpi\Event;
+use Glpi\Exception\Http\BadRequestHttpException;
+
 /**
  * @since 0.85
  */
 
-use Glpi\Event;
-
-/** @var array $CFG_GLPI */
 global $CFG_GLPI;
-
-if (!defined('GLPI_ROOT')) {
-    include('../inc/includes.php');
-}
 
 $link = new Change_User();
 $item = new Change();
 
-Session::checkLoginUser();
-Html::popHeader(__('Email followup'), $_SERVER['PHP_SELF']);
+Html::popHeader(__('Email followup'));
 
 if (isset($_POST["update"])) {
     $link->check($_POST["id"], UPDATE);
 
     $link->update($_POST);
-    echo "<script type='text/javascript' >\n";
+    echo "<script type='text/javascript' >";
     echo "window.parent.location.reload();";
     echo "</script>";
-} else if (isset($_POST['delete'])) {
+} elseif (isset($_POST['delete'])) {
     $link->check($_POST['id'], DELETE);
     $link->delete($_POST);
 
@@ -76,16 +73,14 @@ if (isset($_POST["update"])) {
         Html::redirect(Change::getFormURLWithID($link->fields['changes_id']));
     }
     Session::addMessageAfterRedirect(
-        __('You have been redirected because you no longer have access to this item'),
+        __s('You have been redirected because you no longer have access to this item'),
         true,
         ERROR
     );
 
     Html::redirect($CFG_GLPI["root_doc"] . "/front/change.php");
-} else if (isset($_GET["id"])) {
-    $link->showUserNotificationForm($_GET["id"]);
 } else {
-    Html::displayErrorAndDie('Lost');
+    throw new BadRequestHttpException();
 }
 
 Html::popFooter();

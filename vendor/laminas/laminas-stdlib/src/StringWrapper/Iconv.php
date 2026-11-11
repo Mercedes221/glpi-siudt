@@ -13,6 +13,7 @@ use function iconv_strlen;
 use function iconv_strpos;
 use function iconv_substr;
 
+/** @final */
 class Iconv extends AbstractStringWrapper
 {
     /**
@@ -245,7 +246,7 @@ class Iconv extends AbstractStringWrapper
      */
     public function substr($str, $offset = 0, $length = null)
     {
-        $length = $length ?? $this->strlen($str);
+        $length ??= $this->strlen($str);
         assert($length !== false);
 
         return iconv_substr($str, $offset, $length, $this->getEncoding());

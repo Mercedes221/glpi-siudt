@@ -5,8 +5,7 @@
  #
  # http://glpi-project.org
  #
- # @copyright 2015-2025 Teclib' and contributors.
- # @copyright 2003-2014 by the INDEPNET Development Team.
+ # @copyright 2015-2026 Teclib' and contributors.
  # @licence   https://www.gnu.org/licenses/gpl-3.0.html
  #
  # ---------------------------------------------------------------------
@@ -37,12 +36,12 @@
    {% endif %}
          <span>
             {% if value.icon is defined %}
-               <i class="{{ value.icon }}"></i>
+               <i class="{{ value.icon }}" aria-hidden="true"></i>
             {% endif %}
             {{ value.text }}
          </span>
          {% if value.count is defined %}
-            <span class="badge bg-secondary">{{ value.count }}</span>
+            <span class="badge bg-secondary text-secondary-fg">{{ value.count }}</span>
          {% endif %}
    {% if value.link is defined %}
       </a>

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -42,9 +42,8 @@
  **/
 class RuleSoftwareCategory extends Rule
 {
-   // From Rule
-    public static $rightname = 'rule_softwarecategories';
-    public $can_sort  = true;
+    // From Rule
+    public static string $rightname = 'rule_softwarecategories';
 
 
     public function getTitle()
@@ -54,7 +53,6 @@ class RuleSoftwareCategory extends Rule
 
     public function getCriterias()
     {
-
         static $criterias = [];
 
         if (count($criterias)) {
@@ -62,7 +60,7 @@ class RuleSoftwareCategory extends Rule
         }
 
         $criterias['name']['field']         = 'name';
-        $criterias['name']['name']          = _n('Software', 'Software', Session::getPluralNumber());
+        $criterias['name']['name']          = Software::getTypeName(1);
         $criterias['name']['table']         = 'glpi_softwares';
 
         $criterias['manufacturer']['field'] = 'name';
@@ -70,7 +68,7 @@ class RuleSoftwareCategory extends Rule
         $criterias['manufacturer']['table'] = 'glpi_manufacturers';
 
         $criterias['comment']['field']      = 'comment';
-        $criterias['comment']['name']       = __('Comments');
+        $criterias['comment']['name']       = _n('Comment', 'Comments', Session::getPluralNumber());
         $criterias['comment']['table']      = 'glpi_softwares';
 
         $criterias['_system_category']['field'] = 'name';
@@ -79,10 +77,8 @@ class RuleSoftwareCategory extends Rule
         return $criterias;
     }
 
-
     public function getActions()
     {
-
         $actions                                   = parent::getActions();
 
         $actions['softwarecategories_id']['name']  = _n('Category', 'Categories', 1);

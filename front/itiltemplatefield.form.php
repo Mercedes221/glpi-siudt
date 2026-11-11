@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,10 +33,12 @@
  * ---------------------------------------------------------------------
  */
 
-use Glpi\Event;
+require_once(__DIR__ . '/_check_webserver_config.php');
 
-include '../inc/includes.php';
-Session::checkRight('itiltemplate', UPDATE);
+use Glpi\Event;
+use Glpi\Exception\Http\BadRequestHttpException;
+
+Session::checkRight(ITILTemplate::$rightname, UPDATE);
 
 /**
  * @var string|null $itiltype
@@ -44,14 +46,18 @@ Session::checkRight('itiltemplate', UPDATE);
  */
 
 if (!isset($itiltype)) {
-    Html::displayErrorAndDie("Missing ITIL type");
+    throw new BadRequestHttpException();
 }
 
 if (!isset($fieldtype)) {
-    Html::displayErrorAndDie("Missing field type");
+    throw new BadRequestHttpException();
 }
 
 $item_class = $itiltype . 'Template' . $fieldtype . 'Field';
+if (!is_a($item_class, ITILTemplateField::class, true)) {
+    throw new BadRequestHttpException();
+}
+
 $item = new $item_class();
 
 if ($fieldtype == 'Predefined') {
@@ -65,7 +71,7 @@ if ($fieldtype == 'Predefined') {
 if (isset($_POST["add"]) || isset($_POST['massiveaction'])) {
     $item->check(-1, UPDATE, $_POST);
 
-    if ($item->add($_POST)) {
+    if (!empty($_POST['num']) && $item->add($_POST)) {
         $fieldtype_name = '';
         switch ($fieldtype) {
             case 'Hidden':
@@ -77,6 +83,9 @@ if (isset($_POST["add"]) || isset($_POST['massiveaction'])) {
             case 'Predefined':
                 $fieldtype_name = __('predefined');
                 break;
+            case 'Readonly':
+                $fieldtype_name = __('readonly');
+                break;
         }
 
         Event::log(
@@ -85,7 +94,7 @@ if (isset($_POST["add"]) || isset($_POST['massiveaction'])) {
             4,
             "maintain",
             sprintf(
-            //TRANS: %1$s is the user login, %2$s the field type
+                //TRANS: %1$s is the user login, %2$s the field type
                 __('%1$s adds %2$s field'),
                 $_SESSION["glpiname"],
                 $fieldtype_name
@@ -95,4 +104,4 @@ if (isset($_POST["add"]) || isset($_POST['massiveaction'])) {
     Html::back();
 }
 
-Html::displayErrorAndDie("lost");
+throw new BadRequestHttpException();

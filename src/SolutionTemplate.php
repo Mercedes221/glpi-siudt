@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,17 +33,22 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\Features\Clonable;
+
 /**
  * SolutionTemplate Class
  **/
 class SolutionTemplate extends AbstractITILChildTemplate
 {
-   // From CommonDBTM
-    public $dohistory = true;
+    /** @use Clonable<static> */
+    use Clonable;
 
-    public static $rightname = 'solutiontemplate';
+    // From CommonDBTM
+    public bool $dohistory = true;
 
-    public $can_be_translated = true;
+    public static string $rightname = 'solutiontemplate';
+
+    public bool $can_be_translated = true;
 
 
     public static function getTypeName($nb = 0)
@@ -70,7 +75,7 @@ class SolutionTemplate extends AbstractITILChildTemplate
                 // When an element will be created from a template, tinymce will catch the base64 image and trigger the
                 // document upload process.
                 'convert_images_to_documents' => false,
-            ]
+            ],
         ];
     }
 
@@ -85,7 +90,7 @@ class SolutionTemplate extends AbstractITILChildTemplate
             'field'              => 'content',
             'table'              => $this->getTable(),
             'datatype'           => 'text',
-            'htmltext'           => true
+            'htmltext'           => true,
         ];
 
         $tab[] = [
@@ -93,7 +98,7 @@ class SolutionTemplate extends AbstractITILChildTemplate
             'name'               => SolutionType::getTypeName(1),
             'field'              => 'name',
             'table'              => getTableForItemType('SolutionType'),
-            'datatype'           => 'dropdown'
+            'datatype'           => 'dropdown',
         ];
 
         return $tab;
@@ -101,6 +106,11 @@ class SolutionTemplate extends AbstractITILChildTemplate
 
     public static function getIcon()
     {
-        return "fas fa-layer-group";
+        return "ti ti-stack-2-filled";
+    }
+
+    public function getCloneRelations(): array
+    {
+        return [];
     }
 }

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,11 +33,9 @@
  * ---------------------------------------------------------------------
  */
 
-$AJAX_INCLUDE = 1;
-include('../inc/includes.php');
+use function Safe\json_encode;
 
 Html::header_nocache();
-Session::checkLoginUser();
 
 if (isset($_GET['get_raw']) && filter_var(($_GET['display_container'] ?? true), FILTER_VALIDATE_BOOLEAN)) {
     header("Content-Type: application/json; charset=UTF-8");

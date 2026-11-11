@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,7 +33,10 @@
  * ---------------------------------------------------------------------
  */
 
-include('../inc/includes.php');
+use Glpi\Exception\Http\AccessDeniedHttpException;
+use Glpi\Exception\Http\BadRequestHttpException;
+use Glpi\Features\TreeBrowseInterface;
+
 header("Content-Type: text/html; charset=UTF-8");
 Html::header_nocache();
 
@@ -48,11 +51,26 @@ switch ($_REQUEST['action']) {
             'criteria'           => $_REQUEST['criteria'],
             'sort'               => $_REQUEST['sort'] ?? [],
             'order'              => $_REQUEST['order'] ?? [],
+            'unpublished'        => $_REQUEST['unpublished'],
         ];
 
         $itemtype = $_REQUEST['itemtype'];
-        $category_itemtype = $itemtype::getCategoryItemType($itemtype);
-        $category_table = $category_itemtype::getTable();
+        if (
+            !is_string($itemtype)
+            || !is_a($itemtype, CommonDBTM::class, true)
+            || !is_a($itemtype, TreeBrowseInterface::class, true)
+            || (new ReflectionClass($itemtype))->isAbstract()
+        ) {
+            throw new BadRequestHttpException();
+        }
+        if ($itemtype::canView() === false) {
+            throw new AccessDeniedHttpException();
+        }
+        $category_item = $itemtype::getCategoryItem($itemtype);
+        if ($category_item === null) {
+            throw new BadRequestHttpException();
+        }
+        $category_table = $category_item::getTable();
         $item = new $itemtype();
         $so = $item->rawSearchOptions();
 
@@ -76,5 +94,5 @@ switch ($_REQUEST['action']) {
         Search::showList($itemtype, $params);
         return;
 }
-http_response_code(400);
-return;
+
+throw new BadRequestHttpException();

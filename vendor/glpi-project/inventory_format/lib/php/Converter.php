@@ -297,6 +297,7 @@ class Converter
                 'network_ports/iftype',
                 'network_components/fru',
                 'network_components/index',
+                'network_components/stack_number',
                 'network_device/credentials',
                 'pagecounters/total',
                 'pagecounters/black',
@@ -1302,6 +1303,7 @@ class Converter
                                 case 'Phone':
                                 case 'Printer':
                                 case 'Unmanaged':
+                                case 'Pdu':
                                     $itemtype = $device_info['type'];
                                     break;
                                 case 'Networking':
@@ -1435,6 +1437,21 @@ class Converter
                 case "drives":
                 case "error":
                     $data['content'][$key] = $device_data;
+                    break;
+                case "pdu":
+                    // put pdu into network_device
+                    if (isset($device_data['plugs']) && !array_is_list($device_data['plugs'])) {
+                        $device_data['plugs'] = [$device_data['plugs']];
+                    }
+                    if (isset($device_data['plugs'])) {
+                        foreach ($device_data['plugs'] as &$plug) {
+                            if (isset($plug['number'])) {
+                                $plug['number'] = (int) $plug['number'];
+                            }
+                        }
+                        unset($plug);
+                    }
+                    $data['content']['network_device'][$key] = $device_data;
                     break;
                 default:
                     throw new RuntimeException('Key ' . $key . ' is not handled in network devices conversion');

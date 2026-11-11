@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,7 +33,9 @@
  * ---------------------------------------------------------------------
  */
 
-use Glpi\Toolbox\Sanitizer;
+use Glpi\DBAL\QueryExpression;
+use Glpi\DBAL\QueryFunction;
+use Glpi\DBAL\QueryIdentifier;
 
 /**
  *  NotificationAjax
@@ -46,12 +48,12 @@ class NotificationAjax implements NotificationInterface
      * @param mixed $value   The data to check (may differ for every notification mode)
      * @param array $options Optional special options (may be needed)
      *
-     * @return boolean
+     * @return bool
      **/
     public static function check($value, $options = [])
     {
-       //waiting for a user ID
-        $value = (int)$value;
+        //waiting for a user ID
+        $value = (int) $value;
         return $value > 0;
     }
 
@@ -67,37 +69,32 @@ class NotificationAjax implements NotificationInterface
             'subject'                     => 'Test notification',
             'content_text'                => "Hello, this is a test notification.",
             'to'                          => Session::getLoginUserID(),
-            'event'                       => 'test_notification'
+            'event'                       => 'test_notification',
         ]);
     }
 
-
+    #[Override]
     public function sendNotification($options = [])
     {
-
         $data = [];
         $data['itemtype']                             = $options['_itemtype'];
         $data['items_id']                             = $options['_items_id'];
         $data['notificationtemplates_id']             = $options['_notificationtemplates_id'];
         $data['entities_id']                          = $options['_entities_id'];
-
         $data['sendername']                           = $options['fromname'];
-
         $data['name']                                 = $options['subject'];
         $data['body_text']                            = $options['content_text'];
         $data['recipient']                            = $options['to'];
-
         $data['event'] = $options['event'] ?? null; // `event` has been added in GLPI 10.0.7
-
         $data['mode'] = Notification_NotificationTemplate::MODE_AJAX;
 
         $queue = new QueuedNotification();
 
-        if (!$queue->add(Sanitizer::sanitize($data))) {
-            Session::addMessageAfterRedirect(__('Error inserting browser notification to queue'), true, ERROR);
+        if (!$queue->add($data)) {
+            Session::addMessageAfterRedirect(__s('Error inserting browser notification to queue'), true, ERROR);
             return false;
         } else {
-           //TRANS to be written in logs %1$s is the to email / %2$s is the subject of the mail
+            //TRANS to be written in logs %1$s is the to email / %2$s is the subject of the mail
             Toolbox::logInFile(
                 "notification",
                 sprintf(
@@ -121,25 +118,31 @@ class NotificationAjax implements NotificationInterface
      */
     public static function getMyNotifications()
     {
-        /**
-         * @var array $CFG_GLPI
-         * @var \DBmysql $DB
-         */
         global $CFG_GLPI, $DB;
 
         $return = [];
         if ($CFG_GLPI['notifications_ajax']) {
+            $secs = $CFG_GLPI["notifications_ajax_expiration_delay"] * DAY_TIMESTAMP;
             $iterator = $DB->request([
                 'FROM'   => 'glpi_queuednotifications',
                 'WHERE'  => [
                     'is_deleted'   => false,
                     'recipient'    => Session::getLoginUserID(),
-                    'mode'         => Notification_NotificationTemplate::MODE_AJAX
-                ]
+                    'mode'         => Notification_NotificationTemplate::MODE_AJAX,
+                    new QueryExpression(
+                        QueryFunction::unixTimestamp(new QueryIdentifier('send_time')) . ' + ' . $secs
+                            . ' > ' . QueryFunction::unixTimestamp()
+                    ),
+                ],
             ]);
 
             if ($iterator->numrows()) {
                 foreach ($iterator as $row) {
+                    if ((bool) $row['is_body_encrypted']) {
+                        $glpi_key = new GLPIKey();
+                        $row['body_text'] = $glpi_key->decrypt($row['body_text']);
+                    }
+
                     $url = null;
                     if (is_a($row['itemtype'], CommonGLPI::class, true)) {
                         $item = new $row['itemtype']();
@@ -150,7 +153,7 @@ class NotificationAjax implements NotificationInterface
                         'id'     => $row['id'],
                         'title'  => $row['name'],
                         'body'   => $row['body_text'],
-                        'url'    => $url
+                        'url'    => $url,
                     ];
                 }
             }
@@ -166,13 +169,12 @@ class NotificationAjax implements NotificationInterface
     /**
      * Mark raised notification as deleted
      *
-     * @param integer $id Notification id
+     * @param int $id Notification id
      *
      * @return void
      */
     public static function raisedNotification($id)
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         $now = date('Y-m-d H:i:s');
@@ -180,11 +182,11 @@ class NotificationAjax implements NotificationInterface
             'glpi_queuednotifications',
             [
                 'sent_time'    => $now,
-                'is_deleted'   => 1
+                'is_deleted'   => 1,
             ],
             [
                 'id'        => $id,
-                'recipient' => Session::getLoginUserID()
+                'recipient' => Session::getLoginUserID(),
             ]
         );
     }

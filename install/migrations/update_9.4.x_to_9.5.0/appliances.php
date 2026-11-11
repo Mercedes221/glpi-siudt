@@ -7,8 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
- * @copyright 2003-2014 by the INDEPNET Development Team.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
  * ---------------------------------------------------------------------
@@ -35,10 +34,9 @@
 
 /**
  * @var array $ADDTODISPLAYPREF
- * @var \DBmysql $DB
- * @var \Migration $migration
+ * @var DBmysql $DB
+ * @var Migration $migration
  */
-
 if (!$DB->tableExists('glpi_appliances')) {
     $query = "CREATE TABLE `glpi_appliances` (
          `id` int NOT NULL auto_increment,
@@ -78,7 +76,7 @@ if (!$DB->tableExists('glpi_appliances')) {
          KEY `serial` (`serial`),
          KEY `otherserial` (`otherserial`)
       ) ENGINE=InnoDB  DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;";
-    $DB->doQueryOrDie($query, "9.5 add table glpi_appliances");
+    $DB->doQuery($query);
 }
 
 if (!$DB->tableExists('glpi_appliances_items')) {
@@ -92,7 +90,7 @@ if (!$DB->tableExists('glpi_appliances_items')) {
          KEY `appliances_id` (`appliances_id`),
          KEY `item` (`itemtype`,`items_id`)
       ) ENGINE=InnoDB  DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;";
-    $DB->doQueryOrDie($query, "9.5 add table glpi_appliances_items");
+    $DB->doQuery($query);
 }
 
 if (!$DB->tableExists('glpi_appliancetypes')) {
@@ -108,7 +106,7 @@ if (!$DB->tableExists('glpi_appliancetypes')) {
          KEY `entities_id` (`entities_id`),
          UNIQUE (`externalidentifier`)
       ) ENGINE=InnoDB  DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;";
-    $DB->doQueryOrDie($query, "9.5 add table glpi_appliancetypes");
+    $DB->doQuery($query);
 }
 
 if (!$DB->tableExists('glpi_applianceenvironments')) {
@@ -119,7 +117,7 @@ if (!$DB->tableExists('glpi_applianceenvironments')) {
          PRIMARY KEY (`id`),
          KEY `name` (`name`)
       ) ENGINE=InnoDB  DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;";
-    $DB->doQueryOrDie($query, "9.5 add table glpi_applianceenvironments");
+    $DB->doQuery($query);
 }
 
 if (!$DB->tableExists('glpi_appliancerelations')) {
@@ -131,7 +129,7 @@ if (!$DB->tableExists('glpi_appliancerelations')) {
          KEY `appliances_items_id` (`appliances_items_id`),
          KEY `relations_id` (`relations_id`)
       ) ENGINE=InnoDB  DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;";
-    $DB->doQueryOrDie($query, "9.5 add table glpi_appliancerelations");
+    $DB->doQuery($query);
 }
 
 $migration->addRight('appliance', ALLSTANDARDRIGHT);

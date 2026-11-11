@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,34 +33,35 @@
  * ---------------------------------------------------------------------
  */
 
+require_once(__DIR__ . '/_check_webserver_config.php');
+
+use Glpi\Event;
+use Glpi\Exception\Http\AccessDeniedHttpException;
+use Glpi\Exception\Http\BadRequestHttpException;
+
 /**
  * @since 0.85
  */
+
+global $CFG_GLPI;
 
 /**
  * Following variables have to be defined before inclusion of this file:
  * @var Item_Devices $item_device
  */
 
-use Glpi\Event;
-
-/** @var array $CFG_GLPI */
-global $CFG_GLPI;
-
 /** @var Item_Devices|null $item_device */
 if (!($item_device instanceof Item_Devices)) {
-    Html::displayErrorAndDie('');
+    throw new BadRequestHttpException();
 }
 if (!$item_device->canView()) {
-   // Gestion timeout session
-    Session::redirectIfNotLoggedIn();
-    Html::displayRightError();
+    throw new AccessDeniedHttpException();
 }
 
 
 if (isset($_POST["id"])) {
     $_GET["id"] = $_POST["id"];
-} else if (!isset($_GET["id"])) {
+} elseif (!isset($_GET["id"])) {
     $_GET["id"] = "";
 }
 
@@ -80,9 +81,9 @@ if (isset($_POST["add"])) {
         }
     }
     Html::back();
-} else if (isset($_POST["purge"])) {
+} elseif (isset($_POST["purge"])) {
     $item_device->check($_POST["id"], PURGE);
-    $item_device->delete($_POST, 1);
+    $item_device->delete($_POST, true);
 
     Event::log(
         $_POST["id"],
@@ -95,7 +96,7 @@ if (isset($_POST["add"])) {
 
     $device = $item_device->getOnePeer(1);
     Html::redirect($device->getLinkURL());
-} else if (isset($_POST["update"])) {
+} elseif (isset($_POST["update"])) {
     $item_device->check($_POST["id"], UPDATE);
     $item_device->update($_POST);
 
@@ -109,10 +110,10 @@ if (isset($_POST["add"])) {
     );
     Html::back();
 } else {
-    if (in_array($item_device->getType(), $CFG_GLPI['devices_in_menu'])) {
-        $menus = ["assets", strtolower($item_device->getType())];
+    if (in_array($item_device::class, $CFG_GLPI['devices_in_menu'])) {
+        $menus = ["assets", strtolower($item_device::class)];
     } else {
-        $menus = ["config", "commondevice", $item_device->getType()];
+        $menus = ["config", "commondevice", $item_device::class];
     }
 
     $item_device::displayFullPageForItem($_GET["id"], $menus, $options ?? []);

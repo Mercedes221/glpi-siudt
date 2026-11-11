@@ -7,8 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
- * @copyright 2003-2014 by the INDEPNET Development Team.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
  * ---------------------------------------------------------------------
@@ -34,10 +33,9 @@
  */
 
 /**
- * @var \DBmysql $DB
- * @var \Migration $migration
+ * @var DBmysql $DB
+ * @var Migration $migration
  */
-
 $default_key_sign = DBConnection::getDefaultPrimaryKeySignOption();
 
 // Remove the `NOT NULL` flag of comment fields and fix collation
@@ -130,7 +128,7 @@ $useless_keys = [
         'FK_device',
     ],
     'glpi_dropdowntranslations' => [
-        'typeid'
+        'typeid',
     ],
     'glpi_entities' => [
         'entities_id',
@@ -750,14 +748,14 @@ $tables = [
 foreach ($tables as $table) {
     $migration->addField($table, 'no_entity_restriction', 'boolean', ['update' => 0]);
     $migration->migrationOneTable($table); // Ensure 'no_entity_restriction' is created
-    $DB->updateOrDie(
+    $DB->update(
         $table,
         ['entities_id' => 0, 'no_entity_restriction' => 1],
         ['entities_id' => -1]
     );
     $migration->changeField($table, 'entities_id', 'entities_id', "int {$default_key_sign} DEFAULT NULL");
     $migration->migrationOneTable($table); // Ensure 'entities_id' is nullable
-    $DB->updateOrDie(
+    $DB->update(
         $table,
         ['entities_id' => 'NULL'],
         ['no_entity_restriction' => 1]
@@ -765,7 +763,7 @@ foreach ($tables as $table) {
 }
 
 // Replace -1 default values on glpi_rules.entities_id
-$DB->updateOrDie(
+$DB->update(
     'glpi_rules',
     ['entities_id' => 0],
     ['entities_id' => -1]
@@ -781,7 +779,7 @@ foreach ($tables as $table) {
 }
 
 // Replace -1 default values on glpi_queuednotifications.items_id
-$DB->updateOrDie(
+$DB->update(
     'glpi_queuednotifications',
     ['items_id' => 0],
     ['items_id' => -1]

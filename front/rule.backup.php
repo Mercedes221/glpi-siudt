@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,16 +33,16 @@
  * ---------------------------------------------------------------------
  */
 
+require_once(__DIR__ . '/_check_webserver_config.php');
+
 /**
  * @since 0.85
  */
 
-include("../inc/includes.php");
-
 Session::checkCentralAccess();
 if (isset($_GET['action'])) {
     $action = $_GET['action'];
-} else if (isset($_POST['action'])) {
+} elseif (isset($_POST['action'])) {
     $action = $_POST['action'];
 } else {
     $action = "import";
@@ -51,8 +51,8 @@ if (isset($_GET['action'])) {
 $rulecollection = new RuleCollection();
 $rulecollection->checkGlobal(READ);
 
-if ($action != "export") {
-    Html::header(Rule::getTypeName(Session::getPluralNumber()), $_SERVER['PHP_SELF'], "admin", "rule", -1);
+if ($action !== "export") {
+    Html::header(Rule::getTypeName(Session::getPluralNumber()), '', "admin", "rule");
 }
 
 switch ($action) {
@@ -61,8 +61,9 @@ switch ($action) {
         if (RuleCollection::previewImportRules()) {
             break;
         }
-        //seems wanted not to break; I do no understand why
+        // seems wanted not to break; I do no understand why
 
+        // no break
     case "import":
         $rulecollection->checkGlobal(UPDATE);
         RuleCollection::displayImportRulesForm();
@@ -75,24 +76,22 @@ switch ($action) {
         } else {
             $rules_key = array_keys($rule->find(getEntitiesRestrictCriteria()));
         }
-        $rulecollection->exportRulesToXML($rules_key);
+        $rulecollection::exportRulesToXML($rules_key);
         unset($_SESSION['exportitems']);
         break;
 
     case "download":
         echo "<div class='center'>";
         $itemtype = $_REQUEST['itemtype'];
-        echo "<a href='" . $itemtype::getSearchURL() . "'>" . __('Back') . "</a>";
+        echo "<a href='" . htmlescape($itemtype::getSearchURL()) . "'>" . __s('Back') . "</a>";
         echo "</div>";
-        Html::redirect("rule.backup.php?action=export&itemtype=" . $_REQUEST['itemtype']);
-        break;
-
+        Html::redirect("rule.backup.php?action=export&itemtype=" . urlencode($_REQUEST['itemtype']));
+        // no break
     case "process_import":
         $rulecollection->checkGlobal(UPDATE);
         RuleCollection::processImportRules();
         Html::back();
-        break;
 }
-if ($action != "export") {
+if ($action !== "export") {
     Html::footer();
 }

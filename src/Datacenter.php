@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -42,14 +42,19 @@ class Datacenter extends CommonDBTM
 {
     use AssetImage;
 
-   // From CommonDBTM
-    public $dohistory                   = true;
-    public static $rightname                   = 'datacenter';
+    // From CommonDBTM
+    public bool $dohistory                   = true;
+    public static string $rightname                   = 'datacenter';
 
     public static function getTypeName($nb = 0)
     {
-       //TRANS: Test of comment for translation (mark : //TRANS)
+        //TRANS: Test of comment for translation (mark : //TRANS)
         return _n('Data center', 'Data centers', $nb);
+    }
+
+    public static function getSectorizedDetails(): array
+    {
+        return ['management', self::class];
     }
 
     public function prepareInputForAdd($input)
@@ -69,7 +74,7 @@ class Datacenter extends CommonDBTM
         $ong = [];
         $this->addDefaultFormTab($ong)
          ->addImpactTab($ong, $options)
-         ->addStandardTab('DCRoom', $ong, $options);
+         ->addStandardTab(DCRoom::class, $ong, $options);
         return $ong;
     }
 
@@ -81,7 +86,7 @@ class Datacenter extends CommonDBTM
 
         $tab[] = [
             'id'                 => 'common',
-            'name'               => __('Characteristics')
+            'name'               => __('Characteristics'),
         ];
 
         $tab[] = [
@@ -99,7 +104,7 @@ class Datacenter extends CommonDBTM
             'field'              => 'id',
             'name'               => __('ID'),
             'massiveaction'      => false, // implicit field is id
-            'datatype'           => 'number'
+            'datatype'           => 'number',
         ];
 
         $tab = array_merge($tab, Location::rawSearchOptionsToAdd());
@@ -110,7 +115,7 @@ class Datacenter extends CommonDBTM
             'field'              => 'date_mod',
             'name'               => __('Last update'),
             'datatype'           => 'datetime',
-            'massiveaction'      => false
+            'massiveaction'      => false,
         ];
 
         $tab[] = [
@@ -119,7 +124,7 @@ class Datacenter extends CommonDBTM
             'field'              => 'date_creation',
             'name'               => __('Creation date'),
             'datatype'           => 'datetime',
-            'massiveaction'      => false
+            'massiveaction'      => false,
         ];
 
         $tab[] = [
@@ -127,19 +132,24 @@ class Datacenter extends CommonDBTM
             'table'              => 'glpi_entities',
             'field'              => 'completename',
             'name'               => Entity::getTypeName(1),
-            'datatype'           => 'dropdown'
+            'datatype'           => 'dropdown',
         ];
 
         return $tab;
     }
 
+    /**
+     * @param class-string<CommonDBTM> $itemtype
+     *
+     * @return array
+     */
     public static function rawSearchOptionsToAdd($itemtype)
     {
         $tab = [];
 
         $tab[] = [
             'id'                 => 'datacenter',
-            'name'               => _n('Data center', 'Data centers', Session::getPluralNumber())
+            'name'               => _n('Data center', 'Data centers', Session::getPluralNumber()),
         ];
 
         $tab[] = [
@@ -148,16 +158,16 @@ class Datacenter extends CommonDBTM
             'field'              => '_virtual_datacenter_position', // virtual field
             'additionalfields'   => [
                 'id',
-                'name'
+                'name',
             ],
             'name'               => __('Data center position'),
             'datatype'           => 'specific',
             'nosearch'           => true,
             'nosort'             => true,
-            'massiveaction'      => false
+            'massiveaction'      => false,
         ];
 
-        if (($itemtype != Rack::getType()) && ($itemtype != DCRoom::getType())) {
+        if (($itemtype != Rack::class) && ($itemtype != DCRoom::class)) {
             $tab[] = [
                 'id'            => '1451',
                 'table'         => Datacenter::getTable(),
@@ -178,14 +188,14 @@ class Datacenter extends CommonDBTM
                                     'beforejoin'    => [
                                         'table'         => Item_Rack::getTable(),
                                         'joinparams'    => [
-                                            'jointype'      => 'itemtype_item'
-                                        ]
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ]
+                                            'jointype'      => 'itemtype_item',
+                                        ],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
             ];
         }
 
@@ -195,12 +205,11 @@ class Datacenter extends CommonDBTM
     public static function getAdditionalMenuLinks()
     {
         $links = [];
+        $label = htmlescape(DCRoom::getTypeName(Session::getPluralNumber()));
         if (static::canView()) {
             $rooms = "<i class='ti ti-building pointer'
-                      title=\"" . DCRoom::getTypeName(Session::getPluralNumber()) . "\"></i>
-            <span class='d-none d-xxl-block ps-1'>
-               " . DCRoom::getTypeName(Session::getPluralNumber()) . "
-            </span>";
+                      title=\"$label\"></i>
+            <span class='d-none d-xxl-block ps-1'>$label</span>";
             $links[$rooms] = DCRoom::getSearchURL(false);
         }
         if (count($links)) {
@@ -213,15 +222,15 @@ class Datacenter extends CommonDBTM
     {
         if (static::canView()) {
             return [
-                'dcroom' => [
+                DCRoom::class => [
                     'title' => DCRoom::getTypeName(Session::getPluralNumber()),
                     'page'  => DCRoom::getSearchURL(false),
                     'icon'  => DCRoom::getIcon(),
                     'links' => [
                         'add'    => '/front/dcroom.form.php',
                         'search' => '/front/dcroom.php',
-                    ]
-                ]
+                    ],
+                ],
             ];
         }
         return false;

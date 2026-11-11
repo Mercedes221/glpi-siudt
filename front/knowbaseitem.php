@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,46 +33,30 @@
  * ---------------------------------------------------------------------
  */
 
-use Glpi\Toolbox\Sanitizer;
+require_once(__DIR__ . '/_check_webserver_config.php');
 
-/** @var array $CFG_GLPI */
-global $CFG_GLPI;
+use Glpi\Exception\Http\AccessDeniedHttpException;
 
-include('../inc/includes.php');
-
-if (!Session::haveRightsOr('knowbase', [READ, KnowbaseItem::READFAQ])) {
-    Session::redirectIfNotLoggedIn();
-    Html::displayRightError();
+if (!Session::haveRightsOr(KnowbaseItem::$rightname, [READ, KnowbaseItem::READFAQ])) {
+    throw new AccessDeniedHttpException();
 }
+
+// Entering the knowledge base without any parameter means opening its root
+// article.
+if ($_GET === [] && KnowbaseItem::hasRoot()) {
+    $root_id = KnowbaseItem::getRootId();
+    $root    = new KnowbaseItem();
+    if ($root->getFromDB($root_id) && $root->can($root_id, READ)) {
+        Html::redirect(KnowbaseItem::getFormURLWithID($root_id));
+    }
+}
+
 if (isset($_GET["id"])) {
     Html::redirect(KnowbaseItem::getFormURLWithID($_GET["id"]));
 }
 
-Html::header(KnowbaseItem::getTypeName(1), $_SERVER['PHP_SELF'], "tools", "knowbaseitem");
+Html::header(KnowbaseItem::getTypeName(1), '', "tools", "knowbaseitem");
 
-// Clean for search
-$_GET = Sanitizer::dbUnescapeRecursive($_GET);
-
-// Search a solution
-if (
-    !isset($_GET["contains"])
-    && isset($_GET["item_itemtype"])
-    && isset($_GET["item_items_id"])
-) {
-    if (in_array($_GET["item_itemtype"], $CFG_GLPI['kb_types']) && $item = getItemForItemtype($_GET["item_itemtype"])) {
-        if ($item->can($_GET["item_items_id"], READ)) {
-            $_GET["contains"] = $item->getField('name');
-        }
-    }
-}
-
-// Manage forcetab : non standard system (file name <> class name)
-if (isset($_GET['forcetab'])) {
-    Session::setActiveTab('Knowbase', $_GET['forcetab']);
-    unset($_GET['forcetab']);
-}
-
-$kb = new Knowbase();
-$kb->display($_GET);
+Search::show(KnowbaseItem::class);
 
 Html::footer();

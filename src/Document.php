@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,25 +33,65 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\Application\View\TemplateRenderer;
+use Glpi\DBAL\QuerySubQuery;
 use Glpi\Event;
-use Glpi\Toolbox\Sanitizer;
+use Glpi\Features\ParentStatus;
+use Glpi\Features\TreeBrowse;
+use Glpi\Features\TreeBrowseInterface;
+use Glpi\Form\AccessControl\FormAccessControlManager;
+use Glpi\Form\AccessControl\FormAccessParameters;
+use Glpi\Form\Comment;
+use Glpi\Form\Form;
+use Glpi\Form\Question;
+use Glpi\Form\Section;
+use Glpi\Security\ShareTokenManager;
+use Safe\Exceptions\FilesystemException;
+use Symfony\Component\HttpFoundation\Response;
+
+use function Safe\copy;
+use function Safe\filesize;
+use function Safe\finfo_open;
+use function Safe\getimagesize;
+use function Safe\mkdir;
+use function Safe\opendir;
+use function Safe\preg_match;
+use function Safe\rename;
+use function Safe\session_destroy;
+use function Safe\session_id;
+use function Safe\sha1_file;
+use function Safe\unlink;
 
 /**
  * Document class
  **/
-class Document extends CommonDBTM
+class Document extends CommonDBTM implements TreeBrowseInterface
 {
-    use Glpi\Features\TreeBrowse;
-    use Glpi\Features\ParentStatus;
+    use TreeBrowse;
+    use ParentStatus;
 
-   // From CommonDBTM
-    public $dohistory                   = true;
+    /**
+     * List of file extension allowed for images documents.
+     *
+     * @var string[]
+     */
+    public const ALLOWED_IMAGE_EXTENSIONS = [
+        'bmp',
+        'gif',
+        'jpeg',
+        'jpg',
+        'png',
+        'webp',
+    ];
 
-    protected static $forward_entity_to = ['Document_Item'];
+    // From CommonDBTM
+    public bool $dohistory                   = true;
 
-    public static $rightname                   = 'document';
-    public static $tag_prefix                  = '#';
-    protected $usenotepad               = true;
+    protected static array $forward_entity_to = ['Document_Item'];
+
+    public static string $rightname                   = 'document';
+    public static string $tag_prefix                  = '#';
+    protected bool $usenotepad               = true;
 
 
     public static function getTypeName($nb = 0)
@@ -59,6 +99,10 @@ class Document extends CommonDBTM
         return _n('Document', 'Documents', $nb);
     }
 
+    public static function getSectorizedDetails(): array
+    {
+        return ['management', self::class];
+    }
 
     /**
      * Check if given object can have Document
@@ -67,33 +111,12 @@ class Document extends CommonDBTM
      *
      * @param string|object $item An object or a string
      *
-     * @return boolean
+     * @return bool
      **/
-    public static function canApplyOn($item)
+    public static function canApplyOn($item): bool
     {
-        /** @var array $CFG_GLPI */
-        global $CFG_GLPI;
-
-       // All devices can have documents!
-        if (
-            is_a($item, 'Item_Devices', true)
-            || is_a($item, 'CommonDevice', true)
-        ) {
-            return true;
-        }
-
-       // We also allow direct items to check
-        if ($item instanceof CommonGLPI) {
-            $item = $item->getType();
-        }
-
-        if (in_array($item, $CFG_GLPI['document_types'])) {
-            return true;
-        }
-
-        return false;
+        return in_array(is_string($item) ? $item : $item::class, self::getItemtypesThatCanHave(), true);
     }
-
 
     /**
      * Get all the types that can have a document
@@ -102,9 +125,8 @@ class Document extends CommonDBTM
      *
      * @return array of the itemtypes
      **/
-    public static function getItemtypesThatCanHave()
+    public static function getItemtypesThatCanHave(): array
     {
-        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         return array_merge(
@@ -114,42 +136,34 @@ class Document extends CommonDBTM
         );
     }
 
-
-    /**
-     * @see CommonGLPI::getMenuShorcut()
-     *
-     * @since 0.85
-     **/
     public static function getMenuShorcut()
     {
         return 'd';
     }
 
-
-    public static function canCreate()
+    public static function canCreate(): bool
     {
-
-       // Have right to add document OR ticket followup
-        return (Session::haveRight('document', CREATE)
-              || Session::haveRight('followup', ITILFollowup::ADDMYTICKET));
+        // Have right to add document OR ticket followup
+        return (Session::haveRight(Document::$rightname, CREATE)
+              || Session::haveRight(ITILFollowup::$rightname, ITILFollowup::ADDMY));
     }
 
-
-    public function canCreateItem()
+    public function canCreateItem(): bool
     {
-
-        if (isset($this->input['itemtype']) && isset($this->input['items_id'])) {
+        if (isset($this->input['itemtype'], $this->input['items_id'])) {
             if (
                 ($item = getItemForItemtype($this->input['itemtype']))
                 && $item->getFromDB($this->input['items_id'])
             ) {
-                return $item->canAddItem('Document');
+                // canAddItem() holds the "one write is enough" rule; parent::canCreateItem()
+                // still enforces the document's own entity.
+                return $item->canAddItem('Document') && parent::canCreateItem();
             } else {
                 unset($this->input['itemtype'], $this->input['items_id']);
             }
         }
 
-       // From Ticket Document Tab => check right to add followup.
+        // From Ticket Document Tab => check right to add followup.
         if (
             isset($this->fields['tickets_id'])
             && ($this->fields['tickets_id'] > 0)
@@ -160,38 +174,37 @@ class Document extends CommonDBTM
             }
         }
 
-        if (Document::canCreate()) {
+        if (self::canCreate()) {
             return parent::canCreateItem();
         }
         return false;
     }
 
-
     public function cleanDBonPurge()
     {
-
         $this->deleteChildrenAndRelationsFromDb(
             [
                 Document_Item::class,
             ]
         );
 
-       // UNLINK DU FICHIER
+        // Unlink/delete the file
         if (!empty($this->fields["filepath"])) {
             if (
                 is_file(GLPI_DOC_DIR . "/" . $this->fields["filepath"])
                 && !is_dir(GLPI_DOC_DIR . "/" . $this->fields["filepath"])
                 && (countElementsInTable(
-                    $this->getTable(),
+                    static::getTable(),
                     ['sha1sum' => $this->fields["sha1sum"] ]
                 ) <= 1)
             ) {
-                if (unlink(GLPI_DOC_DIR . "/" . $this->fields["filepath"])) {
-                    Session::addMessageAfterRedirect(sprintf(
+                try {
+                    unlink(GLPI_DOC_DIR . "/" . $this->fields["filepath"]);
+                    Session::addMessageAfterRedirect(htmlescape(sprintf(
                         __('Successful deletion of the file %s'),
                         $this->fields["filepath"]
-                    ));
-                } else {
+                    )));
+                } catch (FilesystemException $e) {
                     trigger_error(
                         sprintf(
                             'Failed to delete the file %s',
@@ -200,10 +213,10 @@ class Document extends CommonDBTM
                         E_USER_WARNING
                     );
                     Session::addMessageAfterRedirect(
-                        sprintf(
+                        htmlescape(sprintf(
                             __('Failed to delete the file %s'),
                             $this->fields["filepath"]
-                        ),
+                        )),
                         false,
                         ERROR
                     );
@@ -212,160 +225,120 @@ class Document extends CommonDBTM
         }
     }
 
-
     public function defineTabs($options = [])
     {
-
         $ong = [];
         $this->addDefaultFormTab($ong);
-        $this->addStandardTab('Document_Item', $ong, $options);
-        $this->addStandardTab('Notepad', $ong, $options);
-        $this->addStandardTab('Log', $ong, $options);
+        $this->addStandardTab(Document_Item::class, $ong, $options);
+        $this->addStandardTab(Notepad::class, $ong, $options);
+        $this->addStandardTab(Log::class, $ong, $options);
 
         return $ong;
     }
 
-
     public function prepareInputForAdd($input)
     {
-        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
-       // security (don't accept filename from $_REQUEST)
-        if (array_key_exists('filename', $_REQUEST)) {
-            unset($input['filename']);
-        }
+        $input = $this->filterFields($input);
+
+        // current_filename/current_filepath are not necessary (item is new, there is no current file)
+        // an unexpected value can lead to wrong file deletion in moveDocument() and moveUploadedDocument()
+        unset($input['current_filepath'], $input['current_filename']);
 
         if ($uid = Session::getLoginUserID()) {
             $input["users_id"] = Session::getLoginUserID();
         }
 
-       // Create a doc only selecting a file from a item form
+        // Create a doc only selecting a file from a item form
         $create_from_item = false;
         if (
-            isset($input["items_id"])
-            && isset($input["itemtype"])
-            && ($item = getItemForItemtype($input["itemtype"]))
-            && ($input["items_id"] > 0)
+            isset($input["items_id"], $input["itemtype"])
+            && ($item = getItemForItemtype($input["itemtype"])) && ($input["items_id"] > 0)
         ) {
-            $typename = $item->getTypeName(1);
-            $name     = NOT_AVAILABLE;
-
-            if ($item->getFromDB($input["items_id"])) {
-                $name = $item->getNameID();
-            }
-           //TRANS: %1$s is Document, %2$s is item type, %3$s is item name
-            $input["name"] = addslashes(Html::resume_text(
-                sprintf(
-                    __('%1$s: %2$s'),
-                    Document::getTypeName(1),
-                    sprintf(__('%1$s - %2$s'), $typename, $name)
-                ),
-                200
-            ));
             $create_from_item = true;
         }
 
         $upload_ok = false;
-        if (isset($input["_filename"]) && !(empty($input["_filename"]) == 1)) {
-            $upload_ok = $this->moveDocument($input, stripslashes(array_shift($input["_filename"])));
-        } else if (isset($input["upload_file"]) && !empty($input["upload_file"])) {
-           // Move doc from upload dir
+        if (!empty($input["_filename"])) {
+            $upload_ok = self::moveDocument($input, array_shift($input["_filename"]));
+        } elseif (!empty($input["upload_file"])) {
+            // Move doc from upload dir
             $upload_ok = $this->moveUploadedDocument($input, $input["upload_file"]);
-        } else if (isset($input['filepath']) && file_exists(GLPI_DOC_DIR . '/' . $input['filepath'])) {
-           // Document is created using an existing document file
-            $upload_ok = true;
         }
 
-       // Tag
-        if (isset($input["_tag_filename"]) && !empty($input["_tag_filename"]) == 1) {
+        // Tag
+        if (!empty($input["_tag_filename"])) {
             $input['tag'] = array_shift($input["_tag_filename"]);
         }
 
-        if (!isset($input["tag"]) || empty($input["tag"])) {
+        if (empty($input["tag"])) {
             $input['tag'] = Rule::getUuid();
         }
 
-       // Upload failed : do not create document
+        // Upload failed : do not create document
         if ($create_from_item && !$upload_ok) {
             return false;
         }
 
-       // Default document name
-        if (
-            (!isset($input['name']) || empty($input['name']))
-            && isset($input['filename'])
-        ) {
+        // Default document name
+        if (empty($input['name']) && isset($input['filename'])) {
             $input['name'] = $input['filename'];
         }
 
         unset($input["upload_file"]);
 
-       // Don't add if no file
+        // Don't add if no file
         if (
             isset($input["_only_if_upload_succeed"])
             && $input["_only_if_upload_succeed"]
-            && (!isset($input['filename']) || empty($input['filename']))
+            && (empty($input['filename']))
         ) {
             return false;
         }
 
-       // Set default category for document linked to tickets
+        // Set default category for document linked to tickets
         if (
-            isset($input['itemtype']) && ($input['itemtype'] == 'Ticket')
+            isset($input['itemtype']) && ($input['itemtype'] === Ticket::class)
             && (!isset($input['documentcategories_id']) || ($input['documentcategories_id'] == 0))
         ) {
             $input['documentcategories_id'] = $CFG_GLPI["documentcategories_id_forticket"];
         }
 
-        if (isset($input['link']) && !empty($input['link']) && !Toolbox::isValidWebUrl($input['link'])) {
+        if (!empty($input['link']) && !Toolbox::isValidWebUrl($input['link'])) {
             Session::addMessageAfterRedirect(
-                __('Invalid link'),
+                __s('Invalid link'),
                 false,
                 ERROR
             );
             return false;
         }
-
-       /* Unicity check
-       if (isset($input['sha1sum'])) {
-         // Check if already upload in the current entity
-         $crit = array('sha1sum'=>$input['sha1sum'],
-                       'entities_id'=>$input['entities_id']);
-         foreach ($DB->request($this->getTable(), $crit) as $data) {
-            $link=$this->getFormURL();
-            Session::addMessageAfterRedirect(__('"A document with that filename has already been attached to another record.').
-               "&nbsp;: <a href=\"".$link."?id=".
-                     $data['id']."\">".$data['name']."</a>",
-               false, ERROR, true);
-            return false;
-         }
-       } */
         return $input;
     }
 
-
     public function post_addItem()
     {
-
         if (
-            isset($this->input["items_id"])
-            && isset($this->input["itemtype"])
-            && (($this->input["items_id"] > 0)
-              || (($this->input["items_id"] == 0)
-                  && ($this->input["itemtype"] == 'Entity')))
-            && !empty($this->input["itemtype"])
+            isset($this->input["items_id"], $this->input["itemtype"]) && (($this->input["items_id"] > 0)
+                || (((int) $this->input["items_id"] === 0)
+                    && ($this->input["itemtype"] === 'Entity'))) && !empty($this->input["itemtype"])
         ) {
             $docitem = new Document_Item();
-            $docitem->add(['documents_id' => $this->fields['id'],
+            $docitem_input = [
+                'documents_id' => $this->fields['id'],
                 'itemtype'     => $this->input["itemtype"],
-                'items_id'     => $this->input["items_id"]
-            ]);
+                'items_id'     => $this->input["items_id"],
+                'is_private'   => (bool) ($this->input['is_private'] ?? false),
+            ];
+
+            $docitem->add($docitem_input);
 
             if (is_a($this->input["itemtype"], CommonITILObject::class, true)) {
-                $itilobject = new $this->input["itemtype"]();
-                $itilobject->getFromDB($this->input["items_id"]);
-                $this->updateParentStatus($itilobject, $this->input);
+                $main_item = new $this->input["itemtype"]();
+                $main_item->getFromDB($this->input["items_id"]);
+                NotificationEvent::raiseEvent('add_document', $main_item);
+
+                $this->updateParentStatus($main_item, $this->input);
             }
 
             Event::log(
@@ -379,44 +352,28 @@ class Document extends CommonDBTM
         }
     }
 
-
-    public function post_getFromDB()
-    {
-        if (
-            isAPI()
-            && (isset($_SERVER['HTTP_ACCEPT']) && $_SERVER['HTTP_ACCEPT'] == 'application/octet-stream'
-              || isset($_GET['alt']) && $_GET['alt'] == 'media')
-        ) {
-           // This is a API request to download the document
-            $this->send();
-            exit();
-        }
-    }
-
-
     public function prepareInputForUpdate($input)
     {
-
-       // security (don't accept filename from $_REQUEST)
-        if (array_key_exists('filename', $_REQUEST)) {
-            unset($input['filename']);
-        }
+        $input = $this->filterFields($input);
 
         if (isset($input['current_filepath'])) {
-            if (isset($input["_filename"]) && !empty($input["_filename"]) == 1) {
-                $this->moveDocument($input, stripslashes(array_shift($input["_filename"])));
-            } else if (isset($input["upload_file"]) && !empty($input["upload_file"])) {
-               // Move doc from upload dir
+            // Always use the values stored in DB to prevent arbitrary file deletion
+            $input['current_filepath'] = $this->fields['filepath'];
+            $input['current_filename'] = $this->fields['filename'];
+
+            if (!empty($input["_filename"])) {
+                self::moveDocument($input, array_shift($input["_filename"]));
+            } elseif (!empty($input["upload_file"])) {
+                // Move doc from upload dir
                 $this->moveUploadedDocument($input, $input["upload_file"]);
             }
         }
 
-        unset($input['current_filepath']);
-        unset($input['current_filename']);
+        unset($input['current_filepath'], $input['current_filename']);
 
-        if (isset($input['link']) && !empty($input['link'])  && !Toolbox::isValidWebUrl($input['link'])) {
+        if (!empty($input['link']) && !Toolbox::isValidWebUrl($input['link'])) {
             Session::addMessageAfterRedirect(
-                __('Invalid link'),
+                __s('Invalid link'),
                 false,
                 ERROR
             );
@@ -426,181 +383,80 @@ class Document extends CommonDBTM
         return $input;
     }
 
-
-    /**
-     * Print the document form
-     *
-     * @param $ID        integer ID of the item
-     * @param $options   array
-     *     - target filename : where to go when done.
-     *     - withtemplate boolean : template or basic item
-     *
-     * @return void
-     **/
     public function showForm($ID, array $options = [])
     {
-        $this->initForm($ID, $options);
-       // $options['formoptions'] = " enctype='multipart/form-data'";
-        $this->showFormHeader($options);
-
-        $showuserlink = 0;
-        if (Session::haveRight('user', READ)) {
-            $showuserlink = 1;
-        }
         if ($ID > 0) {
-            echo "<tr><th colspan='2'>";
-            if ($this->fields["users_id"] > 0) {
-                printf(__('Added by %s'), getUserName($this->fields["users_id"], $showuserlink));
-            } else {
-                echo "&nbsp;";
-            }
-            echo "</th>";
-            echo "<th colspan='2'>";
-
-           //TRANS: %s is the datetime of update
-            printf(__('Last update on %s'), Html::convDateTime($this->fields["date_mod"]));
-
-            echo "</th></tr>\n";
+            $this->check($ID, READ);
         }
 
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Name') . "</td>";
-        echo "<td>";
-        echo Html::input('name', ['value' => $this->fields['name']]);
-        echo "</td>";
-        if ($ID > 0) {
-            echo "<td>" . __('Current file') . "</td>";
-            echo "<td>" . $this->getDownloadLink(null, 45);
-            echo "<input type='hidden' name='current_filepath' value='" . $this->fields["filepath"] . "'>";
-            echo "<input type='hidden' name='current_filename' value='" . $this->fields["filename"] . "'>";
-            echo "</td>";
-        } else {
-            echo "<td colspan=2>&nbsp;</td>";
-        }
-        echo "</tr>";
-
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Heading') . "</td>";
-        echo "<td>";
-        DocumentCategory::dropdown(['value' => $this->fields["documentcategories_id"]]);
-        echo "</td>";
-        if ($ID > 0) {
-            echo "<td>" . sprintf(__('%1$s (%2$s)'), __('Checksum'), __('SHA1')) . "</td>";
-            echo "<td>" . $this->fields["sha1sum"];
-            echo "</td>";
-        } else {
-            echo "<td colspan=2>&nbsp;</td>";
-        }
-        echo "</tr>";
-
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Web link') . "</td>";
-        echo "<td>";
-        echo Html::input('link', ['value' => $this->fields['link']]);
-        echo "</td>";
-        echo "<td rowspan='3' class='middle'>" . __('Comments') . "</td>";
-        echo "<td class='middle' rowspan='3'>";
-        echo "<textarea class='form-control' name='comment' >" . $this->fields["comment"] . "</textarea>";
-        echo "</td></tr>";
-
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('MIME type') . "</td>";
-        echo "<td>";
-        echo Html::input('mime', ['value' => $this->fields['mime']]);
-        echo "</td></tr>";
-
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Blacklisted for import') . "</td>";
-        echo "<td>";
-        Dropdown::showYesNo("is_blacklisted", $this->fields["is_blacklisted"]);
-        echo "</td></tr>";
-
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Use a FTP installed file') . "</td>";
-        echo "<td>";
-        $this->showUploadedFilesDropdown("upload_file");
-        echo "</td>";
-
-        echo "<td>" . sprintf(__('%1$s (%2$s)'), __('File'), self::getMaxUploadSize()) . "</td>";
-        echo "<td>";
-        Html::file();
-        echo "</td></tr>";
-
-        $this->showFormButtons($options);
+        TemplateRenderer::getInstance()->display('pages/management/document.html.twig', [
+            'item'  => $this,
+            'uploader' => $this->fields['users_id'] > 0 ? getUserLink($this->fields["users_id"]) : '',
+            'uploaded_files' => self::getUploadedFiles(),
+            'params' => [
+                'canedit' => $this->can($this->getID(), UPDATE),
+            ],
+        ]);
 
         return true;
     }
 
-
     /**
      * Get max upload size from php config
+     *
+     * @return string
      **/
     public static function getMaxUploadSize()
     {
-        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
-       //TRANS: %s is a size
+        //TRANS: %s is a size
         return sprintf(__('%s Mio max'), $CFG_GLPI['document_max_size']);
     }
 
-
     /**
-     * Send a document to navigator
-     *
-     * @param string $context Context to resize image, if any
-     **/
-    public function send($context = null)
+     * Get a Symfony response for the given document.
+     */
+    public function getAsResponse(): Response
     {
         $file = GLPI_DOC_DIR . "/" . $this->fields['filepath'];
-        if ($context !== null) {
-            $file = self::getImage($file, $context);
-        }
-        Toolbox::sendFile($file, $this->fields['filename'], $this->fields['mime']);
+        return Toolbox::getFileAsResponse($file, $this->fields['filename'], $this->fields['mime']);
     }
-
 
     /**
      * Get download link for a document
      *
      * @param CommonDBTM|null   $linked_item    Item linked to the document, to check access right
-     * @param integer           $len            maximum length of displayed string (default 20)
-     *
+     * @param int           $len            maximum length of displayed string (default 20)
+     * @return string HTML link
      **/
-    public function getDownloadLink($linked_item = null, $len = 20)
+    public function getDownloadLink($linked_item = null, $len = 20): string
     {
-        /**
-         * @var array $CFG_GLPI
-         * @var \DBmysql $DB
-         */
         global $CFG_GLPI, $DB;
 
         $link_params = '';
-        if (is_string($linked_item)) {
-            // Old behaviour.
-            Toolbox::deprecated('Passing additionnal URL parameters in Document::getDownloadLink() is deprecated.', true, '11.0');
-            $linked_item = null;
-            $link_params = $linked_item;
-        } elseif ($linked_item !== null && !($linked_item instanceof CommonDBTM)) {
-            throw new \InvalidArgumentException();
+        if ($linked_item !== null && !($linked_item instanceof CommonDBTM)) {
+            throw new InvalidArgumentException();
         } elseif ($linked_item !== null) {
-            $link_params = sprintf('&itemtype=%s&items_id=%s', $linked_item->getType(), $linked_item->getID());
+            $link_params = sprintf('&itemtype=%s&items_id=%s', rawurlencode($linked_item::class), $linked_item->getID());
         }
 
         $splitter = $this->fields['filename'] !== null ? explode("/", $this->fields['filename']) : [];
 
-        if (count($splitter) == 2) {
-           // Old documents in EXT/filename
+        if (count($splitter) === 2) {
+            // Old documents in EXT/filename
             $fileout = $splitter[1];
         } else {
-           // New document
+            // New document
             $fileout = $this->fields['filename'];
         }
 
-        $initfileout = $fileout;
-
-        if ($fileout !== null && Toolbox::strlen($fileout) > $len) {
-            $fileout = Toolbox::substr($fileout, 0, $len) . "&hellip;";
+        $initfileout = null;
+        if ($fileout !== null) {
+            $initfileout = htmlescape($fileout);
+            $fileout     = Toolbox::strlen($fileout) > $len
+                ? htmlescape(Toolbox::substr($fileout, 0, $len)) . "&hellip;"
+                : htmlescape($fileout);
         }
 
         $out   = '';
@@ -608,12 +464,12 @@ class Document extends CommonDBTM
         $close = '';
 
         $can_view_options = $linked_item !== null
-            ? ['itemtype' => $linked_item->getType(), 'items_id' => $linked_item->getID()]
-            : ['itemtype' => Ticket::getType(), 'items_id' => $this->fields['tickets_id']];
+            ? ['itemtype' => $linked_item::class, 'items_id' => $linked_item->getID()]
+            : ['itemtype' => Ticket::class, 'items_id' => $this->fields['tickets_id']];
 
         if (self::canView() || $this->canViewFile($can_view_options)) {
-            $open  = "<a href='" . $CFG_GLPI["root_doc"] . "/front/document.send.php?docid=" .
-                    $this->fields['id'] . $link_params . "' alt=\"" . $initfileout . "\"
+            $open  = "<a href='" . htmlescape($CFG_GLPI["root_doc"] . "/front/document.send.php?docid="
+                    . $this->fields['id'] . $link_params) . "' alt=\"" . $initfileout . "\"
                     title=\"" . $initfileout . "\"target='_blank'>";
             $close = "</a>";
         }
@@ -625,39 +481,52 @@ class Document extends CommonDBTM
                 'FROM'   => 'glpi_documenttypes',
                 'WHERE'  => [
                     'ext'    => ['LIKE', $splitter[0]],
-                    'icon'   => ['<>', '']
-                ]
+                    'icon'   => ['<>', ''],
+                ],
             ]);
 
             if (count($iterator) > 0) {
                 $result = $iterator->current();
                 $icon = $result['icon'];
-                if (!file_exists(GLPI_ROOT . "/pics/icones/$icon")) {
+                if (!file_exists(GLPI_ROOT . "/public/pics/icones/$icon")) {
                     $icon = "defaut-dist.png";
                 }
-                $out .= "&nbsp;<img class='middle' style='margin-left:3px; margin-right:6px;' alt=\"" .
-                              $initfileout . "\" title=\"" . $initfileout . "\" src='" .
-                              $CFG_GLPI["typedoc_icon_dir"] . "/$icon'>";
+                $out .= "<img class='middle' style='margin-left:3px; margin-right:6px;' alt=\""
+                              . $initfileout . "\" title=\"" . $initfileout . "\" src='"
+                              . htmlescape($CFG_GLPI["typedoc_icon_dir"] . "/$icon") . "'>";
             }
         }
-        $out .= "$open<span class='b'>$fileout</span>$close";
+        $out .= "$open<span class='fw-bold'>" . $fileout . "</span>$close";
 
         return $out;
     }
 
+    public function getDownloadUrl(?CommonDBTM $linked_item = null): string
+    {
+        $params = [
+            'docid' => $this->fields['id'],
+        ];
+
+        if ($linked_item) {
+            $params['itemtype'] = $linked_item::class;
+            $params['items_id'] = $linked_item->getID();
+        }
+
+        $params = http_build_query($params);
+        return Html::getPrefixedUrl("/front/document.send.php?$params");
+    }
 
     /**
      * find a document with a file attached
      *
-     * @param integer $entity    entity of the document
+     * @param int $entity    entity of the document
      * @param string  $path      path of the searched file
      *
-     * @return boolean
+     * @return bool
      **/
     public function getFromDBbyContent($entity, $path)
     {
 
-        /** @var \DBmysql $DB */
         global $DB;
 
         if (empty($path)) {
@@ -669,13 +538,14 @@ class Document extends CommonDBTM
             return false;
         }
 
+        $table = static::getTable();
         $doc_iterator = $DB->request(
             [
                 'SELECT' => 'id',
-                'FROM'   => $this->getTable(),
+                'FROM'   => $table,
                 'WHERE'  => [
-                    $this->getTable() . '.sha1sum'      => $sum,
-                    $this->getTable() . '.entities_id'  => $entity
+                    $table . '.sha1sum'      => $sum,
+                    $table . '.entities_id'  => $entity,
                 ],
                 'LIMIT'  => 1,
             ]
@@ -689,7 +559,6 @@ class Document extends CommonDBTM
         return $this->getFromDB($doc_data['id']);
     }
 
-
     /**
      * Check is the curent user is allowed to see the file.
      *
@@ -699,7 +568,7 @@ class Document extends CommonDBTM
      *     - problems_id (legacy):  ID of Problem linked to document. Ignored if itemtype/items_id options are set.
      *     - tickets_id (legacy):   ID of Ticket linked to document. Ignored if itemtype/items_id options are set.
      *
-     * @return boolean
+     * @return bool
      **/
     public function canViewFile(array $options = [])
     {
@@ -710,6 +579,11 @@ class Document extends CommonDBTM
             && ($this->can($this->fields["id"], READ)
               || ($this->fields["users_id"] === Session::getLoginUserID()))
         ) {
+            return true;
+        }
+
+        // Check if document belongs to an item with session-based shared access (via share token)
+        if ($this->canViewFileFromSharedItem()) {
             return true;
         }
 
@@ -726,15 +600,23 @@ class Document extends CommonDBTM
         $items_id = $options['items_id'] ?? null;
 
         // legacy options
-        $changes_id  = $itemtype === null ? ($options['changes_id'] ?? null) : ($itemtype === 'Change' ? $items_id : null);
-        $problems_id = $itemtype === null ? ($options['problems_id'] ?? null) : ($itemtype === 'Problem' ? $items_id : null);
-        $tickets_id  = $itemtype === null ? ($options['tickets_id'] ?? null) : ($itemtype === 'Ticket' ? $items_id : null);
+        $changes_id  = $itemtype === null ? ($options['changes_id'] ?? null) : ($itemtype === Change::class ? $items_id : null);
+        $problems_id = $itemtype === null ? ($options['problems_id'] ?? null) : ($itemtype === Problem::class ? $items_id : null);
+        $tickets_id  = $itemtype === null ? ($options['tickets_id'] ?? null) : ($itemtype === Ticket::class ? $items_id : null);
 
-        if ($changes_id !== null && $this->canViewFileFromItilObject('Change', $changes_id)) {
+        if ($changes_id !== null && $this->canViewFileFromItilObject(Change::class, $changes_id)) {
             return true;
         }
 
-        if ($problems_id !== null && $this->canViewFileFromItilObject('Problem', $problems_id)) {
+        if ($problems_id !== null && $this->canViewFileFromItilObject(Problem::class, $problems_id)) {
+            return true;
+        }
+
+        if (
+            $itemtype !== null
+            && is_numeric($items_id)
+            && $this->canViewFileFromForm($itemtype, (int) $items_id)
+        ) {
             return true;
         }
 
@@ -750,7 +632,7 @@ class Document extends CommonDBTM
         // The following case should be reachable from the API
         self::loadAPISessionIfExist();
 
-        if ($tickets_id !== null && $this->canViewFileFromItilObject('Ticket', $tickets_id)) {
+        if ($tickets_id !== null && $this->canViewFileFromItilObject(Ticket::class, $tickets_id)) {
             return true;
         }
 
@@ -758,27 +640,28 @@ class Document extends CommonDBTM
     }
 
     /**
-     * Try to load the session from the API Tolen
+     * Try to load the session from the API Token
      *
+     * @return void
      * @since 9.5
      */
-    private static function loadAPISessionIfExist()
+    private static function loadAPISessionIfExist(): void
     {
-        $session_token = \Toolbox::getHeader('Session-Token');
+        $session_token = Toolbox::getHeader('Session-Token');
 
-       // No api token found
+        // No api token found
         if ($session_token === null) {
             return;
         }
 
         $current_session = session_id();
 
-       // Clean current session
+        // Clean current session
         if (!empty($current_session) && $current_session !== $session_token) {
             session_destroy();
         }
 
-       // Load API session
+        // Load API session
         session_id($session_token);
         Session::start();
     }
@@ -786,15 +669,10 @@ class Document extends CommonDBTM
     /**
      * Check if file of current instance can be viewed from a Reminder.
      *
-     * @global DBmysql $DB
-     * @return boolean
-     *
-     * @TODO Use DBmysqlIterator instead of raw SQL
+     * @return bool
      */
     private function canViewFileFromReminder()
     {
-
-        /** @var \DBmysql $DB */
         global $DB;
 
         if (!Session::getLoginUserID()) {
@@ -811,15 +689,15 @@ class Document extends CommonDBTM
                             'glpi_documents_items'  => 'items_id',
                             'glpi_reminders'        => 'id', [
                                 'AND' => [
-                                    'glpi_documents_items.itemtype'  => 'Reminder'
-                                ]
-                            ]
-                        ]
-                    ]
+                                    'glpi_documents_items.itemtype'  => 'Reminder',
+                                ],
+                            ],
+                        ],
+                    ],
                 ],
                 'WHERE'     => [
-                    'glpi_documents_items.documents_id' => $this->fields['id']
-                ]
+                    'glpi_documents_items.documents_id' => $this->fields['id'],
+                ],
             ],
             Reminder::getVisibilityCriteria()
         );
@@ -833,18 +711,14 @@ class Document extends CommonDBTM
      *
      * @global array $CFG_GLPI
      * @global DBmysql $DB
-     * @return boolean
+     * @return bool
      */
     private function canViewFileFromKnowbaseItem()
     {
 
-        /**
-         * @var array $CFG_GLPI
-         * @var \DBmysql $DB
-         */
         global $CFG_GLPI, $DB;
 
-       // Knowbase items can be viewed by non connected user in case of public FAQ
+        // Knowbase items can be viewed by non connected user in case of public FAQ
         if (!Session::getLoginUserID() && !$CFG_GLPI['use_public_faq']) {
             return false;
         }
@@ -860,30 +734,77 @@ class Document extends CommonDBTM
         $visibilityCriteria = KnowbaseItem::getVisibilityCriteria();
 
         $request = [
+            'SELECT'    => 'glpi_knowbaseitems.id',
+            'DISTINCT'  => true,
             'FROM'      => 'glpi_documents_items',
-            'COUNT'     => 'cpt',
-            'LEFT JOIN' => [
+            'INNER JOIN' => [
                 'glpi_knowbaseitems' => [
                     'FKEY' => [
                         'glpi_knowbaseitems'   => 'id',
                         'glpi_documents_items' => 'items_id',
-                        ['AND' => ['glpi_documents_items.itemtype' => 'KnowbaseItem']]
-                    ]
-                ]
+                        ['AND' => ['glpi_documents_items.itemtype' => 'KnowbaseItem']],
+                    ],
+                ],
             ],
             'WHERE'     => [
                 'glpi_documents_items.documents_id' => $this->fields['id'],
-            ]
+            ],
         ];
 
         if (array_key_exists('LEFT JOIN', $visibilityCriteria) && count($visibilityCriteria['LEFT JOIN']) > 0) {
-            $request['LEFT JOIN'] += $visibilityCriteria['LEFT JOIN'];
+            $request['LEFT JOIN'] = $visibilityCriteria['LEFT JOIN'];
         }
         if (array_key_exists('WHERE', $visibilityCriteria) && count($visibilityCriteria['WHERE']) > 0) {
             $request['WHERE'] += $visibilityCriteria['WHERE'];
         }
 
-        $result = $DB->request($request)->current();
+        // The criteria have no publication window: `canViewItem()` checks it.
+        $kb = new KnowbaseItem();
+        foreach ($DB->request($request) as $row) {
+            if ($kb->getFromDB($row['id']) && $kb->canViewItem()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if this document belongs to an item with session-based shared access (via share token).
+     */
+    private function canViewFileFromSharedItem(): bool
+    {
+        global $DB;
+
+        $shared_access = (new ShareTokenManager())->getAccessibleItems();
+        if ($shared_access === []) {
+            return false;
+        }
+
+        $conditions = [];
+        foreach ($shared_access as $itemtype => $item_ids) {
+            if ($item_ids === []) {
+                continue;
+            }
+            $conditions[] = [
+                'itemtype' => $itemtype,
+                'items_id' => $item_ids,
+            ];
+        }
+
+        if ($conditions === []) {
+            return false;
+        }
+
+        $result = $DB->request([
+            'FROM'  => 'glpi_documents_items',
+            'COUNT' => 'cpt',
+            'WHERE' => [
+                'documents_id' => $this->fields['id'],
+                'OR' => $conditions,
+                ...Document_Item::getPrivacyRestrictionCriteria(),
+            ],
+        ])->current();
 
         return $result['cpt'] > 0;
     }
@@ -893,22 +814,23 @@ class Document extends CommonDBTM
      *
      * @global DBmysql $DB
      * @param string  $itemtype
-     * @param integer $items_id
-     * @return boolean
+     * @param int $items_id
+     * @return bool
      */
     private function canViewFileFromItilObject($itemtype, $items_id)
     {
 
-        /** @var \DBmysql $DB */
         global $DB;
 
         if (!Session::getLoginUserID()) {
             return false;
         }
 
-       /* @var CommonITILObject $itil */
-        $itil = new $itemtype();
+        if (!is_a($itemtype, CommonITILObject::class, true)) {
+            return false;
+        }
 
+        $itil = new $itemtype();
         if (!$itil->can($items_id, READ)) {
             return false;
         }
@@ -919,9 +841,11 @@ class Document extends CommonDBTM
             'FROM'  => Document_Item::getTable(),
             'COUNT' => 'cpt',
             'WHERE' => [
+                'documents_id' => $this->fields['id'],
                 $itil->getAssociatedDocumentsCriteria(),
-                'documents_id' => $this->fields['id']
-            ]
+                ...Document_Item::getPrivacyRestrictionCriteria(),
+            ],
+            'LIMIT' => 1, // Only need to see one result
         ])->current();
 
         return $result['cpt'] > 0;
@@ -933,14 +857,15 @@ class Document extends CommonDBTM
      * @global DBmysql $DB
      *
      * @param string  $itemtype
-     * @param integer $items_id
+     * @param int $items_id
      *
-     * @return boolean
+     * @return bool
      */
     private function canViewFileFromItem($itemtype, $items_id): bool
     {
-        /** @var \DBmysql $DB */
-        global $DB;
+        if (!is_a($itemtype, CommonDBTM::class, true)) {
+            return false;
+        }
 
         $item = new $itemtype();
 
@@ -950,35 +875,43 @@ class Document extends CommonDBTM
 
         /** @var CommonDBTM $item */
         $item->getFromDB($items_id);
-        if (!$item->canViewItem()) {
+        if (!$item->can($item->getID(), READ)) {
             return false;
         }
 
-        $result = $DB->request(
-            [
-                'FROM'  => Document_Item::getTable(),
-                'COUNT' => 'cpt',
-                'WHERE' => [
-                    'itemtype' => $itemtype,
-                    'items_id' => $items_id,
-                ]
-            ]
-        )->current();
-
-        if ($result['cpt'] === 0) {
-            return false;
-        }
-
-        return true;
+        return $this->hasLinkedItem($itemtype, $items_id);
     }
 
+    private function hasLinkedItem(string $itemtype, int $items_id): bool
+    {
+        global $DB;
+
+        $result = $DB->request([
+            'FROM'  => Document_Item::getTable(),
+            'COUNT' => 'nb_of_linked_documents',
+            'WHERE' => [
+                'itemtype'     => $itemtype,
+                'items_id'     => $items_id,
+                'documents_id' => $this->getID(),
+                ...Document_Item::getPrivacyRestrictionCriteria(),
+            ],
+        ])->current();
+
+        return $result['nb_of_linked_documents'] > 0;
+    }
+
+    /**
+     * @param ?class-string<CommonDBTM> $itemtype
+     *
+     * @return array
+     */
     public static function rawSearchOptionsToAdd($itemtype = null)
     {
         $tab = [];
 
         $tab[] = [
             'id'                 => 'document',
-            'name'               => self::getTypeName(Session::getPluralNumber())
+            'name'               => self::getTypeName(Session::getPluralNumber()),
         ];
 
         $tab[] = [
@@ -991,13 +924,12 @@ class Document extends CommonDBTM
             'datatype'           => 'count',
             'massiveaction'      => false,
             'joinparams'         => [
-                'jointype'           => 'itemtype_item'
-            ]
+                'jointype'           => 'itemtype_item',
+            ],
         ];
 
         return $tab;
     }
-
 
     public function rawSearchOptions()
     {
@@ -1005,12 +937,12 @@ class Document extends CommonDBTM
 
         $tab[] = [
             'id'                 => 'common',
-            'name'               => __('Characteristics')
+            'name'               => __('Characteristics'),
         ];
 
         $tab[] = [
             'id'                 => '1',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'name',
             'name'               => __('Name'),
             'datatype'           => 'itemlink',
@@ -1019,25 +951,25 @@ class Document extends CommonDBTM
 
         $tab[] = [
             'id'                 => '2',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'id',
             'name'               => __('ID'),
             'massiveaction'      => false,
-            'datatype'           => 'number'
+            'datatype'           => 'number',
         ];
 
         $tab[] = [
             'id'                 => '3',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'filename',
             'name'               => __('File'),
             'massiveaction'      => false,
-            'datatype'           => 'string'
+            'datatype'           => 'string',
         ];
 
         $tab[] = [
             'id'                 => '4',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'link',
             'name'               => __('Web link'),
             'datatype'           => 'weblink',
@@ -1045,7 +977,7 @@ class Document extends CommonDBTM
 
         $tab[] = [
             'id'                 => '5',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'mime',
             'name'               => __('MIME type'),
             'datatype'           => 'string',
@@ -1053,11 +985,11 @@ class Document extends CommonDBTM
 
         $tab[] = [
             'id'                 => '6',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'tag',
             'name'               => __('Tag'),
             'datatype'           => 'text',
-            'massiveaction'      => false
+            'massiveaction'      => false,
         ];
 
         $tab[] = [
@@ -1065,7 +997,7 @@ class Document extends CommonDBTM
             'table'              => 'glpi_documentcategories',
             'field'              => 'completename',
             'name'               => __('Heading'),
-            'datatype'           => 'dropdown'
+            'datatype'           => 'dropdown',
         ];
 
         $tab[] = [
@@ -1074,50 +1006,50 @@ class Document extends CommonDBTM
             'field'              => 'completename',
             'name'               => Entity::getTypeName(1),
             'massiveaction'      => false,
-            'datatype'           => 'dropdown'
+            'datatype'           => 'dropdown',
         ];
 
         $tab[] = [
             'id'                 => '86',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'is_recursive',
             'name'               => __('Child entities'),
-            'datatype'           => 'bool'
+            'datatype'           => 'bool',
         ];
 
         $tab[] = [
             'id'                 => '19',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'date_mod',
             'name'               => __('Last update'),
             'datatype'           => 'datetime',
-            'massiveaction'      => false
+            'massiveaction'      => false,
         ];
 
         $tab[] = [
             'id'                 => '121',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'date_creation',
             'name'               => __('Creation date'),
             'datatype'           => 'datetime',
-            'massiveaction'      => false
+            'massiveaction'      => false,
         ];
 
         $tab[] = [
             'id'                 => '20',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'sha1sum',
             'name'               => sprintf(__('%1$s (%2$s)'), __('Checksum'), __('SHA1')),
             'massiveaction'      => false,
-            'datatype'           => 'string'
+            'datatype'           => 'string',
         ];
 
         $tab[] = [
             'id'                 => '16',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'comment',
-            'name'               => __('Comments'),
-            'datatype'           => 'text'
+            'name'               => _n('Comment', 'Comments', Session::getPluralNumber()),
+            'datatype'           => 'text',
         ];
 
         $tab[] = [
@@ -1130,11 +1062,20 @@ class Document extends CommonDBTM
             'datatype'           => 'count',
             'massiveaction'      => false,
             'joinparams'         => [
-                'jointype'           => 'child'
-            ]
+                'jointype'           => 'child',
+            ],
         ];
 
-       // add objectlock search options
+        $tab[] = [
+            'id'                 => '73',
+            'table'              => static::getTable(),
+            'field'              => 'filesize',
+            'name'               => __('Size'),
+            'massiveaction'      => false,
+            'datatype'           => 'specific',
+        ];
+
+        // add objectlock search options
         $tab = array_merge($tab, ObjectLock::rawSearchOptionsToAdd(get_class($this)));
 
         $tab = array_merge($tab, Notepad::rawSearchOptionsToAdd());
@@ -1142,6 +1083,18 @@ class Document extends CommonDBTM
         return $tab;
     }
 
+    public static function getSpecificValueToDisplay($field, $values, array $options = [])
+    {
+
+        if (!is_array($values)) {
+            $values = [$field => $values];
+        }
+
+        if ($field == 'filesize' && $values[$field] !== null) {
+            return htmlescape(Toolbox::getSize($values[$field]));
+        }
+        return parent::getSpecificValueToDisplay($field, $values, $options);
+    }
 
     /**
      * Move a file to a new location
@@ -1150,29 +1103,32 @@ class Document extends CommonDBTM
      * @param string $srce   source file path
      * @param string $dest   destination file path
      *
-     * @return boolean : success
+     * @return bool : success
      **/
     public static function renameForce($srce, $dest)
     {
-
-       // File already present
+        // File already present
         if (is_file($dest)) {
-           // As content is the same (sha1sum), no need to copy
+            // As content is the same (sha1sum), no need to copy
             @unlink($srce);
             return true;
         }
-       // Move
-        return rename($srce, $dest);
+        // Move
+        try {
+            rename($srce, $dest);
+            return true;
+        } catch (FilesystemException $e) {
+            return false;
+        }
     }
 
-
     /**
-     * Move an uploadd document (files in GLPI_DOC_DIR."/_uploads" dir)
+     * Move an uploaded document (files in GLPI_DOC_DIR."/_uploads" dir)
      *
      * @param array  $input     array of datas used in adding process (need current_filepath)
      * @param string $filename  filename to move
      *
-     * @return boolean for success / $input array is updated
+     * @return bool for success / $input array is updated
      **/
     public function moveUploadedDocument(array &$input, $filename)
     {
@@ -1188,10 +1144,11 @@ class Document extends CommonDBTM
         }
 
         $fullpath = GLPI_UPLOAD_DIR . "/" . $filename;
+        $filesize = filesize($fullpath);
         $filename = str_replace($prefix, '', $filename);
 
         if (!is_dir(GLPI_UPLOAD_DIR)) {
-            Session::addMessageAfterRedirect(__("Upload directory doesn't exist"), false, ERROR);
+            Session::addMessageAfterRedirect(__s("Upload directory doesn't exist"), false, ERROR);
             return false;
         }
 
@@ -1201,7 +1158,7 @@ class Document extends CommonDBTM
                 E_USER_WARNING
             );
             Session::addMessageAfterRedirect(
-                sprintf(__('File %s not found.'), $filename),
+                htmlescape(sprintf(__('File %s not found.'), $filename)),
                 false,
                 ERROR
             );
@@ -1215,25 +1172,26 @@ class Document extends CommonDBTM
             return false;
         }
 
-       // Delete old file (if not used by another doc)
+        // Delete old file (if not used by another doc)
         if (
             isset($input['current_filepath'])
             && !empty($input['current_filepath'])
             && is_file(GLPI_DOC_DIR . "/" . $input['current_filepath'])
             && (countElementsInTable(
                 'glpi_documents',
-                ['sha1sum' => sha1_file(GLPI_DOC_DIR . "/" .
-                $input['current_filepath'])
+                ['sha1sum' => sha1_file(GLPI_DOC_DIR . "/"
+                . $input['current_filepath']),
                 ]
             ) <= 1)
         ) {
-            if (unlink(GLPI_DOC_DIR . "/" . $input['current_filepath'])) {
-                Session::addMessageAfterRedirect(sprintf(
+            try {
+                unlink(GLPI_DOC_DIR . "/" . $input['current_filepath']);
+                Session::addMessageAfterRedirect(htmlescape(sprintf(
                     __('Successful deletion of the file %s'),
                     $input['current_filename']
-                ));
-            } else {
-               // TRANS: %1$s is the curent filename, %2$s is its directory
+                )));
+            } catch (FilesystemException $e) {
+                // TRANS: %1$s is the curent filename, %2$s is its directory
                 trigger_error(
                     sprintf(
                         'Failed to delete the file %1$s (%2$s)',
@@ -1243,44 +1201,44 @@ class Document extends CommonDBTM
                     E_USER_WARNING
                 );
                 Session::addMessageAfterRedirect(
-                    sprintf(
+                    htmlescape(sprintf(
                         __('Failed to delete the file %1$s'),
                         $input['current_filename']
-                    ),
+                    )),
                     false,
                     ERROR
                 );
             }
         }
 
-       // Local file : try to detect mime type
+        // Local file: try to detect mime type
         $input['mime'] = Toolbox::getMime($fullpath);
 
         if (
             is_writable(GLPI_UPLOAD_DIR)
             && is_writable($fullpath)
         ) { // Move if allowed
-            if (self::renameForce($fullpath, GLPI_DOC_DIR . "/" . $new_path)) {
-                Session::addMessageAfterRedirect(__('Document move succeeded.'));
-            } else {
-                Session::addMessageAfterRedirect(__('File move failed.'), false, ERROR);
+            if (!self::renameForce($fullpath, GLPI_DOC_DIR . "/" . $new_path)) {
+                Session::addMessageAfterRedirect(__s('File move failed.'), false, ERROR);
                 return false;
             }
         } else { // Copy (will overwrite dest file is present)
-            if (copy($fullpath, GLPI_DOC_DIR . "/" . $new_path)) {
-                Session::addMessageAfterRedirect(__('Document copy succeeded.'));
-            } else {
-                Session::addMessageAfterRedirect(__('File move failed'), false, ERROR);
+            try {
+                copy($fullpath, GLPI_DOC_DIR . "/" . $new_path);
+            } catch (FilesystemException $e) {
+                Session::addMessageAfterRedirect(__s('File move failed'), false, ERROR);
                 return false;
             }
         }
 
-       // For display
-        $input['filename'] = addslashes($filename);
-       // Storage path
+        // For display
+        $input['filename'] = $filename;
+        // Storage path
         $input['filepath'] = $new_path;
-       // Checksum
+        // Checksum
         $input['sha1sum']  = $sha1sum;
+        // Size
+        $input['filesize'] = $filesize;
         return true;
     }
 
@@ -1290,7 +1248,7 @@ class Document extends CommonDBTM
      * @param array  $input     array of datas used in adding process (need current_filepath)
      * @param string $filename  filename to move
      *
-     * @return boolean for success / $input array is updated
+     * @return bool for success / $input array is updated
      **/
     public static function moveDocument(array &$input, $filename)
     {
@@ -1306,9 +1264,10 @@ class Document extends CommonDBTM
         }
 
         $fullpath = GLPI_TMP_DIR . "/" . $filename;
+        $filesize = filesize($fullpath);
         $filename = str_replace($prefix, '', $filename);
         if (!is_dir(GLPI_TMP_DIR)) {
-            Session::addMessageAfterRedirect(__("Temporary directory doesn't exist"), false, ERROR);
+            Session::addMessageAfterRedirect(__s("Temporary directory doesn't exist"), false, ERROR);
             return false;
         }
 
@@ -1318,7 +1277,7 @@ class Document extends CommonDBTM
                 E_USER_WARNING
             );
             Session::addMessageAfterRedirect(
-                sprintf(__('File %s not found.'), $filename),
+                sprintf(__s('File %s not found.'), $filename),
                 false,
                 ERROR
             );
@@ -1333,25 +1292,25 @@ class Document extends CommonDBTM
             return false;
         }
 
-       // Delete old file (if not used by another doc)
+        // Delete old file (if not used by another doc)
         if (
-            isset($input['current_filepath'])
-            && !empty($input['current_filepath'])
+            !empty($input['current_filepath'])
             && is_file(GLPI_DOC_DIR . "/" . $input['current_filepath'])
             && (countElementsInTable(
                 'glpi_documents',
-                ['sha1sum' => sha1_file(GLPI_DOC_DIR . "/" .
-                $input['current_filepath'])
+                ['sha1sum' => sha1_file(GLPI_DOC_DIR . "/"
+                . $input['current_filepath']),
                 ]
             ) <= 1)
         ) {
-            if (unlink(GLPI_DOC_DIR . "/" . $input['current_filepath'])) {
+            try {
+                unlink(GLPI_DOC_DIR . "/" . $input['current_filepath']);
                 Session::addMessageAfterRedirect(sprintf(
-                    __('Successful deletion of the file %s'),
-                    $input['current_filename']
+                    __s('Successful deletion of the file %s'),
+                    htmlescape($input['current_filename'])
                 ));
-            } else {
-               // TRANS: %1$s is the curent filename, %2$s is its directory
+            } catch (FilesystemException $e) {
+                // TRANS: %1$s is the curent filename, %2$s is its directory
                 trigger_error(
                     sprintf(
                         'Failed to delete the file %1$s (%2$s)',
@@ -1362,8 +1321,8 @@ class Document extends CommonDBTM
                 );
                 Session::addMessageAfterRedirect(
                     sprintf(
-                        __('Failed to delete the file %1$s'),
-                        $input['current_filename']
+                        __s('Failed to delete the file %1$s'),
+                        htmlescape($input['current_filename'])
                     ),
                     false,
                     ERROR
@@ -1371,127 +1330,28 @@ class Document extends CommonDBTM
             }
         }
 
-       // Local file : try to detect mime type
+        // Local file: try to detect mime type
         $input['mime'] = Toolbox::getMime($fullpath);
 
         // Copy (will overwrite dest file if present)
-        if (copy($fullpath, GLPI_DOC_DIR . "/" . $new_path)) {
-            Session::addMessageAfterRedirect(__('Document copy succeeded.'));
-        } else {
-            Session::addMessageAfterRedirect(__('File move failed'), false, ERROR);
+        try {
+            copy($fullpath, GLPI_DOC_DIR . "/" . $new_path);
+        } catch (FilesystemException $e) {
+            Session::addMessageAfterRedirect(__s('File move failed'), false, ERROR);
             @unlink($fullpath);
             return false;
         }
 
-       // For display
-        $input['filename'] = addslashes($filename);
-       // Storage path
+        // For display
+        $input['filename'] = $filename;
+        // Storage path
         $input['filepath'] = $new_path;
-       // Checksum
+        // Checksum
         $input['sha1sum']  = $sha1sum;
+        // Size
+        $input['filesize'] = $filesize;
         return true;
     }
-
-
-    /**
-     * Upload a new file
-     *
-     * @param &$input    array of datas need for add/update (will be completed)
-     * @param $FILEDESC        FILE descriptor
-     *
-     * @return boolean
-     **/
-    public static function uploadDocument(array &$input, $FILEDESC)
-    {
-
-        if (
-            !count($FILEDESC)
-            || empty($FILEDESC['name'])
-            || !is_file($FILEDESC['tmp_name'])
-        ) {
-            switch ($FILEDESC['error']) {
-                case 1:
-                case 2:
-                    Session::addMessageAfterRedirect(__('File too large to be added.'), false, ERROR);
-                    break;
-
-                case 4:
-                   // Session::addMessageAfterRedirect(__('No file specified.'),false,ERROR);
-                    break;
-            }
-
-            return false;
-        }
-
-        $sha1sum = sha1_file($FILEDESC['tmp_name']);
-        $dir     = self::isValidDoc($FILEDESC['name']);
-        $path    = self::getUploadFileValidLocationName($dir, $sha1sum);
-
-        if (!$sha1sum || !$dir || !$path) {
-            return false;
-        }
-
-       // Delete old file (if not used by another doc)
-        if (
-            isset($input['current_filepath'])
-            && !empty($input['current_filepath'])
-            && (countElementsInTable(
-                'glpi_documents',
-                ['sha1sum' => sha1_file(GLPI_DOC_DIR . "/" .
-                $input['current_filepath'])
-                ]
-            ) <= 1)
-        ) {
-            if (unlink(GLPI_DOC_DIR . "/" . $input['current_filepath'])) {
-                Session::addMessageAfterRedirect(sprintf(
-                    __('Successful deletion of the file %s'),
-                    $input['current_filename']
-                ));
-            } else {
-               // TRANS: %1$s is the curent filename, %2$s is its directory
-                trigger_error(
-                    sprintf(
-                        'Failed to delete the file %1$s (%2$s)',
-                        $input['current_filename'],
-                        GLPI_DOC_DIR . "/" . $input['current_filepath']
-                    ),
-                    E_USER_WARNING
-                );
-                Session::addMessageAfterRedirect(
-                    sprintf(
-                        __('Failed to delete the file %1$s'),
-                        $input['current_filename']
-                    ),
-                    false,
-                    ERROR
-                );
-            }
-        }
-
-       // Mime type from client
-        if (isset($FILEDESC['type']) && !empty($FILEDESC['type'])) {
-            $input['mime'] = $FILEDESC['type'];
-        }
-
-       // Move uploaded file
-        if (self::renameForce($FILEDESC['tmp_name'], GLPI_DOC_DIR . "/" . $path)) {
-            Session::addMessageAfterRedirect(__('The file is valid. Upload is successful.'));
-           // For display
-            $input['filename'] = addslashes($FILEDESC['name']);
-           // Storage path
-            $input['filepath'] = $path;
-           // Checksum
-            $input['sha1sum']  = $sha1sum;
-            return true;
-        }
-        Session::addMessageAfterRedirect(
-            __('Potential upload attack or file too large. Moving temporary file failed.'),
-            false,
-            ERROR
-        );
-        return false;
-    }
-
 
     /**
      * Find a valid path for the new file
@@ -1504,12 +1364,11 @@ class Document extends CommonDBTM
     public static function getUploadFileValidLocationName($dir, $sha1sum)
     {
         if (empty($dir)) {
-            $message = __('Unauthorized file type');
+            $message = __s('Unauthorized file type');
 
-            if (Session::haveRight('dropdown', READ)) {
-                $dt       = new DocumentType();
-                $message .= " <a target='_blank' href='" . $dt->getSearchURL() . "' class='pointer'>
-                         <i class='fa fa-info'</i><span class='sr-only'>" . __('Manage document types')  . "</span></a>";
+            if (Session::haveRight(DocumentType::$rightname, READ)) {
+                $message .= " <a target='_blank' href='" . htmlescape(DocumentType::getSearchURL()) . "' class='pointer'>
+                         <i class='fa fa-info'</i><span class='visually-hidden'>" . __s('Manage document types') . "</span></a>";
             }
             Session::addMessageAfterRedirect($message, false, ERROR);
             return '';
@@ -1524,9 +1383,7 @@ class Document extends CommonDBTM
                 E_USER_WARNING
             );
             Session::addMessageAfterRedirect(
-                sprintf(
-                    __("Documents directory doesn't exist.")
-                ),
+                __s("An unexpected error occured."),
                 false,
                 ERROR
             );
@@ -1534,14 +1391,12 @@ class Document extends CommonDBTM
         }
         $subdir = $dir . '/' . substr($sha1sum, 0, 2);
 
-        if (
-            !is_dir(GLPI_DOC_DIR . "/" . $subdir)
-            && @mkdir(GLPI_DOC_DIR . "/" . $subdir, 0777, true)
-        ) {
-            Session::addMessageAfterRedirect(sprintf(
-                __('Create the directory %s'),
-                $subdir
-            ));
+        if (!is_dir(GLPI_DOC_DIR . "/" . $subdir)) {
+            try {
+                mkdir(GLPI_DOC_DIR . "/" . $subdir, 0o777, true);
+            } catch (FilesystemException $e) {
+                //emtpy catch
+            }
         }
 
         if (!is_dir(GLPI_DOC_DIR . "/" . $subdir)) {
@@ -1554,8 +1409,8 @@ class Document extends CommonDBTM
             );
             Session::addMessageAfterRedirect(
                 sprintf(
-                    __('Failed to create the directory %s. Verify that you have the correct permission'),
-                    $subdir
+                    __s('An unexpected error occured.'),
+                    htmlescape($subdir)
                 ),
                 false,
                 ERROR
@@ -1565,75 +1420,66 @@ class Document extends CommonDBTM
         return $subdir . '/' . substr($sha1sum, 2) . '.' . $dir;
     }
 
-
     /**
-     * Show dropdown of uploaded files
-     *
-     * @param $myname dropdown name
-     **/
-    public static function showUploadedFilesDropdown($myname)
+     * @return array Array of uploaded files to be used in a dropdown
+     */
+    private static function getUploadedFiles()
     {
-        if (is_dir(GLPI_UPLOAD_DIR)) {
-            $uploaded_files = [];
-            if ($handle = opendir(GLPI_UPLOAD_DIR)) {
-                while (false !== ($file = readdir($handle))) {
-                    if (!in_array($file, ['.', '..', '.gitkeep', 'remove.txt'])) {
-                        $dir = self::isValidDoc($file);
-                        if (!empty($dir)) {
-                            $uploaded_files[$file] = $file;
-                        }
+        $uploaded_files = [];
+        if ($handle = opendir(GLPI_UPLOAD_DIR)) {
+            while (false !== ($file = readdir($handle))) {
+                if (!in_array($file, ['.', '..', '.gitkeep', 'remove.txt'])) {
+                    $dir = self::isValidDoc($file);
+                    if (!empty($dir)) {
+                        $uploaded_files[$file] = $file;
                     }
                 }
-                closedir($handle);
             }
-
-            if (count($uploaded_files)) {
-                Dropdown::showFromArray($myname, $uploaded_files, ['display_emptychoice' => true]);
-            } else {
-                echo __('No file available');
-            }
-        } else {
-            echo __("Upload directory doesn't exist");
+            closedir($handle);
         }
+        return $uploaded_files;
     }
-
 
     /**
      * Is this file a valid file ? check based on file extension
      *
      * @param string $filename filename to clean
+     *
+     * @return string
      **/
     public static function isValidDoc($filename)
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         $splitter = explode(".", $filename);
         $ext      = end($splitter);
 
         $iterator = $DB->request([
+            'SELECT' => ['id'],
             'FROM'   => 'glpi_documenttypes',
             'WHERE'  => [
+                'is_uploadable'   => 1,
                 'ext'             => ['LIKE', $ext],
-                'is_uploadable'   => 1
-            ]
+            ],
+            'LIMIT'  => 1,
         ]);
 
         if (count($iterator)) {
             return Toolbox::strtoupper($ext);
         }
 
-       // Not found try with regex one
+        // Not found try with regex one
         $iterator = $DB->request([
+            'SELECT' => ['ext'],
             'FROM'   => 'glpi_documenttypes',
             'WHERE'  => [
+                'is_uploadable'   => 1,
                 'ext'             => ['LIKE', '/%/'],
-                'is_uploadable'   => 1
-            ]
+            ],
         ]);
 
         foreach ($iterator as $data) {
-            if (preg_match(Sanitizer::unsanitize($data['ext']) . "i", $ext, $results) > 0) {
+            if (preg_match($data['ext'] . "i", $ext) > 0) {
                 return Toolbox::strtoupper($ext);
             }
         }
@@ -1651,18 +1497,15 @@ class Document extends CommonDBTM
      *    - used : array / Already used items ID: not to display in dropdown (default empty)
      *    - hide_if_no_elements  : boolean / hide dropdown if there is no elements (default false)
      *
-     * @param $options array of possible options
+     * @param array<string,mixed> $options Array of possible options
      *
-     * @return integer|string
+     * @return int|string|void
      *    integer if option display=true (random part of elements id)
      *    string if option display=false (HTML code)
+     *    void if hide_if_no_elements=true and no elements
      **/
     public static function dropdown($options = [])
     {
-        /**
-         * @var array $CFG_GLPI
-         * @var \DBmysql $DB
-         */
         global $CFG_GLPI, $DB;
 
         $p['name']    = 'documents_id';
@@ -1699,10 +1542,10 @@ class Document extends CommonDBTM
                     'SELECT'          => 'documentcategories_id',
                     'DISTINCT'        => true,
                     'FROM'            => 'glpi_documents',
-                    'WHERE'           => $subwhere
-                ])
+                    'WHERE'           => $subwhere,
+                ]),
             ],
-            'ORDER'  => 'name'
+            'ORDER'  => 'name',
         ];
         $iterator = $DB->request($criteria);
 
@@ -1729,7 +1572,7 @@ class Document extends CommonDBTM
             'display'             => false,
             'display_emptychoice' => true,
             'value'               => $p['rubdoc'] ?? 0,
-            'readonly'            => $readonly
+            'readonly'            => $readonly,
         ]);
         $field_id = Html::cleanId("dropdown__rubdoc$rand");
 
@@ -1737,7 +1580,7 @@ class Document extends CommonDBTM
             'entity' => $p['entity'],
             'rand'   => $rand,
             'myname' => $p['name'],
-            'used'   => $p['used']
+            'used'   => $p['used'],
         ];
 
         if ($readonly) {
@@ -1751,7 +1594,7 @@ class Document extends CommonDBTM
             $params,
             false
         );
-        $out .= "<span id='show_" . $p['name'] . "$rand'>";
+        $out .= "<span id='show_" . htmlescape($p['name']) . "$rand'>";
         $out .= "</span>\n";
 
         $params['rubdoc'] = $p['rubdoc'] ?? 0;
@@ -1769,16 +1612,16 @@ class Document extends CommonDBTM
                 'display'             => false,
                 'display_emptychoice' => true,
                 'value'               => $p['value'] ?? 0,
-                'readonly'            => $readonly
+                'readonly'            => $readonly,
             ]);
             $out .= '</div>';
             $out .= '</div>';
         } else {
             $out .= Ajax::updateItem(
-                "show_" . $p['name'] . $rand,
-                $CFG_GLPI["root_doc"] . "/ajax/dropdownRubDocument.php",
-                $params,
-                false
+                toupdate  : "show_" . $p['name'] . $rand,
+                url       : $CFG_GLPI["root_doc"] . "/ajax/dropdownRubDocument.php",
+                parameters: $params,
+                display   : false,
             );
         }
         if ($p['display']) {
@@ -1787,7 +1630,6 @@ class Document extends CommonDBTM
         }
         return $out;
     }
-
 
     public static function getMassiveActionsForItemtype(
         array &$actions,
@@ -1798,28 +1640,28 @@ class Document extends CommonDBTM
         $action_prefix = 'Document_Item' . MassiveAction::CLASS_ACTION_SEPARATOR;
 
         if (self::canApplyOn($itemtype)) {
-            if (Document::canView()) {
-                $actions[$action_prefix . 'add']    = "<i class='fa-fw " . self::getIcon() . "'></i>" .
-                                                _x('button', 'Add a document');
-                $actions[$action_prefix . 'remove'] = _x('button', 'Remove a document');
+            if (self::canView()) {
+                $actions[$action_prefix . 'add']    = "<i class='ti ti-file-plus' aria-hidden='true'></i>"
+                                                . _sx('button', 'Add a document');
+                $actions[$action_prefix . 'remove'] = "<i class='ti ti-file-minus' aria-hidden='true'></i>"
+                                                . _sx('button', 'Remove a document');
             }
         }
 
-        if ((is_a($itemtype, __CLASS__, true)) && (static::canUpdate())) {
-            $actions[$action_prefix . 'add_item']    = _x('button', 'Add an item');
-            $actions[$action_prefix . 'remove_item'] = _x('button', 'Remove an item');
+        if ((is_a($itemtype, self::class, true)) && (static::canUpdate())) {
+            $actions[$action_prefix . 'add_item']    = "<i class='ti ti-package' aria-hidden='true'></i>" . _sx('button', 'Add an item');
+            $actions[$action_prefix . 'remove_item'] = "<i class='ti ti-package-off' aria-hidden='true'></i>" . _sx('button', 'Remove an item');
         }
     }
-
 
     /**
      * @since 0.85
      *
-     * @param $string
+     * @param string $string
      *
      * @return string
      **/
-    public static function getImageTag($string)
+    public static function getImageTag($string): string
     {
         return self::$tag_prefix . $string . self::$tag_prefix;
     }
@@ -1831,96 +1673,90 @@ class Document extends CommonDBTM
      *
      * @param string $file File name
      *
-     * @return boolean
+     * @return bool
      */
-    public static function isImage($file)
+    public static function isImage($file): bool
     {
-        if (!file_exists($file)) {
+        if (!file_exists($file) || !is_file($file)) {
             return false;
         }
+
+        $ext = pathinfo($file, PATHINFO_EXTENSION);
+        if (!in_array(strtolower($ext), self::ALLOWED_IMAGE_EXTENSIONS)) {
+            // Filter by file extensions, since `exif_imagetype()` can be fooled.
+            return false;
+        }
+
         if (extension_loaded('exif')) {
             if (filesize($file) < 12) {
                 return false;
             }
             $etype = exif_imagetype($file);
-            return in_array($etype, [IMAGETYPE_JPEG, IMAGETYPE_GIF, IMAGETYPE_PNG, IMAGETYPE_BMP, IMAGETYPE_WEBP]);
-        } else {
-            trigger_error(
-                'For security reasons, you should consider using exif PHP extension to properly check images.',
-                E_USER_WARNING
-            );
-            $fileinfo = finfo_open(FILEINFO_MIME_TYPE);
-            return in_array(
-                finfo_file($fileinfo, $file),
-                ['image/jpeg', 'image/png','image/gif', 'image/bmp', 'image/webp']
-            );
+            return in_array($etype, [IMAGETYPE_JPEG, IMAGETYPE_GIF, IMAGETYPE_PNG, IMAGETYPE_BMP, IMAGETYPE_WEBP], true);
         }
+
+        trigger_error(
+            'For security reasons, you should consider using exif PHP extension to properly check images.',
+            E_USER_WARNING
+        );
+        $fileinfo = finfo_open(FILEINFO_MIME_TYPE);
+        return in_array(
+            finfo_file($fileinfo, $file),
+            ['image/jpeg', 'image/png','image/gif', 'image/bmp', 'image/webp']
+        );
     }
 
     /**
-     * Get image path for a specified context.
-     * Will call image resize if needed.
+     * Get resized image path.
      *
-     * @since 9.2.1
+     * @since 10.0.1
      *
-     * @param string  $path    Original path
-     * @param string  $context Context
-     * @param integer $mwidth  Maximal width
-     * @param integer $mheight Maximal height
+     * @param string  $path
+     * @param int $width
+     * @param int $height
      *
-     * @return string Image path on disk
+     * @return string
      */
-    public static function getImage($path, $context, $mwidth = null, $mheight = null)
+    public static function getResizedImagePath(string $path, int $width, int $height): string
     {
-        if ($mwidth === null || $mheight === null) {
-            switch ($context) {
-                case 'mail':
-                    $mwidth  = $mwidth ?? 400;
-                    $mheight = $mheight ?? 300;
-                    break;
-                case 'timeline':
-                    $mwidth  = $mwidth ?? 100;
-                    $mheight = $mheight ?? 100;
-                    break;
-                default:
-                    throw new \RuntimeException("Unknown context $context!");
-            }
+        if ($width <= 0 || $height <= 0) {
+            return $path;
         }
 
-       //let's see if original image needs resize
+        // let's see if original image needs resize
         $img_infos  = getimagesize($path);
-        if (!($img_infos[0] > $mwidth) && !($img_infos[1] > $mheight)) {
-           //no resize needed
+        if ($img_infos[0] <= $width && $img_infos[1] <= $height) {
+            // no resize needed, source image is smaller than requested width/height
             return $path;
         }
 
         $infos = pathinfo($path);
-       // output images with possible transparency to png, other to jpg
+        // output images with possible transparency to png, other to jpg
         $extension = in_array(strtolower($infos['extension']), ['png', 'gif']) ? 'png' : 'jpg';
         $context_path = sprintf(
             '%1$s_%2$s-%3$s.%4$s',
             $infos['dirname'] . '/' . $infos['filename'],
-            $mwidth,
-            $mheight,
+            $width,
+            $height,
             $extension
         );
 
-       //let's check if file already exists
+        // let's check if file already exists
         if (file_exists($context_path)) {
             return $context_path;
         }
 
-       //do resize
+        // do resize
         $result = Toolbox::resizePicture(
             $path,
             $context_path,
-            $mwidth,
-            $mheight,
+            $width,
+            $height,
             0,
             0,
             0,
             0,
-            ($mwidth > $mheight ? $mwidth : $mheight)
+            ($width > $height ? $width : $height)
         );
         return ($result ? $context_path : $path);
     }
@@ -1932,14 +1768,12 @@ class Document extends CommonDBTM
      *
      * @return array of information
      **/
-    public static function cronInfo($name)
+    public static function cronInfo($name): array
     {
-
-        switch ($name) {
-            case 'cleanorphans':
-                return ['description' => __('Clean orphaned documents: deletes all documents that are not associated with any items.')];
-        }
-        return [];
+        return match ($name) {
+            'cleanorphansdocument' => ['description' => __('Clean orphaned documents: deletes all documents that are not associated with any items.')],
+            default => [],
+        };
     }
 
     /**
@@ -1947,16 +1781,16 @@ class Document extends CommonDBTM
      *
      * @param CronTask $task CronTask object
      *
-     * @return integer (0 : nothing done - 1 : done)
+     * @return int (0 : nothing done - 1 : done)
+     * @used-by CronTask
      **/
-    public static function cronCleanOrphans(CronTask $task)
+    public static function cronCleanOrphansDocument(CronTask $task): int
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         $dtable = static::getTable();
         $ditable = Document_Item::getTable();
-       //documents that are not present in Document_Item are oprhan
+        // documents that are not present in Document_Item are oprhan
         $iterator = $DB->request([
             'SELECT'    => ["$dtable.id"],
             'FROM'      => $dtable,
@@ -1964,13 +1798,13 @@ class Document extends CommonDBTM
                 $ditable => [
                     'ON'  => [
                         $dtable  => 'id',
-                        $ditable => 'documents_id'
-                    ]
-                ]
+                        $ditable => 'documents_id',
+                    ],
+                ],
             ],
             'WHERE'     => [
-                "$ditable.documents_id" => null
-            ]
+                "$ditable.documents_id" => null,
+            ],
         ]);
 
         $nb = 0;
@@ -1990,20 +1824,18 @@ class Document extends CommonDBTM
         return ($nb > 0 ? 1 : 0);
     }
 
-
     public static function getIcon()
     {
         return "ti ti-files";
     }
 
-
     /**
-     * find and load a document which is a duplicate of a file, with respect of blacklisting
+     * Find and load a document which is a duplicate of a file, with respect of blacklisting
      *
-     * @param integer $entities_id  entity of the document
-     * @param string  $filename     filename of the searched file
+     * @param int $entities_id    Entity of the document
+     * @param string  $filename      Name of the searched file
      *
-     * @return boolean
+     * @return bool
      */
     public function getDuplicateOf(int $entities_id, string $filename): bool
     {
@@ -2018,25 +1850,76 @@ class Document extends CommonDBTM
         return true;
     }
 
-
     /**
      * It checks if a file exists and is readable
      *
      * @param string $filename The name of the file to check.
      *
-     * @return boolean
+     * @return bool
      */
     public function checkAvailability(string $filename): bool
     {
         $file = GLPI_DOC_DIR . '/' . $filename;
-        if (!file_exists($file)) {
+        return file_exists($file) && is_readable($file);
+    }
+
+    private function canViewFileFromForm(string $itemtype, int $items_id): bool
+    {
+        if (!$this->hasLinkedItem($itemtype, $items_id)) {
             return false;
         }
 
-        if (!is_readable($file)) {
+        if ($itemtype === Form::class) {
+            $form = Form::getById($items_id);
+            if (!$form) {
+                return false;
+            }
+        } elseif ($itemtype === Section::class) {
+            $section = Section::getById($items_id);
+            if (!$section) {
+                return false;
+            }
+            $form = $section->getForm();
+        } elseif ($itemtype === Question::class) {
+            $question = Question::getById($items_id);
+            if (!$question) {
+                return false;
+            }
+            $section = $question->getSection();
+            $form = $section->getForm();
+        } elseif ($itemtype === Comment::class) {
+            $comment = Comment::getById($items_id);
+            if (!$comment) {
+                return false;
+            }
+            $section = $comment->getSection();
+            $form = $section->getForm();
+        } else {
             return false;
         }
 
-        return true;
+        $control_manager = FormAccessControlManager::getInstance();
+        $parameters = new FormAccessParameters(
+            session_info: Session::getCurrentSessionInfo(),
+            url_parameters: [],
+        );
+        return $control_manager->canAnswerForm($form, $parameters);
+    }
+
+    /**
+     * Remove $input fields that should not be provided by user input
+     *
+     * @param  array<string, mixed> $input
+     * @return array<string, mixed>
+     */
+    private function filterFields(array $input): array
+    {
+        // security (don't accept filename from $_REQUEST)
+        if (array_key_exists('filename', $_REQUEST)) {
+            unset($input['filename']);
+        }
+
+        $blacklisted = ['filepath', 'sha1sum'];
+        return array_filter($input, static fn($v, $k) => !in_array($k, $blacklisted), ARRAY_FILTER_USE_BOTH);
     }
 }

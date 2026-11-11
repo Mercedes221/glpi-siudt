@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -45,29 +45,28 @@ class ProjectState extends CommonDropdown
         return _n('Project state', 'Project states', $nb);
     }
 
-
     public function post_getEmpty()
     {
         $this->fields['color'] = '#dddddd';
     }
 
-
     public function getAdditionalFields()
     {
-
-        return [['name'     => 'color',
-            'label'    => __('Color'),
-            'type'     => 'color',
-            'list'     => true
-        ],
-            ['name'     => 'is_finished',
+        return [
+            [
+                'name'     => 'color',
+                'label'    => __('Color'),
+                'type'     => 'color',
+                'list'     => true,
+            ],
+            [
+                'name'     => 'is_finished',
                 'label'    => __('Finished state'),
                 'type'     => 'bool',
-                'list'     => true
+                'list'     => true,
             ],
         ];
     }
-
 
     public function rawSearchOptions()
     {
@@ -75,18 +74,18 @@ class ProjectState extends CommonDropdown
 
         $tab[] = [
             'id'                 => '11',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'color',
             'name'               => __('Color'),
-            'datatype'           => 'color'
+            'datatype'           => 'color',
         ];
 
         $tab[] = [
             'id'                 => '12',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'is_finished',
             'name'               => __('Finished state'),
-            'datatype'           => 'bool'
+            'datatype'           => 'bool',
         ];
 
         return $tab;
@@ -94,6 +93,6 @@ class ProjectState extends CommonDropdown
 
     public static function getIcon()
     {
-        return "fas fa-columns";
+        return "ti ti-label";
     }
 }

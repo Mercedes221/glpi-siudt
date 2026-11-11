@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,31 +33,40 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\DBAL\QueryExpression;
+
 /**
  * CronTaskLog class
  **/
-class CronTaskLog extends CommonDBTM
+class CronTaskLog extends CommonDBChild
 {
-   // Class constant
-    const STATE_START = 0;
-    const STATE_RUN   = 1;
-    const STATE_STOP  = 2;
-    const STATE_ERROR = 3;
+    public static string $itemtype = CronTask::class;
+    public static string $items_id  = 'crontasks_id';
 
-    public static $rightname        = 'config';
+    // Prevent CronTaskLog entries from flooding the CronTask historical tab
+    public static bool $logs_for_parent = false;
 
+    // Class constant
+    public const STATE_START = 0;
+    public const STATE_RUN   = 1;
+    public const STATE_STOP  = 2;
+    public const STATE_ERROR = 3;
+
+    public static function getIcon()
+    {
+        return "ti ti-news";
+    }
 
     /**
      * Clean old event for a task
      *
-     * @param $id     integer  ID of the CronTask
-     * @param $days   integer  number of day to keep
+     * @param int $id   ID of the CronTask
+     * @param int $days number of day to keep
      *
-     * @return integer number of events deleted
+     * @return int number of events deleted
      **/
     public static function cleanOld($id, $days)
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         $secs      = $days * DAY_TIMESTAMP;
@@ -66,11 +75,11 @@ class CronTaskLog extends CommonDBTM
             'glpi_crontasklogs',
             [
                 'crontasks_id' => $id,
-                new \QueryExpression("UNIX_TIMESTAMP(" . $DB->quoteName("date") . ") < UNIX_TIMESTAMP()-$secs")
+                new QueryExpression("UNIX_TIMESTAMP(" . $DB->quoteName("date") . ") < UNIX_TIMESTAMP()-$secs"),
             ]
         );
 
-        return $result ? $DB->affectedRows() : 0;
+        return $result ? $DB->getAffectedRows() : 0;
     }
 
 
@@ -80,17 +89,17 @@ class CronTaskLog extends CommonDBTM
         if (!$withtemplate) {
             $nb = 0;
             if ($item instanceof CronTask) {
-                $ong = [];
-                $ong[1] = __('Statistics');
+                $ong    = [];
+                $ong[1] = self::createTabEntry(__('Statistics'), 0, $item::class, 'ti ti-report-analytics');
                 if ($_SESSION['glpishow_count_on_tabs']) {
-                    $nb = countElementsInTable(
+                    $nb =  countElementsInTable(
                         $this->getTable(),
                         ['crontasks_id' => $item->getID(),
-                            'state' => self::STATE_STOP
+                            'state'        => self::STATE_STOP,
                         ]
                     );
                 }
-                $ong[2] = self::createTabEntry(_n('Log', 'Logs', Session::getPluralNumber()), $nb);
+                $ong[2] = self::createTabEntry(_n('Log', 'Logs', Session::getPluralNumber()), $nb, $item::class);
                 return $ong;
             }
         }

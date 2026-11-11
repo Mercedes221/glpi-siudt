@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,15 +33,23 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\DBAL\QueryFunction;
+use Glpi\DBAL\QueryValue;
+
 class PurgeLogs extends CommonDBTM
 {
-    protected static $notable = true;
+    protected static bool $notable = true;
 
     public static function getTypeName($nb = 0)
     {
         return __('Logs purge');
     }
 
+    /**
+     * @param CronTask $task
+     *
+     * @return int
+     */
     public static function cronPurgeLogs($task)
     {
         $cron_status = 0;
@@ -59,7 +67,7 @@ class PurgeLogs extends CommonDBTM
             self::purgePlugins();
             self::purgeAll();
             $logs_after = self::getLogsCount();
-            Log::history(0, __CLASS__, [0, $logs_before, $logs_after], '', Log::HISTORY_LOG_SIMPLE_MESSAGE);
+            Log::history(0, self::class, [0, $logs_before, $logs_after], '', Log::HISTORY_LOG_SIMPLE_MESSAGE);
             $task->addVolume($logs_before - $logs_after);
             $cron_status = 1;
         } else {
@@ -68,6 +76,11 @@ class PurgeLogs extends CommonDBTM
         return $cron_status;
     }
 
+    /**
+     * @param string $name
+     *
+     * @return array
+     */
     public static function cronInfo($name)
     {
         return ['description' => __("Purge history")];
@@ -80,10 +93,6 @@ class PurgeLogs extends CommonDBTM
      */
     public static function purgeSoftware()
     {
-        /**
-         * @var array $CFG_GLPI
-         * @var \DBmysql $DB
-         */
         global $CFG_GLPI, $DB;
 
         $month = self::getDateModRestriction($CFG_GLPI['purge_item_software_install']);
@@ -94,8 +103,11 @@ class PurgeLogs extends CommonDBTM
                     'itemtype'        => $CFG_GLPI['software_types'],
                     'linked_action'   => [
                         Log::HISTORY_INSTALL_SOFTWARE,
-                        Log::HISTORY_UNINSTALL_SOFTWARE
-                    ]
+                        Log::HISTORY_UNINSTALL_SOFTWARE,
+                        Log::HISTORY_ADD_SUBITEM,
+                        Log::HISTORY_UPDATE_SUBITEM,
+                        Log::HISTORY_DELETE_SUBITEM,
+                    ],
                 ] + $month
             );
         }
@@ -105,28 +117,44 @@ class PurgeLogs extends CommonDBTM
             $DB->delete(
                 'glpi_logs',
                 [
-                    'itemtype'        => 'SoftwareVersion',
+                    'itemtype'        => SoftwareVersion::class,
                     'linked_action'   => [
                         Log::HISTORY_INSTALL_SOFTWARE,
-                        Log::HISTORY_UNINSTALL_SOFTWARE
-                    ]
+                        Log::HISTORY_UNINSTALL_SOFTWARE,
+                    ],
                 ] + $month
             );
         }
 
         $month = self::getDateModRestriction($CFG_GLPI['purge_software_version_install']);
         if ($month) {
-           //Delete software version association
+            //Delete software version association
             $DB->delete(
                 'glpi_logs',
                 [
-                    'itemtype'        => 'Software',
-                    'itemtype_link'   => 'SoftwareVersion',
+                    'OR' => [
+                        [
+                            'itemtype'        => Computer::class,
+                            'itemtype_link'   => 'Software',
+                        ],
+                        [
+                            'itemtype'        => Software::class,
+                            'itemtype_link'   => 'SoftwareVersion',
+                        ],
+                        [
+                            'itemtype'        => Software::class,
+                            'itemtype_link'   => 'Item_SoftwareVersion',
+                        ],
+                        [
+                            'itemtype'        => SoftwareVersion::class,
+                            'itemtype_link'   => 'Item_SoftwareVersion',
+                        ],
+                    ],
                     'linked_action'   => [
                         Log::HISTORY_ADD_SUBITEM,
                         Log::HISTORY_UPDATE_SUBITEM,
-                        Log::HISTORY_DELETE_SUBITEM
-                    ]
+                        Log::HISTORY_DELETE_SUBITEM,
+                    ],
                 ] + $month
             );
         }
@@ -139,29 +167,25 @@ class PurgeLogs extends CommonDBTM
      */
     public static function purgeInfocom()
     {
-        /**
-         * @var array $CFG_GLPI
-         * @var \DBmysql $DB
-         */
         global $CFG_GLPI, $DB;
 
         $month = self::getDateModRestriction($CFG_GLPI['purge_infocom_creation']);
         if ($month) {
-           //Delete add infocom
+            //Delete add infocom
             $DB->delete(
                 'glpi_logs',
                 [
-                    'itemtype'        => 'Software',
+                    'itemtype'        => Software::class,
                     'itemtype_link'   => 'Infocom',
-                    'linked_action'   => Log::HISTORY_ADD_SUBITEM
+                    'linked_action'   => Log::HISTORY_ADD_SUBITEM,
                 ] + $month
             );
 
             $DB->delete(
                 'glpi_logs',
                 [
-                    'itemtype'        => 'Infocom',
-                    'linked_action'   => Log::HISTORY_CREATE_ITEM
+                    'itemtype'        => Infocom::class,
+                    'linked_action'   => Log::HISTORY_CREATE_ITEM,
                 ] + $month
             );
         }
@@ -174,66 +198,58 @@ class PurgeLogs extends CommonDBTM
      */
     public static function purgeUserinfos()
     {
-        /**
-         * @var array $CFG_GLPI
-         * @var \DBmysql $DB
-         */
         global $CFG_GLPI, $DB;
 
         $month = self::getDateModRestriction($CFG_GLPI['purge_profile_user']);
         if ($month) {
-           //Delete software version association
             $DB->delete(
                 'glpi_logs',
                 [
-                    'itemtype'        => 'User',
+                    'itemtype'        => User::class,
                     'itemtype_link'   => 'Profile_User',
                     'linked_action'   => [
                         Log::HISTORY_ADD_SUBITEM,
                         Log::HISTORY_UPDATE_SUBITEM,
-                        Log::HISTORY_DELETE_SUBITEM
-                    ]
+                        Log::HISTORY_DELETE_SUBITEM,
+                    ],
                 ] + $month
             );
         }
 
         $month = self::getDateModRestriction($CFG_GLPI['purge_group_user']);
         if ($month) {
-           //Delete software version association
             $DB->delete(
                 'glpi_logs',
                 [
-                    'itemtype'        => 'User',
+                    'itemtype'        => User::class,
                     'itemtype_link'   => 'Group_User',
                     'linked_action'   => [
                         Log::HISTORY_ADD_SUBITEM,
                         Log::HISTORY_UPDATE_SUBITEM,
-                        Log::HISTORY_DELETE_SUBITEM
-                    ]
+                        Log::HISTORY_DELETE_SUBITEM,
+                    ],
                 ] + $month
             );
         }
 
         $month = self::getDateModRestriction($CFG_GLPI['purge_userdeletedfromldap']);
         if ($month) {
-           //Delete software version association
             $DB->delete(
                 'glpi_logs',
                 [
-                    'itemtype'        => 'User',
-                    'linked_action'   => Log::HISTORY_LOG_SIMPLE_MESSAGE
+                    'itemtype'        => User::class,
+                    'linked_action'   => Log::HISTORY_LOG_SIMPLE_MESSAGE,
                 ] + $month
             );
         }
 
         $month = self::getDateModRestriction($CFG_GLPI['purge_user_auth_changes']);
         if ($month) {
-           //Delete software version association
             $DB->delete(
                 'glpi_logs',
                 [
-                    'itemtype'        => 'User',
-                    'linked_action'   => Log::HISTORY_ADD_RELATION
+                    'itemtype'        => User::class,
+                    'linked_action'   => Log::HISTORY_ADD_RELATION,
                 ] + $month
             );
         }
@@ -247,31 +263,14 @@ class PurgeLogs extends CommonDBTM
      */
     public static function purgeDevices()
     {
-        /**
-         * @var array $CFG_GLPI
-         * @var \DBmysql $DB
-         */
-        global $CFG_GLPI, $DB;
-
         $actions = [
             Log::HISTORY_ADD_DEVICE          => "adddevice",
             Log::HISTORY_UPDATE_DEVICE       => "updatedevice",
             Log::HISTORY_DELETE_DEVICE       => "deletedevice",
             Log::HISTORY_CONNECT_DEVICE      => "connectdevice",
-            Log::HISTORY_DISCONNECT_DEVICE   => "disconnectdevice"
+            Log::HISTORY_DISCONNECT_DEVICE   => "disconnectdevice",
         ];
-        foreach ($actions as $key => $value) {
-            $month = self::getDateModRestriction($CFG_GLPI['purge_' . $value]);
-            if ($month) {
-               //Delete software version association
-                $DB->delete(
-                    'glpi_logs',
-                    [
-                        'linked_action' => $key
-                    ] + $month
-                );
-            }
-        }
+        self::purgeByField('linked_action', $actions);
     }
 
     /**
@@ -281,29 +280,12 @@ class PurgeLogs extends CommonDBTM
      */
     public static function purgeRelations()
     {
-        /**
-         * @var array $CFG_GLPI
-         * @var \DBmysql $DB
-         */
-        global $CFG_GLPI, $DB;
-
         $actions = [
             Log::HISTORY_ADD_RELATION     => "addrelation",
             Log::HISTORY_UPDATE_RELATION  => "addrelation",
-            Log::HISTORY_DEL_RELATION     => "deleterelation"
+            Log::HISTORY_DEL_RELATION     => "deleterelation",
         ];
-        foreach ($actions as $key => $value) {
-            $month = self::getDateModRestriction($CFG_GLPI['purge_' . $value]);
-            if ($month) {
-               //Delete software version association
-                $DB->delete(
-                    'glpi_logs',
-                    [
-                        'linked_action' => $key
-                    ] + $month
-                );
-            }
-        }
+        self::purgeByField('linked_action', $actions);
     }
 
     /**
@@ -313,32 +295,15 @@ class PurgeLogs extends CommonDBTM
      */
     public static function purgeItems()
     {
-        /**
-         * @var array $CFG_GLPI
-         * @var \DBmysql $DB
-         */
-        global $CFG_GLPI, $DB;
-
         $actions = [
             Log::HISTORY_CREATE_ITEM      => "createitem",
             Log::HISTORY_ADD_SUBITEM      => "createitem",
             Log::HISTORY_DELETE_ITEM      => "deleteitem",
             Log::HISTORY_DELETE_SUBITEM   => "deleteitem",
             Log::HISTORY_UPDATE_SUBITEM   => "updateitem",
-            Log::HISTORY_RESTORE_ITEM     => "restoreitem"
+            Log::HISTORY_RESTORE_ITEM     => "restoreitem",
         ];
-        foreach ($actions as $key => $value) {
-            $month = self::getDateModRestriction($CFG_GLPI['purge_' . $value]);
-            if ($month) {
-               //Delete software version association
-                $DB->delete(
-                    'glpi_logs',
-                    [
-                        'linked_action' => $key
-                    ] + $month
-                );
-            }
-        }
+        self::purgeByField('linked_action', $actions);
     }
 
     /**
@@ -348,24 +313,16 @@ class PurgeLogs extends CommonDBTM
      */
     public static function purgeRefusedLogs()
     {
-        /**
-         * @var array $CFG_GLPI
-         * @var \DBmysql $DB
-         */
         global $CFG_GLPI, $DB;
 
         $month = self::getDateModRestriction($CFG_GLPI['purge_refusedequipment']);
         if ($month) {
-            $refused = new RefusedEquipment();
-            $iterator = $DB->request([
-                'SELECT' => 'id',
-                'FROM' => RefusedEquipment::getTable()
-            ] + $month);
-
-            foreach ($iterator as $row) {
-                 //purge each one
-                 $refused->delete($row, true);
-            }
+            $DB->delete(
+                'glpi_logs',
+                [
+                    'itemtype' => RefusedEquipment::class,
+                ] + $month
+            );
         }
     }
 
@@ -377,27 +334,11 @@ class PurgeLogs extends CommonDBTM
      */
     public static function purgeOthers()
     {
-        /**
-         * @var array $CFG_GLPI
-         * @var \DBmysql $DB
-         */
-        global $CFG_GLPI, $DB;
-
         $actions = [
             16 => 'comments',
-            19 => 'datemod'
+            19 => 'datemod',
         ];
-        foreach ($actions as $key => $value) {
-            $month = self::getDateModRestriction($CFG_GLPI['purge_' . $value]);
-            if ($month) {
-                $DB->delete(
-                    'glpi_logs',
-                    [
-                        'id_search_option' => $key
-                    ] + $month
-                );
-            }
-        }
+        self::purgeByField('id_search_option', $actions);
     }
 
 
@@ -408,10 +349,6 @@ class PurgeLogs extends CommonDBTM
      */
     public static function purgePlugins()
     {
-        /**
-         * @var array $CFG_GLPI
-         * @var \DBmysql $DB
-         */
         global $CFG_GLPI, $DB;
 
         $month = self::getDateModRestriction($CFG_GLPI['purge_plugins']);
@@ -419,7 +356,7 @@ class PurgeLogs extends CommonDBTM
             $DB->delete(
                 'glpi_logs',
                 [
-                    'itemtype' => ['LIKE', 'Plugin%']
+                    'itemtype' => ['LIKE', 'Plugin%'],
                 ] + $month
             );
         }
@@ -433,10 +370,6 @@ class PurgeLogs extends CommonDBTM
      */
     public static function purgeAll()
     {
-        /**
-         * @var array $CFG_GLPI
-         * @var \DBmysql $DB
-         */
         global $CFG_GLPI, $DB;
 
         $month = self::getDateModRestriction($CFG_GLPI['purge_all']);
@@ -449,19 +382,50 @@ class PurgeLogs extends CommonDBTM
     }
 
     /**
+     * Purge logs matching given field values, grouping values sharing the same retention
+     * so that a single query is executed per retention value.
+     *
+     * @param string             $field  Field to filter on (e.g. `linked_action`)
+     * @param array<int, string> $values Field values, associated to their purge configuration suffix
+     *
+     * @return void
+     */
+    private static function purgeByField(string $field, array $values): void
+    {
+        global $CFG_GLPI, $DB;
+
+        $values_by_retention = [];
+        foreach ($values as $value => $config_suffix) {
+            $values_by_retention[(int) $CFG_GLPI['purge_' . $config_suffix]][] = $value;
+        }
+
+        foreach ($values_by_retention as $retention => $field_values) {
+            $month = self::getDateModRestriction($retention);
+            if ($month) {
+                $DB->delete(
+                    'glpi_logs',
+                    [
+                        $field => $field_values,
+                    ] + $month
+                );
+            }
+        }
+    }
+
+    /**
      * Get modification date restriction clause
      *
-     * @param integer $month Number of months
+     * @param int $month Number of months
      *
      * @return array|false
      */
     public static function getDateModRestriction($month)
     {
         if ($month > 0) {
-            return ['date_mod' => ['<=', new QueryExpression("DATE_ADD(NOW(), INTERVAL -$month MONTH)")]];
-        } else if ($month == Config::DELETE_ALL) {
-            return [1 => 1];
-        } else if ($month == Config::KEEP_ALL) {
+            return ['date_mod' => ['<=', QueryFunction::dateSub(QueryFunction::now(), $month, 'MONTH')]];
+        } elseif ($month == Config::DELETE_ALL) {
+            return [new QueryValue(true)];
+        } elseif ($month == Config::KEEP_ALL) {
             return false;
         }
 
@@ -471,7 +435,7 @@ class PurgeLogs extends CommonDBTM
     /**
      * Count logs
      *
-     * @return integer
+     * @return int
      */
     public static function getLogsCount()
     {

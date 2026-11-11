@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -35,10 +35,10 @@
 
 class RuleSoftwareCategoryCollection extends RuleCollection
 {
-   // From RuleCollection
-    public $stop_on_first_match = true;
-    public static $rightname   = 'rule_softwarecategories';
-    public $menu_option = 'softwarecategories';
+    // From RuleCollection
+    public bool $stop_on_first_match = true;
+    public static string $rightname   = 'rule_softwarecategories';
+    public string $menu_option = 'softwarecategories';
 
 
     public function getTitle()
@@ -46,20 +46,8 @@ class RuleSoftwareCategoryCollection extends RuleCollection
         return __('Rules for assigning a category to software');
     }
 
-
-    /**
-     * Get the attributes needed for processing the rules
-     *
-     * @see RuleCollection::prepareInputDataForProcess()
-     *
-     * @param $input     input data
-     * @param $software  software data array
-     *
-     * @return array of attributes
-     **/
     public function prepareInputDataForProcess($input, $software)
     {
-
         $params["name"] = $software["name"];
         if (isset($software["comment"])) {
             $params["comment"] = $software["comment"];

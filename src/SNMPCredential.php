@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -34,28 +34,42 @@
  */
 
 use Glpi\Application\View\TemplateRenderer;
+use Glpi\Inventory\Inventory;
 
 /**
  * SNMP credentials
  */
 class SNMPCredential extends CommonDBTM
 {
-   // From CommonDBTM
-    public $dohistory                   = true;
-    public static $rightname = 'snmpcredential';
+    // From CommonDBTM
+    public bool $dohistory                   = true;
+    public static string $rightname = 'snmpcredential';
+
+    public static array $undisclosedFields = [
+        'auth_passphrase',
+        'priv_passphrase',
+    ];
 
     public static function getTypeName($nb = 0)
     {
         return _n('SNMP credential', 'SNMP credentials', $nb);
     }
 
+    public static function getSectorizedDetails(): array
+    {
+        return ['admin', Inventory::class, self::class];
+    }
+
+    /**
+     * @return array
+     */
     public static function rawSearchOptionsToAdd()
     {
         $tab = [];
 
         $tab[] = [
             'id'                => 'snmpcredential',
-            'name'              => SNMPCredential::getTypeName(0)
+            'name'              => SNMPCredential::getTypeName(0),
         ];
 
         $tab[] = [
@@ -95,24 +109,27 @@ class SNMPCredential extends CommonDBTM
         return $tab;
     }
 
-    /**
-     * Define tabs to display on form page
-     *
-     * @param array $options
-     * @return array containing the tabs name
-     */
     public function defineTabs($options = [])
     {
 
         $ong = [];
         $this->addDefaultFormTab($ong);
-        $this->addStandardTab('Log', $ong, $options);
+        $this->addStandardTab(Log::class, $ong, $options);
 
         return $ong;
     }
 
     public function showForm($ID, array $options = [])
     {
+        // warning and no form if can't read keyfile,
+        // only version 3 is impacted but it's better to always show the warning & forbid form display
+        $glpi_encryption_key = new GLPIKey();
+        if ($glpi_encryption_key->hasReadErrors()) {
+            $glpi_encryption_key->showReadErrors();
+
+            return false;
+        }
+
         $this->initForm($ID, $options);
         TemplateRenderer::getInstance()->display('components/form/snmpcredential.html.twig', [
             'item'   => $this,
@@ -132,7 +149,7 @@ class SNMPCredential extends CommonDBTM
         switch ($this->fields['snmpversion']) {
             case 1:
             case 3:
-                return (string)$this->fields['snmpversion'];
+                return (string) $this->fields['snmpversion'];
             case 2:
                 return '2c';
             default:
@@ -152,10 +169,17 @@ class SNMPCredential extends CommonDBTM
                 return 'MD5';
             case 2:
                 return 'SHA';
+            case 3:
+                return 'SHA224';
+            case 4:
+                return 'SHA256';
+            case 5:
+                return 'SHA384';
+            case 6:
+                return 'SHA512';
             default:
                 return '';
         }
-        return '';
     }
 
     /**
@@ -170,8 +194,16 @@ class SNMPCredential extends CommonDBTM
                 return 'DES';
             case 2:
                 return 'AES';
-            case 5:
+            case 3:
                 return '3DES';
+            case 4:
+                return 'AES192C';
+            case 5:
+                return 'AES256C';
+            case 6:
+                return 'CFB192-AES';
+            case 7:
+                return 'CFB256-AES';
             default:
                 return '';
         }
@@ -203,18 +235,20 @@ class SNMPCredential extends CommonDBTM
         return $input;
     }
 
-    private function checkRequiredFields($input): bool
+    private function checkRequiredFields(array $input): bool
     {
         // Require a snmpversion
-        if (!isset($input['snmpversion']) || $input['snmpversion'] == '0') {
-            Session::addMessageAfterRedirect(__('You must select an SNMP version'), false, ERROR);
+        $snmp_version = (int) ($input['snmpversion'] ?? $this->fields['snmpversion'] ?? 0);
+        if ($snmp_version === 0) {
+            Session::addMessageAfterRedirect(__s('You must select an SNMP version'), false, ERROR);
             return false;
         }
 
         // Require username if using version 3
-        if ($input['snmpversion'] == 3) {
-            if (empty($input['username'])) {
-                Session::addMessageAfterRedirect(__('You must enter a username'), false, ERROR);
+        if ($snmp_version === 3) {
+            $username = $input['username'] ?? $this->fields['username'] ?? null;
+            if (empty($username)) {
+                Session::addMessageAfterRedirect(__s('You must enter a username'), false, ERROR);
                 return false;
             }
         }

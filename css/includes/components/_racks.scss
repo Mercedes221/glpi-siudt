@@ -5,7 +5,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -61,6 +61,10 @@
             cursor: grabbing;
         }
     }
+
+    &.ui-draggable-dragging {
+        min-width: 1% !important; /* fix %50 min-width when position is fixed (50% of body width) */
+    }
 }
 
 .grid-stack-item-content a {
@@ -74,7 +78,7 @@
 
 #viewgraph:not(.clear_picture) .with_picture .grid-stack-item-content {
     .itemrack_name {
-        background-color: rgba(255, 255, 255, 65%);
+        background-color: rgb(255, 255, 255, 65%);
         color: #000 !important;
     }
 
@@ -101,17 +105,9 @@
 }
 
 .grid-stack {
-    .grid-stack-item {
-        .grid-stack-item-content,
-        .placeholder-content {
-            left: 0;
-            right: 0;
-        }
-    }
-
     .grid-stack-placeholder > .placeholder-content {
         border: 1px dashed #bcbf33;
-        background-color: rgba(229, 245, 105, 50%);
+        background-color: rgb(229, 245, 105, 50%);
     }
 }
 
@@ -149,7 +145,7 @@ ul.indexes {
         content: "\2b";
         left: 45%;
         color: grey;
-        top: 1px;
+        top: 3px;
         font: var(--fa-font-solid);
         font-size: 1em;
         position: absolute;
@@ -165,7 +161,7 @@ ul.indexes {
     box-sizing: content-box;
     margin: 10px 0 10px 10px;
     float: left;
-    padding: 15px 0 0 15px;
+    position: relative;
 
     *,
     ::before,
@@ -174,26 +170,31 @@ ul.indexes {
     }
 
     .blueprint {
-        margin-left: 15px;
-        width: calc(100% - 16px);
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        z-index: 1;
+        pointer-events: none;
     }
 
     .racks_add {
-        border: 1px solid $table-border-color;
+        border: 1px solid var(--tblr-border-color);
         border-width: 0 1px 1px 0;
         background-size: var(--dcroom-grid-cellw) var(--dcroom-grid-cellh);
         background-image:
             linear-gradient(
                 to right,
-                $table-border-color 1px,
+                var(--tblr-border-color) 1px,
                 transparent 1px
             ),
             linear-gradient(
                 to bottom,
-                $table-border-color 1px,
+                var(--tblr-border-color) 1px,
                 transparent 1px
             );
-        margin-left: 15px;
+        position: absolute;
+        inset: 0;
+        z-index: 2;
 
         .cell_add {
             height: var(--dcroom-grid-cellh);
@@ -201,14 +202,15 @@ ul.indexes {
             float: left;
 
             &::after {
-                left: 15px;
-                top: 10px;
+                left: calc(50% - 5px);
+                top: calc(50% - 6px);
             }
         }
     }
 
     .grid-stack {
-        float: left;
+        position: absolute;
+        inset: 0;
     }
 
     .grid-stack-item {
@@ -218,7 +220,7 @@ ul.indexes {
         &::after {
             position: absolute;
             content: " ";
-            background-color: rgba(3, 2, 2, 30%);
+            background-color: rgb(3, 2, 2, 30%);
         }
 
         &.room_orientation_1::after {
@@ -268,28 +270,103 @@ ul.indexes {
         padding: 0;
         text-align: center;
         font-size: 0.7em;
-        color: $table-color;
+        color: var(--tblr-body-color);
         float: left;
 
         &.indexes-x {
-            width: 100%;
+            grid-column: 2;
+            grid-row: 1;
             float: none;
             height: 15px;
-            padding-left: 15px;
 
             li {
                 float: left;
                 width: var(--dcroom-grid-cellw);
+                height: 15px;
             }
         }
 
         &.indexes-y {
-            width: 15px;
+            grid-column: 1;
+            grid-row: 2;
+            width: auto;
 
             li {
                 height: var(--dcroom-grid-cellh);
-                line-height: calc(var(--dcroom-grid-cellh) + 1px);
+                min-width: 15px;
+                display: flex;
+                justify-content: flex-end;
+                align-items: center;
             }
+        }
+    }
+
+    .dcroom-grid-layout {
+        display: grid;
+        grid-template-columns: max-content max-content;
+        grid-template-rows: 15px max-content;
+    }
+
+    .dcroom-grid-canvas {
+        grid-column: 2;
+        grid-row: 2;
+        position: relative;
+    }
+
+    .dcroom-axis-label-button,
+    .dcroom-axis-label-input {
+        box-sizing: border-box;
+        height: 100%;
+        min-width: 0;
+        border: 0;
+        border-radius: 2px;
+        padding: 0 3px;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        line-height: normal;
+    }
+
+    .dcroom-axis-label-button {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 700;
+        cursor: text;
+
+        &:hover,
+        &:focus-visible {
+            background-color: var(--tblr-secondary-bg);
+            outline: 1px solid var(--tblr-border-color);
+        }
+    }
+
+    .dcroom-axis-label > span {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 700;
+    }
+
+    .indexes-x {
+        .dcroom-axis-label-button,
+        .dcroom-axis-label-input,
+        .dcroom-axis-label > span {
+            width: var(--dcroom-grid-cellw);
+        }
+    }
+
+    .indexes-y {
+        .dcroom-axis-label-button,
+        .dcroom-axis-label > span {
+            max-width: 240px;
+        }
+
+        .dcroom-axis-label-input {
+            width: 160px;
+            max-width: 240px;
         }
     }
 }
@@ -311,14 +388,14 @@ ul.indexes {
 #viewgraph {
     .rooms a {
         &.fa {
-            color: $table-color;
+            color: var(--tblr-body-color);
             position: absolute;
             right: 0;
             top: 0;
             padding: 0.5em;
 
             &:link {
-                color: $table-color;
+                color: var(--tblr-body-color);
                 position: absolute;
                 right: 0;
                 top: 0;
@@ -327,7 +404,7 @@ ul.indexes {
         }
 
         .fa {
-            color: $table-color;
+            color: var(--tblr-body-color);
             position: absolute;
             right: 0;
             top: 0;
@@ -346,12 +423,12 @@ ul.indexes {
         }
 
         th {
-            color: $table-head-color;
+            color: var(--tblr-secondary);
             background-color: steelblue;
         }
 
         td {
-            border-left: 1px solid $table-head-border-color;
+            border-left: 1px solid var(--tblr-border-color);
 
             div {
                 border: none !important;
@@ -370,7 +447,7 @@ ul.indexes {
                     color: #e0e0e0;
 
                     &:hover {
-                        background-color: rgba(0, 128, 0, 50%);
+                        background-color: rgb(0, 128, 0, 50%);
                         cursor: pointer;
                     }
                 }
@@ -398,17 +475,17 @@ ul.indexes {
 .rack_side {
     float: left;
     text-align: center;
-    background: $table-bg;
-    border: 1px solid $table-border-color;
-    color: $table-color;
+    background: var(--tblr-body-bg);
+    border: 1px solid var(--tblr-border-color);
+    color: var(--tblr-body-color);
     padding-top: 18px;
 }
 
 .racks_col h2 {
     font-size: 14px;
     font-weight: bold;
-    color: $table-head-color;
-    background-color: $table-head-bg;
+    color: var(--tblr-secondary);
+    background-color: var(--tblr-bg-surface-tertiary);
     height: 30px;
     margin: 0;
     padding: 5px 0;
@@ -423,6 +500,18 @@ ul.indexes {
 }
 
 .grid-rack {
+    width: 217px;
+    background:
+        var(--tblr-bg-surface) repeating-linear-gradient(
+            transparent,
+            transparent 21px,
+            var(--tblr-bg-surface-tertiary) 21px,
+            var(--tblr-bg-surface-tertiary) 42px
+        );
+    z-index: 1;
+    border: 1px solid var(--tblr-border-color);
+    float: left;
+
     *,
     ::before,
     ::after {
@@ -436,18 +525,6 @@ ul.indexes {
             width: 100%;
         }
     }
-
-    width: 217px;
-    background:
-        $table-bg repeating-linear-gradient(
-            transparent,
-            transparent 21px,
-            $table-striped-bg 21px,
-            $table-striped-bg 42px
-        );
-    z-index: 1;
-    border: 1px solid $table-border-color;
-    float: left;
 }
 
 .virtual_pdu_space {
@@ -471,7 +548,7 @@ ul.indexes {
 }
 
 .side_pdus {
-    background-color: $table-striped-bg;
+    background-color: var(--tblr-bg-surface-tertiary);
     margin: 0 1px;
 
     .grid-stack-item:not(.lock-bottom) {
@@ -483,7 +560,7 @@ ul.indexes {
 .side_pdus_float {
     .grid-stack-item {
         .grid-stack-item-content {
-            border: 0 solid rgba(4, 4, 4, 40%);
+            border: 0 solid rgb(4, 4, 4, 40%);
             border-width: 4px 1px;
 
             .rotated_text {
@@ -526,14 +603,14 @@ ul.indexes {
 .grid-rack .grid-stack-item:not(.lock-bottom) .grid-stack-item-content {
     position: relative;
     color: #2c3e50;
-    border: 0 solid rgba(4, 4, 4, 40%);
+    border: 0 solid rgb(4, 4, 4, 40%);
     border-width: 1px 4px;
     box-shadow: 1px 1px 5px 0 #656565;
     height: 100%;
 }
 
 #viewgraph:not(.clear_picture) .grid-rack .grid-stack-item.with_picture .grid-stack-item-content {
-    border-color: rgba(4, 4, 4, 25%);
+    border-color: rgb(4, 4, 4, 25%);
     border-width: 0 4px;
 }
 
@@ -548,7 +625,7 @@ ul.indexes {
     }
 
     &.item_rear {
-        background: repeating-linear-gradient(45deg, rgba(0, 0, 0, 15%), rgba(0, 0, 0, 15%) 10px, rgba(59, 59, 59, 15%) 10px, rgba(59, 59, 59, 15%) 20px);
+        background: repeating-linear-gradient(45deg, rgb(0, 0, 0, 15%), rgb(0, 0, 0, 15%) 10px, rgb(59, 59, 59, 15%) 10px, rgb(59, 59, 59, 15%) 20px);
     }
 
     &.reserved {
@@ -579,7 +656,7 @@ ul.indexes {
 }
 
 .grid-rack .grid-stack-item.lock-bottom {
-    background: $table-bg;
+    background: var(--tblr-body-bg);
     width: 101% !important;
     margin: 0 -1px;
 }
@@ -594,9 +671,9 @@ ul.indexes {
 
 .rack_side_block {
     width: 200px;
-    border: 1px solid $table-border-color;
-    background-color: $table-head-bg;
-    color: $table-head-color;
+    border: 1px solid var(--tblr-border-color);
+    background-color: var(--tblr-bg-surface-tertiary);
+    color: var(--tblr-secondary);
     text-align: left;
     font-size: 11px;
     margin-bottom: 20px;
@@ -608,7 +685,7 @@ ul.indexes {
 
 .rack_side_block {
     h3 {
-        color: $table-color;
+        color: inherit;
         margin: 0;
         font-size: 11px;
         font-weight: bold;
@@ -624,7 +701,7 @@ div#viewgraph .rack_side_block .pdu_list {
 
     td {
         text-align: left;
-        border: 1px solid rgba(0, 0, 0, 20%);
+        border: 1px solid rgb(0, 0, 0, 20%);
         padding: 0 3px;
     }
 }
@@ -635,6 +712,6 @@ div#viewgraph .rack_side_block .pdu_list {
     }
 
     i.fa {
-        color: rgba(0, 0, 0, 60%);
+        color: rgb(0, 0, 0, 60%);
     }
 }

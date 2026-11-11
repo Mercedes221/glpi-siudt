@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,15 +33,14 @@
  * ---------------------------------------------------------------------
  */
 
-use Glpi\Event;
+require_once(__DIR__ . '/_check_webserver_config.php');
 
-include('../inc/includes.php');
+use Glpi\Event;
 
 if (!isset($_GET["id"])) {
     $_GET["id"] = "";
 }
 $remind = new Reminder();
-Session::checkLoginUser();
 
 if (isset($_POST["add"])) {
     $remind->check(-1, CREATE, $_POST);
@@ -59,9 +58,9 @@ if (isset($_POST["add"])) {
         }
     }
     Html::back();
-} else if (isset($_POST["purge"])) {
+} elseif (isset($_POST["purge"])) {
     $remind->check($_POST["id"], PURGE);
-    $remind->delete($_POST, 1);
+    $remind->delete($_POST, true);
     Event::log(
         $_POST["id"],
         "reminder",
@@ -75,7 +74,7 @@ if (isset($_POST["add"])) {
     } else {
         Html::back();
     }
-} else if (isset($_POST["update"])) {
+} elseif (isset($_POST["update"])) {
     $remind->check($_POST["id"], UPDATE);   // Right to update the reminder
 
     $remind->update($_POST);
@@ -88,7 +87,7 @@ if (isset($_POST["add"])) {
         sprintf(__('%s updates an item'), $_SESSION["glpiname"])
     );
     Html::back();
-} else if (isset($_POST["addvisibility"])) {
+} elseif (isset($_POST["addvisibility"])) {
     if (
         isset($_POST["_type"]) && !empty($_POST["_type"])
         && isset($_POST["reminders_id"]) && $_POST["reminders_id"]
@@ -123,6 +122,7 @@ if (isset($_POST["add"])) {
                 break;
         }
         if (!is_null($item)) {
+            $item->check(-1, CREATE, $_POST);
             $item->add($_POST);
             Event::log(
                 $_POST["reminders_id"],

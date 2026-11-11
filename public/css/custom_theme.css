@@ -77,7 +77,7 @@ header,
 
 .sidebar .nav-link,
 .topbar .nav-link,
-.navbar-vertical .nav-link {
+.navbar-vertical .nav   -link {
     color: #ffffff !important;
     transition: all 0.25s ease-in-out;
     border-radius: 6px;
@@ -312,6 +312,55 @@ a:not(.nav-link):not(.dropdown-item):hover {
 #navbar-menu a.dropdown-item > span {
     color: #ffffff !important;
     -webkit-text-fill-color: #ffffff !important;
+}
+
+.sidebar #navbar-menu .nav-item > .nav-link,
+.sidebar #navbar-menu .dropdown-item {
+    transition: transform 0.25s ease, background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.sidebar #navbar-menu .nav-item:hover > .nav-link,
+.sidebar #navbar-menu .nav-item > .nav-link:hover,
+.sidebar #navbar-menu .dropdown-item:hover,
+.sidebar #navbar-menu .dropdown-item:focus {
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    background: linear-gradient(90deg, rgba(255, 214, 0, 0.14), rgba(216, 27, 96, 0.2)) !important;
+    border-left-color: #ffd600 !important;
+    box-shadow: inset 3px 0 0 #ffd600, 0 0 12px rgba(255, 214, 0, 0.16);
+    transform: translateX(3px);
+}
+
+.sidebar #navbar-menu .nav-item:hover > .nav-link .nav-link-icon,
+.sidebar #navbar-menu .nav-item > .nav-link:hover .nav-link-icon {
+    color: #ffd600 !important;
+}
+
+header form[role="search"] input[name="globalsearch"] {
+    color: #1f2937 !important;
+    -webkit-text-fill-color: #1f2937 !important;
+    caret-color: #1f2937;
+    background-color: #ffffff !important;
+}
+
+header form[role="search"] input[name="globalsearch"]::placeholder {
+    color: #64748b !important;
+    -webkit-text-fill-color: #64748b !important;
+    opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sidebar #navbar-menu .nav-item > .nav-link,
+    .sidebar #navbar-menu .dropdown-item {
+        transition: none;
+    }
+
+    .sidebar #navbar-menu .nav-item:hover > .nav-link,
+    .sidebar #navbar-menu .nav-item > .nav-link:hover,
+    .sidebar #navbar-menu .dropdown-item:hover,
+    .sidebar #navbar-menu .dropdown-item:focus {
+        transform: none;
+    }
 }
 
 /* Formularios en focus */

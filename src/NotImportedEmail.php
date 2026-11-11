@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,19 +33,25 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\DBAL\QueryExpression;
+
 /**
  * NotImportedEmail Class
  **/
 class NotImportedEmail extends CommonDBTM
 {
-    public static $rightname = 'config';
+    public static string $rightname = 'config';
 
-    const MATCH_NO_RULE     = 0;
-    const USER_UNKNOWN      = 1;
-    const FAILED_OPERATION  = 2;
-    const FAILED_INSERT     = self::FAILED_OPERATION;
-    const NOT_ENOUGH_RIGHTS = 3;
+    public const MATCH_NO_RULE     = 0;
+    public const USER_UNKNOWN      = 1;
+    public const FAILED_OPERATION  = 2;
+    public const FAILED_INSERT     = self::FAILED_OPERATION;
+    public const NOT_ENOUGH_RIGHTS = 3;
 
+    public static function canPurge(): bool
+    {
+        return self::canUpdate();
+    }
 
     public function getForbiddenStandardMassiveAction()
     {
@@ -63,10 +69,11 @@ class NotImportedEmail extends CommonDBTM
         return _n('Refused email', 'Refused emails', $nb);
     }
 
+    public static function getSectorizedDetails(): array
+    {
+        return ['config', MailCollector::class, self::class];
+    }
 
-    /**
-     * @see CommonDBTM::getSpecificMassiveActions()
-     **/
     public function getSpecificMassiveActions($checkitem = null)
     {
 
@@ -74,19 +81,13 @@ class NotImportedEmail extends CommonDBTM
         $actions = parent::getSpecificMassiveActions($checkitem);
 
         if ($isadmin) {
-            $prefix                          = __CLASS__ . MassiveAction::CLASS_ACTION_SEPARATOR;
-            $actions[$prefix . 'delete_email'] = __('Delete emails');
-            $actions[$prefix . 'import_email'] = _x('button', 'Import');
+            $prefix                          = self::class . MassiveAction::CLASS_ACTION_SEPARATOR;
+            $actions[$prefix . 'delete_email'] = __s('Delete emails');
+            $actions[$prefix . 'import_email'] = _sx('button', 'Import');
         }
         return $actions;
     }
 
-
-    /**
-     * @since 0.85
-     *
-     * @see CommonDBTM::showMassiveActionsSubForm()
-     **/
     public static function showMassiveActionsSubForm(MassiveAction $ma)
     {
 
@@ -100,12 +101,6 @@ class NotImportedEmail extends CommonDBTM
         return parent::showMassiveActionsSubForm($ma);
     }
 
-
-    /**
-     * @since 0.85
-     *
-     * @see CommonDBTM::processMassiveActionsForOneItemtype()
-     **/
     public static function processMassiveActionsForOneItemtype(
         MassiveAction $ma,
         CommonDBTM $item,
@@ -116,18 +111,18 @@ class NotImportedEmail extends CommonDBTM
             case 'delete_email':
             case 'import_email':
                 if (!$item->canUpdate()) {
-                    $ma->itemDone($item->getType(), $ids, MassiveAction::ACTION_NORIGHT);
+                    $ma->itemDone($item::class, $ids, MassiveAction::ACTION_NORIGHT);
                 } else {
                     $input = $ma->getInput();
                     if (count($ids)) {
                         $mailcollector = new MailCollector();
                         if ($ma->getAction() == 'delete_email') {
-                              $mailcollector->deleteOrImportSeveralEmails($ids, 0);
+                            $mailcollector->deleteOrImportSeveralEmails($ids, 0);
                         } else {
-                             $mailcollector->deleteOrImportSeveralEmails($ids, 1, $input['entities_id']);
+                            $mailcollector->deleteOrImportSeveralEmails($ids, 1, $input['entities_id']);
                         }
                     }
-                    $ma->itemDone($item->getType(), $ids, MassiveAction::ACTION_OK);
+                    $ma->itemDone($item::class, $ids, MassiveAction::ACTION_OK);
                 }
                 return;
         }
@@ -145,7 +140,7 @@ class NotImportedEmail extends CommonDBTM
             'field'              => 'from',
             'name'               => __('From email header'),
             'massiveaction'      => false,
-            'datatype'           => 'string'
+            'datatype'           => 'string',
         ];
 
         $tab[] = [
@@ -154,7 +149,7 @@ class NotImportedEmail extends CommonDBTM
             'field'              => 'to',
             'name'               => __('To email header'),
             'massiveaction'      => false,
-            'datatype'           => 'string'
+            'datatype'           => 'string',
         ];
 
         $tab[] = [
@@ -163,7 +158,7 @@ class NotImportedEmail extends CommonDBTM
             'field'              => 'subject',
             'name'               => __('Subject email header'),
             'massiveaction'      => false,
-            'datatype'           => 'string'
+            'datatype'           => 'string',
         ];
 
         $tab[] = [
@@ -171,7 +166,7 @@ class NotImportedEmail extends CommonDBTM
             'table'              => 'glpi_mailcollectors',
             'field'              => 'name',
             'name'               => __('Mails receiver'),
-            'datatype'           => 'itemlink'
+            'datatype'           => 'itemlink',
         ];
 
         $tab[] = [
@@ -180,7 +175,7 @@ class NotImportedEmail extends CommonDBTM
             'field'              => 'messageid',
             'name'               => __('Message-ID email header'),
             'massiveaction'      => false,
-            'datatype'           => 'string'
+            'datatype'           => 'string',
         ];
 
         $tab[] = [
@@ -189,7 +184,7 @@ class NotImportedEmail extends CommonDBTM
             'field'              => 'name',
             'name'               => _n('Requester', 'Requesters', 1),
             'datatype'           => 'dropdown',
-            'right'              => 'all'
+            'right'              => 'all',
         ];
 
         $tab[] = [
@@ -198,7 +193,7 @@ class NotImportedEmail extends CommonDBTM
             'field'              => 'reason',
             'name'               => __('Reason of rejection'),
             'datatype'           => 'specific',
-            'massiveaction'      => false
+            'massiveaction'      => false,
         ];
 
         $tab[] = [
@@ -207,40 +202,41 @@ class NotImportedEmail extends CommonDBTM
             'field'              => 'date',
             'name'               => _n('Date', 'Dates', 1),
             'datatype'           => 'datetime',
-            'massiveaction'      => false
+            'massiveaction'      => false,
         ];
 
         return $tab;
     }
 
 
+    /**
+     * @return void
+     */
     public static function deleteLog()
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
-        $DB->truncate('glpi_notimportedemails');
+        $DB->delete('glpi_notimportedemails', [new QueryExpression('true')]);
     }
 
 
     /**
-     * @param $reason_id
-     **/
+     * @param int $reason_id
+     *
+     * @return string
+     */
     public static function getReason($reason_id)
     {
 
         $tab = self::getAllReasons();
-        if (isset($tab[$reason_id])) {
-            return $tab[$reason_id];
-        }
-        return NOT_AVAILABLE;
+        return $tab[$reason_id] ?? NOT_AVAILABLE;
     }
 
 
     /**
-     * @since versin 0.84
-     *
      * Get All possible reasons array
+     *
+     * @return array
      **/
     public static function getAllReasons()
     {
@@ -269,13 +265,13 @@ class NotImportedEmail extends CommonDBTM
         }
         switch ($field) {
             case 'reason':
-                return self::getReason($values[$field]);
+                return htmlescape(self::getReason($values[$field]));
 
             case 'messageid':
                 $clean = ['<' => '',
-                    '>' => ''
+                    '>' => '',
                 ];
-                return strtr($values[$field], $clean);
+                return htmlescape(strtr($values[$field], $clean));
         }
         return parent::getSpecificValueToDisplay($field, $values, $options);
     }

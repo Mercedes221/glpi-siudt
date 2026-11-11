@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -35,11 +35,17 @@
 
 use Glpi\Features\CacheableListInterface;
 use Glpi\Inventory\FilesToJSON;
+use Psr\SimpleCache\InvalidArgumentException;
 
-/// Class PCIVendor
+use function Safe\file_get_contents;
+use function Safe\json_decode;
+
+/**
+ * PCIVendor class
+ */
 class PCIVendor extends CommonDropdown implements CacheableListInterface
 {
-    public $cache_key = 'glpi_pcivendors';
+    public string $cache_key = 'glpi_pcivendors';
 
     public static function getTypeName($nb = 0)
     {
@@ -52,12 +58,12 @@ class PCIVendor extends CommonDropdown implements CacheableListInterface
             [
                 'name'   => 'vendorid',
                 'label'  => __('Vendor ID'),
-                'type'   => 'text'
+                'type'   => 'text',
             ], [
                 'name'  => 'deviceid',
                 'label' => __('Device ID'),
-                'type'  => 'text'
-            ]
+                'type'  => 'text',
+            ],
         ];
     }
 
@@ -67,18 +73,18 @@ class PCIVendor extends CommonDropdown implements CacheableListInterface
 
         $tab[] = [
             'id'                 => '10',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'vendorid',
             'name'               => __('Vendor ID'),
-            'datatype'           => 'string'
+            'datatype'           => 'string',
         ];
 
         $tab[] = [
             'id'                 => '11',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'deviceid',
             'name'               => __('Device ID'),
-            'datatype'           => 'string'
+            'datatype'           => 'string',
         ];
 
         return $tab;
@@ -91,7 +97,6 @@ class PCIVendor extends CommonDropdown implements CacheableListInterface
      */
     public static function getList(): array
     {
-        /** @var \Psr\SimpleCache\CacheInterface $GLPI_CACHE */
         global $GLPI_CACHE;
 
         $vendors = new PCIVendor();
@@ -100,7 +105,7 @@ class PCIVendor extends CommonDropdown implements CacheableListInterface
         }
 
         $jsonfile = new FilesToJSON();
-        $file_pciids = json_decode(file_get_contents($jsonfile->getJsonFilePath('pciid')), true);
+        $file_pciids = json_decode(file_get_contents($jsonfile->getJsonFilePath('pciid')), true) ?? [];
         $db_pciids = $vendors->getDbList();
         $pciids = $db_pciids + $file_pciids;
         $GLPI_CACHE->set($vendors->cache_key, $pciids);
@@ -115,11 +120,10 @@ class PCIVendor extends CommonDropdown implements CacheableListInterface
      */
     private function getDbList(): array
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         $list = [];
-        $iterator = $DB->request(['FROM' => $this->getTable()]);
+        $iterator = $DB->request(['FROM' => static::getTable()]);
         foreach ($iterator as $row) {
             $row_key = $row['vendorid'];
             if (!empty($row['deviceid'])) {
@@ -140,10 +144,10 @@ class PCIVendor extends CommonDropdown implements CacheableListInterface
      * Clean cache
      *
      * @return void
+     * @throws InvalidArgumentException
      */
     public function invalidateListCache(): void
     {
-        /** @var \Psr\SimpleCache\CacheInterface $GLPI_CACHE */
         global $GLPI_CACHE;
 
         $GLPI_CACHE->delete($this->cache_key);
@@ -156,15 +160,11 @@ class PCIVendor extends CommonDropdown implements CacheableListInterface
      *
      * @return string|false
      */
-    public function getManufacturer($vendorid)
+    public function getManufacturer($vendorid): false|string
     {
-        $pciids = $this->getList();
+        $pciids = self::getList();
 
-        if (isset($pciids[$vendorid])) {
-            return $pciids[$vendorid];
-        }
-
-        return false;
+        return $pciids[$vendorid] ?? false;
     }
 
     /**
@@ -175,15 +175,11 @@ class PCIVendor extends CommonDropdown implements CacheableListInterface
      *
      * @return string|false
      */
-    public function getProductName($vendorid, $deviceid)
+    public function getProductName($vendorid, $deviceid): false|string
     {
-        $pciids = $this->getList();
+        $pciids = self::getList();
 
-        if (isset($pciids[$vendorid . '::' . $deviceid])) {
-            return $pciids[$vendorid . '::' . $deviceid];
-        }
-
-        return false;
+        return $pciids[$vendorid . '::' . $deviceid] ?? false;
     }
 
     public static function getIcon()

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -36,27 +36,24 @@
 /// Class DeviceGeneric
 class DeviceGeneric extends CommonDevice
 {
-    protected static $forward_entity_to = ['Item_DeviceGeneric', 'Infocom'];
+    protected static array $forward_entity_to = ['Item_DeviceGeneric', 'Infocom'];
 
     public static function getTypeName($nb = 0)
     {
         return _n('Generic device', 'Generic devices', $nb);
     }
 
-
     public function getAdditionalFields()
     {
-
         return array_merge(
             parent::getAdditionalFields(),
             [['name'  => 'devicegenerictypes_id',
                 'label' => _n('Type', 'Types', 1),
-                'type'  => 'dropdownValue'
-            ]
+                'type'  => 'dropdownValue',
+            ],
             ]
         );
     }
-
 
     public function rawSearchOptions()
     {
@@ -67,12 +64,11 @@ class DeviceGeneric extends CommonDevice
             'table'              => 'glpi_devicegenerictypes',
             'field'              => 'name',
             'name'               => _n('Type', 'Types', 1),
-            'datatype'           => 'dropdown'
+            'datatype'           => 'dropdown',
         ];
 
         return $tab;
     }
-
 
     public static function getHTMLTableHeader(
         $itemtype,
@@ -90,12 +86,11 @@ class DeviceGeneric extends CommonDevice
 
         switch ($itemtype) {
             case 'Computer':
-                Manufacturer::getHTMLTableHeader(__CLASS__, $base, $super, $father, $options);
-                $base->addHeader('devicegenerictypes_id', _n('Type', 'Types', 1), $super, $father);
+                Manufacturer::getHTMLTableHeader(self::class, $base, $super, $father, $options);
+                $base->addHeader('devicegenerictypes_id', _sn('Type', 'Types', 1), $super, $father);
                 break;
         }
     }
-
 
     public function getHTMLTableCellForItem(
         ?HTMLTableRow $row = null,
@@ -103,41 +98,36 @@ class DeviceGeneric extends CommonDevice
         ?HTMLTableCell $father = null,
         array $options = []
     ) {
-
         $column = parent::getHTMLTableCellForItem($row, $item, $father, $options);
 
         if ($column == $father) {
             return $father;
         }
 
-        switch ($item->getType()) {
-            case 'Computer':
+        switch ($item::class) {
+            case Computer::class:
                 Manufacturer::getHTMLTableCellsForItem($row, $this, null, $options);
                 if ($this->fields["devicegenerictypes_id"]) {
                     $type_name = Dropdown::getDropdownName(
                         "glpi_devicegenerictypes",
                         $this->fields["devicegenerictypes_id"]
                     );
-                    $row->addCell($row->getHeaderByName('devicegenerictypes_id'), $type_name);
+                    $row->addCell(
+                        $row->getHeaderByName('devicegenerictypes_id'),
+                        htmlescape($type_name)
+                    );
                 }
                 break;
         }
+        return null;
     }
 
-
-    /**
-     * Criteria used for import function
-     *
-     * @see CommonDevice::getImportCriteria()
-     *
-     * @since 0.84
-     **/
     public function getImportCriteria()
     {
-
-        return ['designation'       => 'equal',
+        return [
+            'designation'       => 'equal',
             'manufacturers_id'  => 'equal',
-            'devicecasetypes_id' => 'equal',
+            'devicegenerictypes_id' => 'equal',
             'locations_id'      => 'equal',
         ];
     }

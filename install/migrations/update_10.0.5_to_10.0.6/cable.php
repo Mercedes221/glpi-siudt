@@ -7,8 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
- * @copyright 2003-2014 by the INDEPNET Development Team.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
  * ---------------------------------------------------------------------
@@ -34,16 +33,15 @@
  */
 
 /**
- * @var \DBmysql $DB
- * @var \Migration $migration
+ * @var DBmysql $DB
+ * @var Migration $migration
  */
-
 $table = 'glpi_cables';
 if (!$DB->fieldExists($table, 'is_deleted', false)) {
     $migration->addField($table, 'is_deleted', 'bool');
     $migration->addKey($table, 'is_deleted');
 }
 
-$migration->updateRight('cable_management', READ | UPDATE | CREATE | DELETE | PURGE, [
-    'cable_management' => READ | UPDATE | CREATE | PURGE
+$migration->replaceRight('cable_management', READ | UPDATE | CREATE | DELETE | PURGE, [
+    'cable_management' => READ | UPDATE | CREATE | PURGE,
 ]);

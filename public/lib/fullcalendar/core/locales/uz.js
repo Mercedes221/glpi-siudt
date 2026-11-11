@@ -1,24 +1,24 @@
-(function (global, factory) {
-    typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
-    typeof define === 'function' && define.amd ? define(factory) :
-    (global = global || self, (global.FullCalendarLocales = global.FullCalendarLocales || {}, global.FullCalendarLocales.uz = factory()));
-}(this, function () { 'use strict';
+var l75 = {
+    code: 'uz',
+    week: {
+        dow: 1,
+        doy: 4, // The week that contains Jan 4th is the first week of the year.
+    },
+    buttonText: {
+        prev: 'Oldingi',
+        next: 'Keyingi',
+        today: 'Bugun',
+        year: 'Yil',
+        month: 'Oy',
+        week: 'Xafta',
+        day: 'Kun',
+        list: 'Kun tartibi',
+    },
+    allDayText: 'Kun bo\'yi',
+    moreLinkText(n) {
+        return '+ yana ' + n;
+    },
+    noEventsText: 'Ko\'rsatish uchun voqealar yo\'q',
+};
 
-    var uz = {
-        code: "uz",
-        buttonText: {
-            month: "Oy",
-            week: "Xafta",
-            day: "Kun",
-            list: "Kun tartibi"
-        },
-        allDayText: "Kun bo'yi",
-        eventLimitText: function (n) {
-            return "+ yana " + n;
-        },
-        noEventsMessage: "Ko'rsatish uchun voqealar yo'q"
-    };
-
-    return uz;
-
-}));
+export { l75 as default };

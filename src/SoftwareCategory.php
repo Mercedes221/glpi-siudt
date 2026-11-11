@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -36,7 +36,7 @@
 /// Class SoftwareCategory
 class SoftwareCategory extends CommonTreeDropdown
 {
-    public $can_be_translated = true;
+    public bool $can_be_translated = true;
 
 
     public static function getTypeName($nb = 0)
@@ -57,7 +57,7 @@ class SoftwareCategory extends CommonTreeDropdown
         parent::cleanRelationData();
 
         if ($this->isUsedAsCategoryOnSoftwareDeletion()) {
-            $newval = (isset($this->input['_replace_by']) ? $this->input['_replace_by'] : 0);
+            $newval = ($this->input['_replace_by'] ?? 0);
 
             Config::setConfigurationValues(
                 'core',
@@ -83,7 +83,7 @@ class SoftwareCategory extends CommonTreeDropdown
     /**
      * Check if type is used as category for software deleted by rules.
      *
-     * @return boolean
+     * @return bool
      */
     private function isUsedAsCategoryOnSoftwareDeletion()
     {

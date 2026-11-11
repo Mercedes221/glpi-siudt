@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -35,12 +35,9 @@
 
 class RuleDictionnaryOperatingSystemVersionCollection extends RuleDictionnaryDropdownCollection
 {
-    public $item_table  = "glpi_operatingsystemversions";
-    public $menu_option = "os_version";
+    public string $item_table  = "glpi_operatingsystemversions";
+    public string $menu_option = "os_version";
 
-    /**
-     * @see RuleCollection::getTitle()
-     **/
     public function getTitle()
     {
         return __('Dictionary of operating system versions');

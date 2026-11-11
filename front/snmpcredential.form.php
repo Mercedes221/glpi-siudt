@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,12 +33,11 @@
  * ---------------------------------------------------------------------
  */
 
+require_once(__DIR__ . '/_check_webserver_config.php');
+
 use Glpi\Event;
-use Glpi\Toolbox\Sanitizer;
 
-include('../inc/includes.php');
-
-Session::checkRight("snmpcredential", READ);
+Session::checkRight(SNMPCredential::$rightname, READ);
 
 if (!isset($_GET["id"])) {
     $_GET["id"] = "";
@@ -46,15 +45,6 @@ if (!isset($_GET["id"])) {
 
 if (!isset($_GET["withtemplate"])) {
     $_GET["withtemplate"] = "";
-}
-
-if (array_key_exists('auth_passphrase', $_POST)) {
-    // Passphrase must not be altered, it will be encrypted and never displayed, so sanitize is not necessary.
-    $_POST['auth_passphrase'] = Sanitizer::unsanitize($_POST['auth_passphrase']);
-}
-if (array_key_exists('priv_passphrase', $_POST)) {
-    // Passphrase must not be altered, it will be encrypted and never displayed, so sanitize is not necessary.
-    $_POST['priv_passphrase'] = Sanitizer::unsanitize($_POST['priv_passphrase']);
 }
 
 $cred = new SNMPCredential();
@@ -74,7 +64,7 @@ if (isset($_POST["add"])) {
         }
     }
     Html::back();
-} else if (isset($_POST["delete"])) {
+} elseif (isset($_POST["delete"])) {
     $cred->check($_POST["id"], DELETE);
     if ($cred->delete($_POST)) {
         Event::log(
@@ -87,7 +77,7 @@ if (isset($_POST["add"])) {
         );
     }
     $cred->redirectToList();
-} else if (isset($_POST["restore"])) {
+} elseif (isset($_POST["restore"])) {
     $cred->check($_POST["id"], DELETE);
     if ($cred->restore($_POST)) {
         Event::log(
@@ -100,9 +90,9 @@ if (isset($_POST["add"])) {
         );
     }
     $cred->redirectToList();
-} else if (isset($_POST["purge"])) {
+} elseif (isset($_POST["purge"])) {
     $cred->check($_POST["id"], PURGE);
-    if ($cred->delete($_POST, 1)) {
+    if ($cred->delete($_POST, true)) {
         Event::log(
             $_POST["id"],
             "snmpcredential",
@@ -113,7 +103,7 @@ if (isset($_POST["add"])) {
         );
     }
     $cred->redirectToList();
-} else if (isset($_POST["update"])) {
+} elseif (isset($_POST["update"])) {
     $cred->check($_POST["id"], UPDATE);
     $cred->update($_POST);
     Event::log(
@@ -126,9 +116,9 @@ if (isset($_POST["add"])) {
     );
     Html::back();
 } else {
-    $menus = ["admin", "glpi\inventory\inventory", "snmpcredential"];
+    $menus = ["admin", "glpi\inventory\inventory", "SNMPCredential"];
     SNMPCredential::displayFullPageForItem($_GET["id"], $menus, [
         'withtemplate' => $_GET["withtemplate"],
-        'formoptions'  => "data-track-changes=true"
+        'formoptions'  => "data-track-changes=true",
     ]);
 }

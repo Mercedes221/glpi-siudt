@@ -1,0 +1,455 @@
+/**
+ * GLPI Custom Theme - Paleta Gradiente
+ * Inspirado en la paleta: Amarillo (#FFD600), Naranja (#FF8C00), Bermellón (#F4511E),
+ * Rojo (#D32F2F), Magenta Oscuro (#AD1457), Fucsia/Rosa (#D81B60),
+ * Púrpura (#8E24AA), Índigo (#5E35B1), Azul Real (#3949AB) y Azul Eléctrico (#1E88E5).
+ */
+
+:root {
+    /* Colores individuales de la paleta */
+    --color-palette-yellow: #ffd600;
+    --color-palette-orange: #ff8c00;
+    --color-palette-vermilion: #c4c3c2;
+    --color-palette-red: #c9c4c4;
+    --color-palette-wine: #c19ead;
+    --color-palette-magenta: #fcfc6b;
+    --color-palette-purple: #f1eff1;
+    --color-palette-indigo: #f1f0f3;
+    --color-palette-blue-indigo: #bc7d7d;
+    --color-palette-blue: #d4e5f4;
+    
+    /* Fondos oscuros */
+    --bg-dark-base: #3059d3;
+    --bg-dark-surface: #4132e6;
+    --bg-dark-header: #2e0db2;
+
+    /* Gradientes principales */
+    --gradient-full-spectrum: linear-gradient(90deg, #ffd600 0%, #ff8c00 12%, #f4511e 25%, #d32f2f 37%, #ad1457 50%, #d81b60 62%, #8e24aa 75%, #5e35b1 87%, #1e88e5 100%);
+    --gradient-primary: linear-gradient(135deg, #5e35b1 0%, #8e24aa 50%, #ad1457 100%);
+    --gradient-primary-hover: linear-gradient(135deg, #6a3cbd 0%, #7b1fa2 50%, #ad1457 100%);
+    --gradient-secondary: linear-gradient(135deg, #b71c1c 0%, #c2410c 50%, #b45309 100%);
+    --gradient-secondary-hover: linear-gradient(135deg, #c62828 0%, #c2410c 50%, #b45309 100%);
+    --gradient-warm: linear-gradient(135deg, #ff8c00 0%, #ffd600 100%);
+    --gradient-cool: linear-gradient(135deg, #1e88e5 0%, #3949ab 50%, #5e35b1 100%);
+    --gradient-sidebar: linear-gradient(180deg, #0a0e1a 0%, #120e24 50%, #1a0b22 100%);
+    --gradient-header: linear-gradient(90deg, #0a0e1a 0%, #16102a 50%, #1e0e24 100%);
+    --gradient-card-header: linear-gradient(135deg, #0d1222 0%, #1c102e 100%);
+    --gradient-table-header: linear-gradient(90deg, #0e1326 0%, #19122c 50%, #201026 100%);
+
+    /* Tabler & GLPI Tokens */
+    --tblr-primary: #8e24aa !important;
+    --tblr-primary-rgb: 142, 36, 170 !important;
+    --tblr-secondary: #f4511e !important;
+    --tblr-secondary-rgb: 244, 81, 30 !important;
+    --tblr-yellow: #ffd600 !important;
+    --tblr-red: #d32f2f !important;
+    --tblr-blue: #1e88e5 !important;
+    --mainmenu-bg: #0a0e1a !important;
+    --mainmenu-fg: #ffffff !important;
+    --header-bg: #15102a !important;
+    --header-fg: #ffffff !important;
+    --primary: #8e24aa !important;
+    --secondary: #f4511e !important;
+    --link-color: #8e24aa !important;
+    --hover-bg: rgba(216, 27, 96, 0.15) !important;
+}
+
+/* ==========================================================================
+   1. Navegación Principal & Menú Lateral (Gradientes Oscuros & Acentos Vivos)
+   ========================================================================== */
+.sidebar,
+.navbar-vertical,
+.navbar-dark {
+    background: var(--gradient-sidebar) !important;
+    color: #ebf561 !important;
+    border-right: 1px solid rgba(142, 36, 170, 0.25) !important;
+}
+
+.topbar,
+header,
+.navbar-expand-md.topbar {
+    background: var(--gradient-header) !important;
+    color: #ffffff !important;
+    border-bottom: 2px solid transparent !important;
+    border-image: var(--gradient-full-spectrum) 1 !important;
+    position: relative;
+}
+
+.sidebar .nav-link,
+.topbar .nav-link,
+.navbar-vertical .nav   -link {
+    color: #ffffff !important;
+    transition: all 0.25s ease-in-out;
+    border-radius: 6px;
+    margin: 2px 6px;
+}
+
+.sidebar .nav-link:hover,
+.topbar .nav-link:hover,
+.navbar-vertical .nav-link:hover {
+    color: #ffffff !important;
+    background: linear-gradient(90deg, rgba(216, 27, 96, 0.18) 0%, rgba(255, 140, 0, 0.12) 100%) !important;
+    transform: translateX(2px);
+}
+
+.sidebar .nav-item.active > .nav-link,
+.sidebar .nav-link.active,
+.navbar-vertical .nav-link.active {
+    color: #ffffff !important;
+    background: linear-gradient(90deg, rgba(94, 53, 177, 0.6) 0%, rgba(216, 27, 96, 0.45) 100%) !important;
+    border-left: 4px solid #ffd600 !important; /* Borde activo amarillo brillante */
+    box-shadow: inset 0 0 12px rgba(216, 27, 96, 0.25) !important;
+    font-weight: 600;
+}
+
+.sidebar .nav-link .nav-link-icon,
+.topbar .nav-link .nav-link-icon {
+    color: #ff8c00 !important; /* Iconos en degradado naranja cálido */
+    transition: color 0.25s ease;
+}
+
+.sidebar .nav-link:hover .nav-link-icon,
+.topbar .nav-link:hover .nav-link-icon {
+    color: #ffd600 !important;
+}
+
+.sidebar .nav-item.active .nav-link-icon {
+    color: #ffd600 !important;
+}
+
+/* ==========================================================================
+   2. Botones & Acentos (Gradientes Púrpura-Magenta & Cálido Rojo-Naranja)
+   ========================================================================== */
+
+/* Botón Primario -> Gradiente Púrpura a Magenta */
+.btn-primary,
+button[type="submit"].btn-primary,
+.btn-success {
+    background: var(--gradient-primary) !important;
+    border: none !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(142, 36, 170, 0.35) !important;
+    transition: all 0.25s ease-in-out !important;
+}
+
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active,
+.btn-success:hover {
+    background: var(--gradient-primary-hover) !important;
+    color: #ffffff !important;
+    box-shadow: 0 6px 16px rgba(216, 27, 96, 0.45) !important;
+    transform: translateY(-1px);
+}
+
+/* Botón Secundario & Warning & Danger -> Gradiente Rojo a Naranja Cálido */
+.btn-secondary,
+.btn-danger,
+.btn-warning {
+    background: var(--gradient-secondary) !important;
+    border: none !important;
+    color: #ffffff !important;
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(244, 81, 30, 0.35) !important;
+    transition: all 0.25s ease-in-out !important;
+}
+
+.btn-secondary:hover,
+.btn-danger:hover,
+.btn-warning:hover {
+    background: var(--gradient-secondary-hover) !important;
+    color: #ffffff !important;
+    box-shadow: 0 6px 16px rgba(255, 140, 0, 0.45) !important;
+    transform: translateY(-1px);
+}
+
+/* Botones Outline */
+.btn-outline-primary {
+    color: #5e35b1 !important;
+    border: 1.5px solid #5e35b1 !important;
+    background: #ffffff !important;
+    transition: all 0.25s ease-in-out !important;
+}
+
+.btn-outline-primary:hover {
+    background: var(--gradient-primary) !important;
+    border-color: transparent !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(142, 36, 170, 0.35) !important;
+}
+
+.btn-outline-secondary {
+    color: #b93812 !important;
+    border: 1.5px solid #b93812 !important;
+    background: #ffffff !important;
+    transition: all 0.25s ease-in-out !important;
+}
+
+.btn-outline-secondary:hover {
+    background: var(--gradient-secondary) !important;
+    border-color: transparent !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(244, 81, 30, 0.35) !important;
+}
+
+.btn-primary,
+.btn-primary *,
+.btn-success,
+.btn-success *,
+.btn-secondary,
+.btn-secondary *,
+.btn-danger,
+.btn-danger *,
+.btn-warning,
+.btn-warning * {
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+}
+
+.topbar .breadcrumb,
+.topbar .breadcrumb-item,
+.topbar .breadcrumb-item > a,
+.topbar .breadcrumb-item.active {
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+}
+
+.topbar .breadcrumb-item > a:hover,
+.topbar .breadcrumb-item > a:focus-visible {
+    color: #ffd600 !important;
+    -webkit-text-fill-color: #ffd600 !important;
+}
+
+.topbar .breadcrumb-item + .breadcrumb-item::before {
+    color: #cbd5e1 !important;
+}
+
+/* Cards and containers */
+.card {
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 10px !important;
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06) !important;
+    overflow: hidden;
+}
+
+.card-header {
+    background: var(--gradient-card-header) !important;
+    color: #ffffff !important;
+    border-bottom: 3px solid transparent !important;
+    border-image: linear-gradient(90deg, #ffd600, #ff8c00, #d81b60, #8e24aa) 1 !important;
+    font-weight: 600;
+}
+
+.card-header .card-title,
+.card-header h3,
+.card-header h4 {
+    color: #ffffff !important;
+}
+
+/* ==========================================================================
+   4. Tablas (Table Headers con Gradientes)
+   ========================================================================== */
+.table thead th,
+.tab_cadre th,
+table.tab_cadre_fixe th {
+    background: var(--gradient-table-header) !important;
+    color: #ffffff !important;
+    border-bottom: 2px solid transparent !important;
+    border-image: linear-gradient(90deg, #d81b60, #f4511e, #ff8c00) 1 !important;
+    text-transform: uppercase;
+    font-size: 0.825rem;
+    letter-spacing: 0.05em;
+}
+
+.table tbody tr:hover,
+.tab_cadre tr:hover {
+    background: linear-gradient(90deg, rgba(216, 27, 96, 0.06) 0%, rgba(255, 140, 0, 0.04) 100%) !important;
+}
+
+/* Paginación */
+.pagination .page-item.active .page-link {
+    background: var(--gradient-primary) !important;
+    border-color: #8e24aa !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 6px rgba(142, 36, 170, 0.35) !important;
+}
+
+.pagination .page-link {
+    color: #0a0e1a !important;
+    border-radius: 6px;
+    margin: 0 2px;
+}
+
+.pagination .page-link:hover {
+    color: #d81b60 !important;
+    background-color: #fdf2f8 !important;
+}
+
+/* ==========================================================================
+   5. Badges, Alertas & Enlaces
+   ========================================================================== */
+.badge.bg-primary,
+.badge-primary {
+    background: var(--gradient-primary) !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 6px rgba(142, 36, 170, 0.25) !important;
+}
+
+.badge.bg-secondary,
+.badge-secondary {
+    background: var(--gradient-secondary) !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 6px rgba(244, 81, 30, 0.25) !important;
+}
+
+.badge.bg-warning,
+.badge-warning {
+    background: var(--gradient-warm) !important;
+    color: #0a0e1a !important;
+    font-weight: 700;
+    box-shadow: 0 2px 6px rgba(255, 140, 0, 0.25) !important;
+}
+
+.badge.bg-info,
+.badge-info {
+    background: var(--gradient-cool) !important;
+    color: #ffffff !important;
+}
+
+a:not(.nav-link):not(.dropdown-item) {
+    color: #8e24aa !important;
+    text-decoration: none;
+    transition: color 0.2s ease-in-out;
+}
+
+a:not(.nav-link):not(.dropdown-item):hover {
+    color: #d81b60 !important;
+    text-decoration: underline;
+}
+
+#navbar-menu a.nav-link,
+#navbar-menu a.nav-link:hover,
+#navbar-menu a.nav-link:focus,
+#navbar-menu a.nav-link:active,
+#navbar-menu a.nav-link.active,
+#navbar-menu a.nav-link.show,
+#navbar-menu a.nav-link .menu-label,
+#navbar-menu a.dropdown-item,
+#navbar-menu a.dropdown-item:hover,
+#navbar-menu a.dropdown-item:focus,
+#navbar-menu a.dropdown-item:active,
+#navbar-menu a.dropdown-item.active,
+#navbar-menu a.dropdown-item > span {
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+}
+
+.sidebar #navbar-menu .nav-item > .nav-link,
+.sidebar #navbar-menu .dropdown-item {
+    transition: transform 0.25s ease, background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.sidebar #navbar-menu .nav-item:hover > .nav-link,
+.sidebar #navbar-menu .nav-item > .nav-link:hover,
+.sidebar #navbar-menu .dropdown-item:hover,
+.sidebar #navbar-menu .dropdown-item:focus {
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    background: linear-gradient(90deg, rgba(255, 214, 0, 0.14), rgba(216, 27, 96, 0.2)) !important;
+    border-left-color: #ffd600 !important;
+    box-shadow: inset 3px 0 0 #ffd600, 0 0 12px rgba(255, 214, 0, 0.16);
+    transform: translateX(3px);
+}
+
+.sidebar #navbar-menu .nav-item:hover > .nav-link .nav-link-icon,
+.sidebar #navbar-menu .nav-item > .nav-link:hover .nav-link-icon {
+    color: #ffd600 !important;
+}
+
+header form[role="search"] input[name="globalsearch"] {
+    color: #1f2937 !important;
+    -webkit-text-fill-color: #1f2937 !important;
+    caret-color: #1f2937;
+    background-color: #ffffff !important;
+}
+
+header form[role="search"] input[name="globalsearch"]::placeholder {
+    color: #64748b !important;
+    -webkit-text-fill-color: #64748b !important;
+    opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sidebar #navbar-menu .nav-item > .nav-link,
+    .sidebar #navbar-menu .dropdown-item {
+        transition: none;
+    }
+
+    .sidebar #navbar-menu .nav-item:hover > .nav-link,
+    .sidebar #navbar-menu .nav-item > .nav-link:hover,
+    .sidebar #navbar-menu .dropdown-item:hover,
+    .sidebar #navbar-menu .dropdown-item:focus {
+        transform: none;
+    }
+}
+
+/* Formularios en focus */
+.form-control:focus,
+.form-select:focus {
+    border-color: #8e24aa !important;
+    box-shadow: 0 0 0 0.25rem rgba(142, 36, 170, 0.25) !important;
+}
+
+/* ==========================================================================
+   6. Logo Institucional Personalizado (Escudo)
+   ========================================================================== */
+.glpi-logo {
+    background: url('/pics/logos/logo-GS.png') center / contain no-repeat !important;
+    display: inline-block !important;
+}
+
+/* Logo en Sidebar y Topbar */
+.navbar-brand .glpi-logo,
+.sidebar .navbar-brand .glpi-logo,
+.topbar .navbar-brand .glpi-logo,
+.page .glpi-logo {
+    background: url('/pics/logos/logo-GS.png') center / contain no-repeat !important;
+    display: inline-block !important;
+    width: 60px !important;
+    height: 60px !important;
+    max-height: 60px !important;
+}
+
+.sidebar .navbar-brand {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0.6rem 0.5rem !important;
+    background: url('/pics/logos/logo-GS-sidebar.png') center / 72px 66px no-repeat !important;
+}
+
+.sidebar .navbar-brand .glpi-logo {
+    visibility: hidden !important;
+}
+
+/* Sidebar Colapsado */
+body.navbar-collapsed .navbar-brand .glpi-logo {
+    background: none !important;
+}
+
+body.navbar-collapsed .sidebar .navbar-brand {
+    background-image: url('/pics/logos/logo-G-100-white.png') !important;
+    background-size: 44px 44px !important;
+}
+
+/* Pantalla de Inicio de Sesión / Login */
+.page-anonymous .glpi-logo {
+    background: url('/pics/logos/logo-custom.png') center / contain no-repeat !important;
+    width: 160px !important;
+    height: 160px !important;
+    display: inline-block !important;
+    content: "" !important;
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.25));
+}

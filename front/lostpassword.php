@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,24 +33,35 @@
  * ---------------------------------------------------------------------
  */
 
-/** @var array $CFG_GLPI */
+require_once(__DIR__ . '/_check_webserver_config.php');
+
+use Glpi\Application\View\TemplateRenderer;
+
 global $CFG_GLPI;
-
-$SECURITY_STRATEGY = 'no_check';
-
-include('../inc/includes.php');
 
 if (
     !$CFG_GLPI['notifications_mailing']
     || !countElementsInTable(
         'glpi_notifications',
-        ['itemtype' => 'User', 'event' => 'passwordforget', 'is_active' => 1]
+        ['itemtype' => User::class, 'event' => 'passwordforget', 'is_active' => 1]
     )
 ) {
-    exit();
+    Session::addMessageAfterRedirect(
+        __s('Sending password forget notification is not enabled.'),
+        true,
+        ERROR
+    );
+    TemplateRenderer::getInstance()->display('forgotpassword.html.twig', [
+        'messages_only' => true,
+    ]);
+    return;
 }
 
 $user = new User();
+
+if (isset($_POST['totp_code']) && is_array($_POST['totp_code'])) {
+    $_REQUEST['totp_code'] = implode('', $_POST['totp_code']);
+}
 
 // Manage lost password
 // REQUEST needed : GET on first access / POST on submit form
@@ -67,5 +78,3 @@ if (isset($_REQUEST['password_forget_token'])) {
         User::showPasswordForgetRequestForm();
     }
 }
-
-exit();

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,22 +33,27 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\Application\View\TemplateRenderer;
+use Glpi\DBAL\QueryExpression;
+use Glpi\Features\Clonable;
+
 class Appliance_Item extends CommonDBRelation
 {
-    use Glpi\Features\Clonable;
+    /** @use Clonable<static> */
+    use Clonable;
 
-    public static $itemtype_1 = 'Appliance';
-    public static $items_id_1 = 'appliances_id';
-    public static $take_entity_1 = false;
+    public static ?string $itemtype_1 = Appliance::class;
+    public static ?string $items_id_1 = 'appliances_id';
+    public static bool $take_entity_1 = false;
 
-    public static $itemtype_2 = 'itemtype';
-    public static $items_id_2 = 'items_id';
-    public static $take_entity_2 = true;
+    public static ?string $itemtype_2 = 'itemtype';
+    public static ?string $items_id_2 = 'items_id';
+    public static bool $take_entity_2 = true;
 
     public function getCloneRelations(): array
     {
         return [
-            Appliance_Item_Relation::class
+            Appliance_Item_Relation::class,
         ];
     }
 
@@ -60,23 +65,23 @@ class Appliance_Item extends CommonDBRelation
 
     public function getTabNameForItem(CommonGLPI $item, $withtemplate = 0)
     {
-        if (!Appliance::canView()) {
+        if (!Appliance::canView() || !$item instanceof CommonDBTM) {
             return '';
         }
 
         $nb = 0;
-        if ($item->getType() == Appliance::class) {
+        if ($item instanceof Appliance) {
             if ($_SESSION['glpishow_count_on_tabs']) {
                 if (!$item->isNewItem()) {
                     $nb = self::countForMainItem($item);
                 }
             }
-            return self::createTabEntry(self::getTypeName(Session::getPluralNumber()), $nb);
-        } else if (in_array($item->getType(), Appliance::getTypes(true))) {
+            return self::createTabEntry(self::getTypeName(Session::getPluralNumber()), $nb, $item::class, 'ti ti-package');
+        } elseif (in_array($item::class, Appliance::getTypes(true))) {
             if ($_SESSION['glpishow_count_on_tabs']) {
                 $nb = self::countForItem($item);
             }
-            return self::createTabEntry(Appliance::getTypeName(Session::getPluralNumber()), $nb);
+            return self::createTabEntry(Appliance::getTypeName(Session::getPluralNumber()), $nb, $item::class);
         }
 
         return '';
@@ -84,13 +89,16 @@ class Appliance_Item extends CommonDBRelation
 
     public static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0)
     {
+        if (!$item instanceof CommonDBTM) {
+            return false;
+        }
 
-        switch ($item->getType()) {
-            case Appliance::class:
+        switch (true) {
+            case $item instanceof Appliance:
                 self::showItems($item);
                 break;
             default:
-                if (in_array($item->getType(), Appliance::getTypes())) {
+                if (in_array($item::class, Appliance::getTypes())) {
                     self::showForItem($item, $withtemplate);
                 }
         }
@@ -102,11 +110,10 @@ class Appliance_Item extends CommonDBRelation
      *
      * @param Appliance $appliance  Appliance object wanted
      *
-     * @return void|boolean (display) Returns false if there is a rights error.
+     * @return void|bool (display) Returns false if there is a rights error.
      **/
     public static function showItems(Appliance $appliance)
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         $ID = $appliance->fields['id'];
@@ -123,12 +130,12 @@ class Appliance_Item extends CommonDBRelation
         $items = $DB->request([
             'FROM'   => self::getTable(),
             'WHERE'  => [
-                self::$items_id_1 => $ID
-            ]
+                self::$items_id_1 => $ID,
+            ],
         ]);
 
         Session::initNavigateListItems(
-            self::getType(),
+            static::class,
             //TRANS : %1$s is the itemtype name,
             //        %2$s is the name of the item (used for headings of a list)
             sprintf(
@@ -142,12 +149,12 @@ class Appliance_Item extends CommonDBRelation
             echo "<div class='firstbloc'>";
             echo "<form method='post' name='appliances_form$rand'
                      id='appliances_form$rand'
-                     action='" . Toolbox::getItemTypeFormURL(__CLASS__) . "'>";
+                     action='" . htmlescape(Toolbox::getItemTypeFormURL(self::class)) . "'>";
 
             echo "<table class='tab_cadre_fixe'>";
             echo "<tr class='tab_bg_2'>";
-            echo "<th colspan='2'>" .
-               __('Add an item') . "</th></tr>";
+            echo "<th colspan='2'>"
+               . __s('Add an item') . "</th></tr>";
 
             echo "<tr class='tab_bg_1'><td class='center'>";
             Dropdown::showSelectItemFromItemtypes(
@@ -171,67 +178,44 @@ class Appliance_Item extends CommonDBRelation
             echo "</div>";
         }
 
-        $items = iterator_to_array($items);
-
-        if (!count($items)) {
-            echo "<table class='tab_cadre_fixe'><tr><th>" . __('No item found') . "</th></tr>";
-            echo "</table>";
-        } else {
-            if ($canedit) {
-                Html::openMassiveActionsForm('mass' . __CLASS__ . $rand);
-                $massiveactionparams = [
-                    'num_displayed'   => min($_SESSION['glpilist_limit'], count($items)),
-                    'container'       => 'mass' . __CLASS__ . $rand
-                ];
-                Html::showMassiveActions($massiveactionparams);
-            }
-
-            echo "<table class='tab_cadre_fixehov'>";
-            $header = "<tr>";
-            if ($canedit) {
-                $header .= "<th width='10'>";
-                $header .= Html::getCheckAllAsCheckbox('mass' . __CLASS__ . $rand);
-                $header .= "</th>";
-            }
-            $header .= "<th>" . __('Itemtype') . "</th>";
-            $header .= "<th>" . _n('Item', 'Items', 1) . "</th>";
-            $header .= "<th>" . __("Serial") . "</th>";
-            $header .= "<th>" . __("Inventory number") . "</th>";
-            $header .= "<th>" . Appliance_Item_Relation::getTypeName(Session::getPluralNumber()) . "</th>";
-            $header .= "</tr>";
-            echo $header;
-
-            foreach ($items as $row) {
-                $item = new $row['itemtype']();
-                $item->getFromDB($row['items_id']);
-                echo "<tr lass='tab_bg_1'>";
-                if ($canedit) {
-                    echo "<td>";
-                    Html::showMassiveActionCheckBox(__CLASS__, $row["id"]);
-                    echo "</td>";
-                }
-                echo "<td>" . $item->getTypeName(1) . "</td>";
-                echo "<td>" . $item->getLink() . "</td>";
-                echo "<td>" . ($item->fields['serial'] ?? "") . "</td>";
-                echo "<td>" . ($item->fields['otherserial'] ?? "") . "</td>";
-                echo "<td class='relations_list'>";
-                echo Appliance_Item_Relation::showListForApplianceItem($row["id"], $canedit);
-                echo "</td>";
-                echo "</tr>";
-            }
-            echo $header;
-            echo "</table>";
-
-            if ($canedit && count($items)) {
-                $massiveactionparams['ontop'] = false;
-                Html::showMassiveActions($massiveactionparams);
-            }
-            if ($canedit) {
-                Html::closeForm();
-            }
-
-            echo Appliance_Item_Relation::getListJSForApplianceItem($appliance, $canedit);
+        $entries = [];
+        foreach ($items as $row) {
+            $item = getItemForItemtype($row['itemtype']);
+            $item->getFromDB($row['items_id']);
+            $entries[] = [
+                'itemtype' => self::class,
+                'id' => $row['id'],
+                'item_type' => $item->getTypeName(1),
+                'item' => $item->getLink(),
+                'serial' => $item->fields['serial'] ?? "",
+                'otherserial' => $item->fields['otherserial'] ?? "",
+                'relations' => "<div class='relations_list'>" . Appliance_Item_Relation::showListForApplianceItem($row["id"], $canedit) . "</div>",
+            ];
         }
+
+        TemplateRenderer::getInstance()->display('components/datatable.html.twig', [
+            'is_tab' => true,
+            'nofilter' => true,
+            'columns' => [
+                'item_type' => __('Itemtype'),
+                'item' => _n('Item', 'Items', 1),
+                'serial' => __('Serial'),
+                'otherserial' => __('Inventory number'),
+                'relations' => Appliance_Item_Relation::getTypeName(Session::getPluralNumber()),
+            ],
+            'formatters' => [
+                'item' => 'raw_html',
+                'relations' => 'raw_html',
+            ],
+            'entries' => $entries,
+            'total_number' => count($entries),
+            'showmassiveactions' => $canedit,
+            'massiveactionparams' => [
+                'num_displayed' => min($_SESSION['glpilist_limit'], count($entries)),
+                'container'     => 'mass' . static::class . $rand,
+            ],
+        ]);
+        echo Appliance_Item_Relation::getListJSForApplianceItem($appliance, $canedit);
     }
 
     /**
@@ -240,15 +224,13 @@ class Appliance_Item extends CommonDBRelation
      * @since 9.5.2
      *
      * @param CommonDBTM $item         CommonDBTM object wanted
-     * @param integer    $withtemplate not used (to be deleted)
+     * @param int    $withtemplate not used (to be deleted)
      *
      * @return void
      **/
     public static function showForItem(CommonDBTM $item, $withtemplate = 0)
     {
-
-        $itemtype = $item->getType();
-        $ID       = $item->fields['id'];
+        $ID = $item->getID();
 
         if (
             !Appliance::canView()
@@ -261,7 +243,6 @@ class Appliance_Item extends CommonDBRelation
         $rand = mt_rand();
 
         $iterator = self::getListForItem($item);
-        $number = count($iterator);
 
         $appliances = [];
         $used      = [];
@@ -272,104 +253,60 @@ class Appliance_Item extends CommonDBRelation
         if ($canedit && ($withtemplate != 2)) {
             echo "<div class='firstbloc'>";
             echo "<form name='applianceitem_form$rand' id='applianceitem_form$rand' method='post'
-                action='" . Toolbox::getItemTypeFormURL(__CLASS__) . "'>";
+                action='" . htmlescape(Toolbox::getItemTypeFormURL(self::class)) . "'>";
+            echo __s('Add to an appliance');
+            echo "<div class='d-flex'>";
             echo "<input type='hidden' name='items_id' value='$ID'>";
-            echo "<input type='hidden' name='itemtype' value='$itemtype'>";
-
-            echo "<table class='tab_cadre_fixe'>";
-            echo "<tr class='tab_bg_2'><th colspan='2'>" . __('Add to an appliance') . "</th></tr>";
-
-            echo "<tr class='tab_bg_1'><td>";
+            echo "<input type='hidden' name='itemtype' value='" . htmlescape($item::class) . "'>";
+            echo "<div class='auto'>";
             Appliance::dropdown([
                 'entity'  => $item->getEntityID(),
-                'used'    => $used
+                'used'    => $used,
             ]);
-
-            echo "</td><td class='center'>";
-            echo "<input type='submit' name='add' value=\"" . _sx('button', 'Add') . "\" class='btn btn-primary'>";
-            echo "</td></tr>";
-            echo "</table>";
-            Html::closeForm();
             echo "</div>";
-        }
-
-        echo "<div class='spaced'>";
-        if ($withtemplate != 2) {
-            if ($canedit && $number) {
-                Html::openMassiveActionsForm('mass' . __CLASS__ . $rand);
-                $massiveactionparams = ['num_displayed' => min($_SESSION['glpilist_limit'], $number),
-                    'container'     => 'mass' . __CLASS__ . $rand
-                ];
-                Html::showMassiveActions($massiveactionparams);
-            }
-        }
-        echo "<table class='tab_cadre_fixehov'>";
-
-        $header = "<tr>";
-        if ($canedit && $number && ($withtemplate != 2)) {
-            $header    .= "<th width='10'>" . Html::getCheckAllAsCheckbox('mass' . __CLASS__ . $rand);
-            $header    .= "</th>";
-        }
-
-        $header .= "<th>" . __('Name') . "</th>";
-        $header .= "<th>" . Appliance_Item_Relation::getTypeName(Session::getPluralNumber()) . "</th>";
-        $header .= "</tr>";
-
-        if ($number > 0) {
-            echo $header;
-            Session::initNavigateListItems(
-                __CLASS__,
-                //TRANS : %1$s is the itemtype name,
-                              //         %2$s is the name of the item (used for headings of a list)
-                                        sprintf(
-                                            __('%1$s = %2$s'),
-                                            $item->getTypeName(1),
-                                            $item->getName()
-                                        )
-            );
-            foreach ($appliances as $data) {
-                $cID         = $data["id"];
-                Session::addToNavigateListItems(__CLASS__, $cID);
-                $assocID     = $data["linkid"];
-                $app         = new Appliance();
-                $app->getFromResultSet($data);
-                echo "<tr class='tab_bg_1" . ($app->fields["is_deleted"] ? "_2" : "") . "'>";
-                if ($canedit && ($withtemplate != 2)) {
-                    echo "<td width='10'>";
-                    Html::showMassiveActionCheckBox(__CLASS__, $assocID);
-                    echo "</td>";
-                }
-                echo "<td class='b'>";
-                $name = $app->fields["name"];
-                if (
-                    $_SESSION["glpiis_ids_visible"]
-                    || empty($app->fields["name"])
-                ) {
-                    $name = sprintf(__('%1$s (%2$s)'), $name, $app->fields["id"]);
-                }
-                echo "<a href='" . Appliance::getFormURLWithID($cID) . "'>" . $name . "</a>";
-                echo "</td>";
-                echo "<td class='relations_list'>";
-                echo Appliance_Item_Relation::showListForApplianceItem($assocID, $canedit);
-                echo "</td>";
-
-                echo "</tr>";
-            }
-            echo $header;
-            echo "</table>";
-        } else {
-            echo "<table class='tab_cadre_fixe'>";
-            echo "<tr><th>" . __('No item found') . "</th></tr></table>";
-        }
-
-        echo "</table>";
-        if ($canedit && $number && ($withtemplate != 2)) {
-            $massiveactionparams['ontop'] = false;
-            Html::showMassiveActions($massiveactionparams);
+            echo "<div class='auto'>";
+            echo "<button type='submit' name='add' value='1' class='btn btn-primary ms-1'>";
+            echo "<i class='ti ti-link' aria-hidden='true'></i><span>" . _sx('button', 'Add') . "</span>";
+            echo "</button>";
+            echo "</div>";
+            echo "</div>"; //d-flex
             Html::closeForm();
+            echo "</div>"; //firstbloc
         }
-        echo "</div>";
 
+        $entries = [];
+        foreach ($appliances as $data) {
+            $assocID = $data["linkid"];
+            $app = new Appliance();
+            $app->getFromResultSet($data);
+
+            $entries[] = [
+                'itemtype' => self::class,
+                'id' => $assocID,
+                'name' => $app->getLink(),
+                'relations' => "<div class='relations_list'>" . Appliance_Item_Relation::showListForApplianceItem($assocID, $canedit) . "</div>",
+            ];
+        }
+
+        TemplateRenderer::getInstance()->display('components/datatable.html.twig', [
+            'is_tab' => true,
+            'nofilter' => true,
+            'columns' => [
+                'name' => __('Name'),
+                'relations' => Appliance_Item_Relation::getTypeName(Session::getPluralNumber()),
+            ],
+            'formatters' => [
+                'name' => 'raw_html',
+                'relations' => 'raw_html',
+            ],
+            'entries' => $entries,
+            'total_number' => count($entries),
+            'showmassiveactions' => $canedit,
+            'massiveactionparams' => [
+                'num_displayed' => min($_SESSION['glpilist_limit'], count($entries)),
+                'container'     => 'mass' . static::class . $rand,
+            ],
+        ]);
         echo Appliance_Item_Relation::getListJSForApplianceItem($item, $canedit);
     }
 
@@ -395,24 +332,24 @@ class Appliance_Item extends CommonDBRelation
     {
         $error_detected = [];
 
-       //check for requirements
+        //check for requirements
         if (
             ($this->isNewItem() && (!isset($input['itemtype']) || empty($input['itemtype'])))
             || (isset($input['itemtype']) && empty($input['itemtype']))
         ) {
-            $error_detected[] = __('An item type is required');
+            $error_detected[] = __s('An item type is required');
         }
         if (
             ($this->isNewItem() && (!isset($input['items_id']) || empty($input['items_id'])))
             || (isset($input['items_id']) && empty($input['items_id']))
         ) {
-            $error_detected[] = __('An item is required');
+            $error_detected[] = __s('An item is required');
         }
         if (
             ($this->isNewItem() && (!isset($input[self::$items_id_1]) || empty($input[self::$items_id_1])))
             || (isset($input[self::$items_id_1]) && empty($input[self::$items_id_1]))
         ) {
-            $error_detected[] = __('An appliance is required');
+            $error_detected[] = __s('An appliance is required');
         }
 
         if (count($error_detected)) {
@@ -436,7 +373,7 @@ class Appliance_Item extends CommonDBRelation
         if (count($types)) {
             $clause = ['itemtype' => $types];
         } else {
-            $clause = [new \QueryExpression('true = false')];
+            $clause = [new QueryExpression('true = false')];
         }
         $extra_types_where = array_merge(
             $extra_types_where,
@@ -456,7 +393,6 @@ class Appliance_Item extends CommonDBRelation
 
     public static function getRelationMassiveActionsSpecificities()
     {
-        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $specificities              = parent::getRelationMassiveActionsSpecificities();

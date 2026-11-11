@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -38,45 +38,41 @@
  **/
 class DeviceControl extends CommonDevice
 {
-    protected static $forward_entity_to = ['Item_DeviceControl', 'Infocom'];
+    protected static array $forward_entity_to = ['Item_DeviceControl', 'Infocom'];
 
     public static function getTypeName($nb = 0)
     {
         return _n('Controller', 'Controllers', $nb);
     }
 
-
     public function getAdditionalFields()
     {
-
         return array_merge(
             parent::getAdditionalFields(),
-            [['name'  => 'is_raid',
-                'label' => __('RAID'),
-                'type'  => 'bool'
-            ],
-                ['name'  => 'interfacetypes_id',
+            [
+                [
+                    'name'  => 'is_raid',
+                    'label' => __('RAID'),
+                    'type'  => 'bool',
+                ],
+                [
+                    'name'  => 'interfacetypes_id',
                     'label' => __('Interface'),
-                    'type'  => 'dropdownValue'
+                    'type'  => 'dropdownValue',
                 ],
-                ['name'  => 'devicecontrolmodels_id',
+                [
+                    'name'  => 'devicecontrolmodels_id',
                     'label' => _n('Model', 'Models', 1),
-                    'type'  => 'dropdownValue'
+                    'type'  => 'dropdownValue',
                 ],
-                ['name'  => 'none',
-                    'label' => RegisteredID::getTypeName(Session::getPluralNumber()) .
-                                        RegisteredID::showAddChildButtonForItemForm(
-                                            $this,
-                                            '_registeredID',
-                                            null,
-                                            false
-                                        ),
-                    'type'  => 'registeredIDChooser'
-                ]
+                [
+                    'name'  => 'none',
+                    'label' => RegisteredID::getTypeName(Session::getPluralNumber()),
+                    'type'  => 'registeredIDChooser',
+                ],
             ]
         );
     }
-
 
     public function rawSearchOptions()
     {
@@ -84,10 +80,10 @@ class DeviceControl extends CommonDevice
 
         $tab[] = [
             'id'                 => '12',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'is_raid',
             'name'               => __('RAID'),
-            'datatype'           => 'bool'
+            'datatype'           => 'bool',
         ];
 
         $tab[] = [
@@ -95,7 +91,7 @@ class DeviceControl extends CommonDevice
             'table'              => 'glpi_interfacetypes',
             'field'              => 'name',
             'name'               => __('Interface'),
-            'datatype'           => 'dropdown'
+            'datatype'           => 'dropdown',
         ];
 
         $tab[] = [
@@ -103,12 +99,11 @@ class DeviceControl extends CommonDevice
             'table'              => 'glpi_devicecontrolmodels',
             'field'              => 'name',
             'name'               => _n('Model', 'Models', 1),
-            'datatype'           => 'dropdown'
+            'datatype'           => 'dropdown',
         ];
 
         return $tab;
     }
-
 
     public static function getHTMLTableHeader(
         $itemtype,
@@ -125,14 +120,13 @@ class DeviceControl extends CommonDevice
         }
 
         switch ($itemtype) {
-            case 'Computer':
-                Manufacturer::getHTMLTableHeader(__CLASS__, $base, $super, $father, $options);
-                InterfaceType::getHTMLTableHeader(__CLASS__, $base, $super, $father, $options);
+            case Computer::class:
+                Manufacturer::getHTMLTableHeader(self::class, $base, $super, $father, $options);
+                InterfaceType::getHTMLTableHeader(self::class, $base, $super, $father, $options);
 
                 break;
         }
     }
-
 
     public function getHTMLTableCellForItem(
         ?HTMLTableRow $row = null,
@@ -140,23 +134,22 @@ class DeviceControl extends CommonDevice
         ?HTMLTableCell $father = null,
         array $options = []
     ) {
-
         $column = parent::getHTMLTableCellForItem($row, $item, $father, $options);
 
         if ($column == $father) {
             return $father;
         }
 
-        switch ($item->getType()) {
-            case 'Computer':
+        switch ($item::class) {
+            case Computer::class:
                 Manufacturer::getHTMLTableCellsForItem($row, $this, null, $options);
                 InterfaceType::getHTMLTableCellsForItem($row, $this, null, $options);
         }
+        return $column;
     }
-
 
     public static function getIcon()
     {
-        return "fas fa-microchip";
+        return "ti ti-cpu";
     }
 }

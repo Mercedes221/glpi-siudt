@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,27 +33,32 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\Features\Clonable;
+
+use function Safe\strtotime;
+
 /**
  * Calendar Class
  **/
 class Calendar extends CommonDropdown
 {
-    use Glpi\Features\Clonable;
+    /** @use Clonable<static> */
+    use Clonable;
 
-   // From CommonDBTM
-    public $dohistory                   = true;
-    public $can_be_translated           = false;
+    // From CommonDBTM
+    public bool $dohistory                   = true;
+    public bool $can_be_translated           = false;
 
-    protected static $forward_entity_to = ['CalendarSegment'];
+    protected static array $forward_entity_to = ['CalendarSegment'];
 
-    public static $rightname = 'calendar';
+    public static string $rightname = 'calendar';
 
 
     public function getCloneRelations(): array
     {
         return [
             Calendar_Holiday::class,
-            CalendarSegment::class
+            CalendarSegment::class,
         ];
     }
 
@@ -80,8 +85,8 @@ class Calendar extends CommonDropdown
     {
 
         $ong = parent::defineTabs($options);
-        $this->addStandardTab('CalendarSegment', $ong, $options);
-        $this->addStandardTab('Calendar_Holiday', $ong, $options);
+        $this->addStandardTab(CalendarSegment::class, $ong, $options);
+        $this->addStandardTab(Calendar_Holiday::class, $ong, $options);
 
         return $ong;
     }
@@ -94,8 +99,8 @@ class Calendar extends CommonDropdown
         $actions = parent::getSpecificMassiveActions($checkitem);
 
         if ($isadmin) {
-            $actions[__CLASS__ . MassiveAction::CLASS_ACTION_SEPARATOR . 'duplicate'] = _x('button', 'Duplicate');
-            $actions[__CLASS__ . MassiveAction::CLASS_ACTION_SEPARATOR . 'addholiday'] = __('Add a close time');
+            $actions[self::class . MassiveAction::CLASS_ACTION_SEPARATOR . 'duplicate'] = _sx('button', 'Duplicate');
+            $actions[self::class . MassiveAction::CLASS_ACTION_SEPARATOR . 'addholiday'] = __s('Add a close time');
         }
         return $actions;
     }
@@ -130,7 +135,7 @@ class Calendar extends CommonDropdown
 
         switch ($ma->getAction()) {
             case 'duplicate': // For calendar duplicate in another entity
-                if (Toolbox::hasTrait($item, \Glpi\Features\Clonable::class)) {
+                if (Toolbox::hasTrait($item, Clonable::class)) {
                     $input = $ma->getInput();
                     $options = [];
                     if ($item->isEntityAssign()) {
@@ -144,26 +149,26 @@ class Calendar extends CommonDropdown
                             ) {
                                 if ($item->can(-1, CREATE, $options)) {
                                     if (method_exists($item, 'clone') && $item->clone($options)) {
-                                         $ma->itemDone($item->getType(), $id, MassiveAction::ACTION_OK);
+                                        $ma->itemDone($item::class, $id, MassiveAction::ACTION_OK);
                                     } else {
-                                         $ma->itemDone($item->getType(), $id, MassiveAction::ACTION_KO);
-                                         $ma->addMessage($item->getErrorMessage(ERROR_ON_ACTION));
+                                        $ma->itemDone($item::class, $id, MassiveAction::ACTION_KO);
+                                        $ma->addMessage($item->getErrorMessage(ERROR_ON_ACTION));
                                     }
                                 } else {
-                                    $ma->itemDone($item->getType(), $id, MassiveAction::ACTION_NORIGHT);
+                                    $ma->itemDone($item::class, $id, MassiveAction::ACTION_NORIGHT);
                                     $ma->addMessage($item->getErrorMessage(ERROR_RIGHT));
                                 }
                             } else {
-                                $ma->itemDone($item->getType(), $id, MassiveAction::ACTION_KO);
+                                $ma->itemDone($item::class, $id, MassiveAction::ACTION_KO);
                                 $ma->addMessage($item->getErrorMessage(ERROR_COMPAT));
                             }
                         } else {
-                             $ma->itemDone($item->getType(), $id, MassiveAction::ACTION_KO);
-                             $ma->addMessage($item->getErrorMessage(ERROR_NOT_FOUND));
+                            $ma->itemDone($item::class, $id, MassiveAction::ACTION_KO);
+                            $ma->addMessage($item->getErrorMessage(ERROR_NOT_FOUND));
                         }
                     }
                 } else {
-                    $ma->itemDone($item->getType(), $ids, MassiveAction::ACTION_KO);
+                    $ma->itemDone($item::class, $ids, MassiveAction::ACTION_KO);
                 }
                 return;
 
@@ -183,21 +188,28 @@ class Calendar extends CommonDropdown
                         $entities_id = CommonDBTM::getItemEntity('Calendar', $id);
                         if (isset($entities[$entities_id])) {
                             $input = ['calendars_id' => $id,
-                                'holidays_id'  => $input['holidays_id']
+                                'holidays_id'  => $input['holidays_id'],
                             ];
+
+                            if (!$calendar_holiday->can(-1, CREATE, $input)) {
+                                $ma->itemDone($item::class, $id, MassiveAction::ACTION_NORIGHT);
+                                $ma->addMessage($item->getErrorMessage(ERROR_RIGHT));
+                                continue;
+                            }
+
                             if ($calendar_holiday->add($input)) {
-                                $ma->itemDone($item->getType(), $id, MassiveAction::ACTION_OK);
+                                $ma->itemDone($item::class, $id, MassiveAction::ACTION_OK);
                             } else {
-                                $ma->itemDone($item->getType(), $id, MassiveAction::ACTION_KO);
+                                $ma->itemDone($item::class, $id, MassiveAction::ACTION_KO);
                                 $ma->addMessage($item->getErrorMessage(ERROR_ON_ACTION));
                             }
                         } else {
-                            $ma->itemDone($item->getType(), $id, MassiveAction::ACTION_KO);
+                            $ma->itemDone($item::class, $id, MassiveAction::ACTION_KO);
                             $ma->addMessage($item->getErrorMessage(ERROR_ON_ACTION));
                         }
                     }
                 } else {
-                    $ma->itemDone($item->getType(), $ids, MassiveAction::ACTION_KO);
+                    $ma->itemDone($item::class, $ids, MassiveAction::ACTION_KO);
                 }
                 return;
         }
@@ -205,7 +217,10 @@ class Calendar extends CommonDropdown
     }
 
     /**
-     * @see Glpi\Features\Clonable::post_clone
+     * @param CommonDBTM $source
+     * @param bool $history
+     *
+     * @return void
      */
     public function post_clone($source, $history)
     {
@@ -229,21 +244,30 @@ class Calendar extends CommonDropdown
      *
      * @param string $date Date of the day to check
      *
-     * @return boolean
+     * @return bool
      **/
     public function isHoliday($date)
     {
+        // Check if date is null or emtpy
+        if (empty($date)) {
+            return false;
+        }
+
         $calendar_holiday = new Calendar_Holiday();
         $holidays = $calendar_holiday->getHolidaysForCalendar($this->fields['id']);
 
         foreach ($holidays as $holiday) {
+            // CHeck if begin_date and end_date are not null or empty
+            if (empty($holiday['begin_date']) || empty($holiday['end_date'])) {
+                continue;
+            }
             if ($holiday['is_perpetual']) {
                 // Compare only month and day for holidays that occurs every year.
                 $date_to_compare = date('m-d', strtotime($date));
                 $begin_date      = date('m-d', strtotime($holiday['begin_date']));
                 $end_date        = date('m-d', strtotime($holiday['end_date']));
             } else {
-               // Normalize dates to Y-m-d
+                // Normalize dates to Y-m-d
                 $date_to_compare = date('Y-m-d', strtotime($date));
                 $begin_date      = date('Y-m-d', strtotime($holiday['begin_date']));
                 $end_date        = date('Y-m-d', strtotime($holiday['end_date']));
@@ -259,20 +283,28 @@ class Calendar extends CommonDropdown
 
 
     /**
-     * Get active time between to date time for the active calendar
+     * Seconds elapsed between two dates
      *
-     * @param string $start                 begin datetime
-     * @param string $end                   end datetime
-     * @param bool   $include_inactive_time true to just get the time passed between start time and end time
+     * Taking opening hours into account unless param $include_inactive_time is true
      *
-     * @return int timestamp of delay
+     * @param string $start begin datetime
+     * @param string $end   end datetime
      *
-     * @FIXME Remove `$include_inactive_time` parameter in GLPI 10.1. It does not seems to be used and makes no sense.
+     * @return int seconds elapsed between the two dates, taking opening hours into account.
      */
-    public function getActiveTimeBetween($start, $end, $include_inactive_time = false)
+    public function getActiveTimeBetween($start, $end)
     {
 
         if (!isset($this->fields['id'])) {
+            return 0;
+        }
+
+        // `$start` and/or `$end` may be the `'NULL'` SQL sentinel string (for
+        // instance, reopening a solved/closed ITIL object resets `solvedate` and
+        // `closedate` to `'NULL'`) or be empty. These are not parseable dates:
+        // return early instead of letting `Safe\strtotime()` (used below) throw an
+        // uncaught `DatetimeException`.
+        if (empty($start) || empty($end) || $start === 'NULL' || $end === 'NULL') {
             return 0;
         }
 
@@ -284,51 +316,48 @@ class Calendar extends CommonDropdown
         $timeend    = strtotime($end);
         $datestart  = date('Y-m-d', $timestart);
         $dateend    = date('Y-m-d', $timeend);
-       // Need to finish at the closing day : set hour to midnight (23:59:59 for PHP)
+        // Need to finish at the closing day : set hour to midnight (23:59:59 for PHP)
         $timerealend = strtotime($dateend . ' 23:59:59');
 
         $activetime = 0;
 
-        if ($include_inactive_time) {
-            $activetime = $timeend - $timestart;
-        } else {
-            $cache_duration = $this->getDurationsCache();
+        $cache_duration = $this->getDurationsCache();
 
-            for ($actualtime = $timestart; $actualtime <= $timerealend; $actualtime += DAY_TIMESTAMP) {
-                $actualdate = date('Y-m-d', $actualtime);
+        for ($actualtime = $timestart; $actualtime <= $timerealend; $actualtime += DAY_TIMESTAMP) {
+            $actualdate = date('Y-m-d', $actualtime);
 
-                if (!$this->isHoliday($actualdate)) {
-                    $beginhour    = '00:00:00';
-                    // Calendar segment work with '24:00:00' format for midnight
-                    $endhour      = '24:00:00';
-                    $dayofweek    = self::getDayNumberInWeek($actualtime);
-                    $timeoftheday = 0;
+            if (!$this->isHoliday($actualdate)) {
+                $beginhour    = '00:00:00';
+                // Calendar segment work with '24:00:00' format for midnight
+                $endhour      = '24:00:00';
+                $dayofweek    = self::getDayNumberInWeek($actualtime);
+                $timeoftheday = 0;
 
-                    if ($actualdate == $datestart) { // First day : cannot use cache
-                        $beginhour = date('H:i:s', $timestart);
-                    }
-
-                    if ($actualdate == $dateend) { // Last day : cannot use cache
-                        $endhour = date('H:i:s', $timeend);
-                    }
-
-                    if (
-                        (($actualdate == $datestart) || ($actualdate == $dateend))
-                        && ($cache_duration[$dayofweek] > 0)
-                    ) {
-                         $timeoftheday = CalendarSegment::getActiveTimeBetween(
-                             $this->fields['id'],
-                             $dayofweek,
-                             $beginhour,
-                             $endhour
-                         );
-                    } else {
-                        $timeoftheday = $cache_duration[$dayofweek];
-                    }
-                    $activetime += $timeoftheday;
+                if ($actualdate == $datestart) { // First day : cannot use cache
+                    $beginhour = date('H:i:s', $timestart);
                 }
+
+                if ($actualdate == $dateend) { // Last day : cannot use cache
+                    $endhour = date('H:i:s', $timeend);
+                }
+
+                if (
+                    (($actualdate == $datestart) || ($actualdate == $dateend))
+                    && ($cache_duration[$dayofweek] > 0)
+                ) {
+                    $timeoftheday = CalendarSegment::getActiveTimeBetween(
+                        $this->fields['id'],
+                        $dayofweek,
+                        $beginhour,
+                        $endhour
+                    );
+                } else {
+                    $timeoftheday = $cache_duration[$dayofweek];
+                }
+                $activetime += $timeoftheday;
             }
         }
+
         return $activetime;
     }
 
@@ -338,9 +367,9 @@ class Calendar extends CommonDropdown
      *
      * @since 0.84
      *
-     * @param integer $time Time to check
+     * @param int $time Time to check
      *
-     * @return boolean
+     * @return bool
      */
     public function isAWorkingDay($time)
     {
@@ -357,7 +386,7 @@ class Calendar extends CommonDropdown
      *
      * @since 9.4.3
      *
-     * @return boolean
+     * @return bool
      */
     public function hasAWorkingDay()
     {
@@ -373,9 +402,9 @@ class Calendar extends CommonDropdown
      *
      * @since 0.85
      *
-     * @param integer $time Time to check
+     * @param int $time Time to check
      *
-     * @return boolean
+     * @return bool
      */
     public function isAWorkingHour($time)
     {
@@ -399,16 +428,16 @@ class Calendar extends CommonDropdown
      * else work in minutes
      *
      * @param string   $start               begin
-     * @param integer  $delay               delay to add (in seconds)
-     * @param integer  $additional_delay    delay to add (default 0)
-     * @param boolean  $work_in_days        force working in days (false by default)
-     * @param boolean  $end_of_working_day  end of working day (false by default)
+     * @param int  $delay               delay to add (in seconds)
+     * @param int  $additional_delay    delay to add (default 0)
+     * @param bool  $work_in_days        force working in days (false by default)
+     * @param bool  $end_of_working_day  end of working day (false by default)
      *
-     * @return boolean|string end date
+     * @return bool|string end date
      **/
     public function computeEndDate($start, $delay, $additional_delay = 0, $work_in_days = false, $end_of_working_day = false)
     {
-        // TODO 10.1: parameter $work_in_day make calculation for duration exprimed
+        // TODO parameter $work_in_day make calculation for duration exprimed
         // in days (e.g "+ 5 days") but we don't have anything for month.
         // +1 month will push the date 30 working day when it should get the next
         // valid calendar date at least one month away from the starting date.
@@ -418,7 +447,7 @@ class Calendar extends CommonDropdown
         }
 
         if (!$this->hasAWorkingDay()) {
-           // Invalid calendar (no working day = unable to find any date inside calendar hours)
+            // Invalid calendar (no working day = unable to find any date inside calendar hours)
             return false;
         }
         $cache_duration = $this->getDurationsCache();
@@ -486,7 +515,7 @@ class Calendar extends CommonDropdown
 
             $lastworkinghour = CalendarSegment::getLastWorkingHour($this->fields['id'], $dayofweek);
             $actualtime      = strtotime(date('Y-m-d', $actualtime) . ' ' . $lastworkinghour);
-        } else if ($work_in_days) {
+        } elseif ($work_in_days) {
             // Computation that is based on a delay expressed in full days.
 
             // Compute Real starting time
@@ -578,10 +607,10 @@ class Calendar extends CommonDropdown
                     }
 
                     if ($delay >= $timeoftheday) {
-                         // Delay is greater or equal than remaining time in day
-                         // -> pass to next day
-                         $actualtime = self::getActualTime($actualtime, DAY_TIMESTAMP, $negative_delay);
-                         $delay      -= $timeoftheday;
+                        // Delay is greater or equal than remaining time in day
+                        // -> pass to next day
+                        $actualtime = self::getActualTime($actualtime, DAY_TIMESTAMP, $negative_delay);
+                        $delay      -= $timeoftheday;
                     } else {
                         // End of the delay in the day : get hours with this delay
                         $endhour = CalendarSegment::addDelayInDay(
@@ -616,6 +645,13 @@ class Calendar extends CommonDropdown
         return $actualdate;
     }
 
+    /**
+     * @param int $current_time
+     * @param int $number
+     * @param bool $negative
+     *
+     * @return int
+     */
     public static function getActualTime($current_time, $number = 0, $negative = false)
     {
         if ($negative) {
@@ -629,7 +665,7 @@ class Calendar extends CommonDropdown
     /**
      * Get days durations including all segments of the current calendar
      *
-     * @return boolean|array
+     * @return bool|array
      **/
     public function getDurationsCache()
     {
@@ -639,7 +675,7 @@ class Calendar extends CommonDropdown
         }
         $cache_duration = importArrayFromDB($this->fields['cache_duration']);
 
-       // Invalid cache duration : recompute it
+        // Invalid cache duration : recompute it
         if (!isset($cache_duration[0])) {
             $this->updateDurationCache($this->fields['id']);
             $cache_duration = importArrayFromDB($this->fields['cache_duration']);
@@ -652,7 +688,7 @@ class Calendar extends CommonDropdown
     /**
      * Get days durations including all segments of the current calendar
      *
-     * @return boolean|array
+     * @return bool|array
      **/
     public function getDaysDurations()
     {
@@ -677,7 +713,7 @@ class Calendar extends CommonDropdown
     /**
      * Update the calendar cache
      *
-     * @param integer $calendars_id ID of the calendar
+     * @param int $calendars_id ID of the calendar
      *
      * @return bool True if successful in updating the cache, otherwise returns false.
      */
@@ -698,17 +734,17 @@ class Calendar extends CommonDropdown
     /**
      * Get day number (in week) for a date.
      *
-     * @param integer $date Date as a UNIX timestamp
+     * @param int $date Date as a UNIX timestamp
      *
-     * @return integer
+     * @return int
      */
     public static function getDayNumberInWeek($date)
     {
-        return (int)date('w', $date);
+        return (int) date('w', $date);
     }
 
     public static function getIcon()
     {
-        return "far fa-calendar-alt";
+        return "ti ti-calendar";
     }
 }

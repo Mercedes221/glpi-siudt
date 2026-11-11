@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,13 +33,10 @@
  * ---------------------------------------------------------------------
  */
 
-include('../inc/includes.php');
 Html::header_nocache();
 
-Session::checkLoginUser();
-
 if (!isset($_REQUEST['id'])) {
-    throw new \RuntimeException('Required argument missing!');
+    throw new RuntimeException('Required argument missing!');
 }
 
 $id = $_REQUEST['id'];
@@ -58,9 +55,9 @@ if ($room->getFromDB($id)) {
             'value'                 => $current,
             'rand'                  => $rand,
             'display_emptychoice'   => true,
-            'used'                  => $used
+            'used'                  => $used,
         ]
     );
 } else {
-    echo "<div class='col-form-label'>" . __('No room found or selected') . "</div>";
+    echo "<div class='col-form-label'>" . __s('No room found or selected') . "</div>";
 }

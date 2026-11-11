@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,17 +33,22 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\Features\Clonable;
+
 /**
  * Template for followups
  * @since 9.5
  **/
 class ITILFollowupTemplate extends AbstractITILChildTemplate
 {
-   // From CommonDBTM
-    public $dohistory          = true;
-    public $can_be_translated  = true;
+    /** @use Clonable<static> */
+    use Clonable;
 
-    public static $rightname          = 'itilfollowuptemplate';
+    // From CommonDBTM
+    public bool $dohistory          = true;
+    public bool $can_be_translated  = true;
+
+    public static string $rightname          = 'itilfollowuptemplate';
 
     public static function getTypeName($nb = 0)
     {
@@ -58,11 +63,16 @@ class ITILFollowupTemplate extends AbstractITILChildTemplate
                 'name'  => 'requesttypes_id',
                 'label' => __('Source of followup'),
                 'type'  => 'dropdownValue',
-                'list'  => true
+                'list'  => true,
+            ], [
+                'name'  => 'pendingreasons_id',
+                'label' => PendingReason::getTypeName(1),
+                'type'  => 'dropdownValue',
+                'list'  => true,
             ], [
                 'name'  => 'is_private',
                 'label' => __('Private'),
-                'type'  => 'bool'
+                'type'  => 'bool',
             ], [
                 'name'  => 'content',
                 'label' => __('Content'),
@@ -71,7 +81,7 @@ class ITILFollowupTemplate extends AbstractITILChildTemplate
                 // When an element will be created from a template, tinymce will catch the base64 image and trigger the
                 // document upload process.
                 'convert_images_to_documents' => false,
-            ]
+            ],
         ];
     }
 
@@ -86,7 +96,7 @@ class ITILFollowupTemplate extends AbstractITILChildTemplate
             'field'              => 'content',
             'table'              => self::getTable(),
             'datatype'           => 'text',
-            'htmltext'           => true
+            'htmltext'           => true,
         ];
 
         $tab[] = [
@@ -94,7 +104,7 @@ class ITILFollowupTemplate extends AbstractITILChildTemplate
             'name'               => __('Source of followup'),
             'field'              => 'name',
             'table'              => getTableForItemType('RequestType'),
-            'datatype'           => 'dropdown'
+            'datatype'           => 'dropdown',
         ];
 
         $tab[] = [
@@ -102,7 +112,15 @@ class ITILFollowupTemplate extends AbstractITILChildTemplate
             'name'               => __('Private'),
             'field'              => 'is_private',
             'table'              => self::getTable(),
-            'datatype'           => 'bool'
+            'datatype'           => 'bool',
+        ];
+
+        $tab[] = [
+            'id'                 => '7',
+            'name'               => PendingReason::getTypeName(1),
+            'field'              => 'name',
+            'table'              => getTableForItemType('PendingReason'),
+            'datatype'           => 'dropdown',
         ];
 
         return $tab;
@@ -110,6 +128,11 @@ class ITILFollowupTemplate extends AbstractITILChildTemplate
 
     public static function getIcon()
     {
-        return "fas fa-layer-group";
+        return "ti ti-stack-2-filled";
+    }
+
+    public function getCloneRelations(): array
+    {
+        return [];
     }
 }

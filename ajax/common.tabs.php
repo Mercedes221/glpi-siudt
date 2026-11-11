@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,37 +33,25 @@
  * ---------------------------------------------------------------------
  */
 
-use Glpi\Toolbox\Sanitizer;
+use Glpi\Debug\Profiler;
 
-/**
- * @var array $CFG_GLPI
- * @var array $_UGET
- */
-global $CFG_GLPI, $_UGET;
+global $CFG_GLPI;
 
-$SECURITY_STRATEGY = 'no_check'; // specific checks done later to allow anonymous access to public FAQ tabs
+header("Content-Type: text/html; charset=UTF-8");
+Html::header_nocache();
 
-include('../inc/includes.php');
-$AJAX_INCLUDE = 1;
-
-if (isset($_GET['full_page_tab'])) {
-    Html::header('Only tab for debug', $_SERVER['PHP_SELF']);
-} else {
-    header("Content-Type: text/html; charset=UTF-8");
-    Html::header_nocache();
-}
-
+// Session check is disabled for this script (see `\Glpi\Http\Firewall::computeStrategyForCoreLegacyScript()`)
+// to be able to adapt the checks depending on the request.
 if (!($CFG_GLPI["use_public_faq"] && str_ends_with($_GET["_target"], '/front/helpdesk.faq.php'))) {
     Session::checkLoginUser();
 }
 
 if (!isset($_GET['_glpi_tab'])) {
-    exit();
+    return;
 }
-$_GET['_glpi_tab'] = Sanitizer::unsanitize($_GET['_glpi_tab']);
 
 if (!isset($_GET['_itemtype']) || empty($_GET['_itemtype'])) {
-    exit();
+    return;
 }
 
 if (!isset($_GET["sort"])) {
@@ -79,22 +67,31 @@ if (!isset($_GET["withtemplate"])) {
 }
 
 if (isset($_GET['id']) && !empty($_GET['id'])) {
-    $_GET['id'] = (int)$_GET['id'];
+    $_GET['id'] = (int) $_GET['id'];
 }
 
-if ($item = getItemForItemtype($_UGET['_itemtype'])) {
+if ($item = getItemForItemtype($_GET['_itemtype'])) {
     if ($item->get_item_to_display_tab) {
-       // No id if ruleCollection but check right
+        // No id if ruleCollection but check right
         if ($item instanceof RuleCollection) {
             if (!$item->canList()) {
-                exit();
+                return;
             }
-        } else if (!isset($_GET["id"]) || $item->isNewID($_GET["id"])) {
-            if (!$item->can(-1, CREATE, $_GET)) {
-                exit();
+        } elseif (!isset($_GET["id"]) || $item->isNewID($_GET["id"])) {
+            if (!$item::canCreate()) {
+                return;
             }
-        } else if (!$item->can($_GET["id"], READ)) {
-            exit();
+            // This call was initially triggered by a call to `$item->can($ID, CREATE, $input)`
+            // but checking the input at display time was blocking legitiame form displays (mainly for `CommonDBRelation`).
+            // This call should not be mandatory if `$this->initForm($ID, $options)` was made in every `showForm()`
+            // method, but it is not always true, including in plugins, and we cannot refactor this in a bugfixes version.
+            // Therefore, the current call prevent introducing `Undefined array key` warning when accessing `$this->fields`.
+            // FIXME: Try to move `initForm()` call outside the `showForm()` method in a future GLPI version.
+            if ($item instanceof CommonDBTM) {
+                $item->initObjectOnCreation($_GET);
+            }
+        } elseif (!$item->can($_GET["id"], READ)) {
+            return;
         }
     }
 }
@@ -105,7 +102,7 @@ if (isset($_GET['_target'])) {
 
 Session::setActiveTab($_GET['_itemtype'], $_GET['_glpi_tab']);
 
-$notvalidoptions = ['_glpi_tab', '_itemtype', 'sort', 'order', 'withtemplate', 'formoptions'];
+$notvalidoptions = ['_glpi_tab', '_itemtype', 'sort', 'order', 'withtemplate', 'formoptions', 'header_toolbar'];
 $options         = $_GET;
 foreach ($notvalidoptions as $key) {
     if (isset($options[$key])) {
@@ -116,25 +113,6 @@ if (isset($options['locked'])) {
     ObjectLock::setReadOnlyProfile();
 }
 
-\Glpi\Debug\Profiler::getInstance()->start('CommonGLPI::displayStandardTab');
-CommonGLPI::displayStandardTab($item, $_GET['_glpi_tab'], (int)$_GET["withtemplate"], $options);
-\Glpi\Debug\Profiler::getInstance()->stop('CommonGLPI::displayStandardTab');
-
-
-if (isset($_GET['full_page_tab'])) {
-   // I think that we should display this warning, because tabs are not prepare
-   // for being used full space ...
-    if (!isset($_SESSION['glpi_warned_about_full_page_tab'])) {
-       // Debug string : not really need translation.
-        $msg  = 'WARNING: full page tabs are only for debug/validation purpose !\n';
-        $msg .= 'Actions on this page may have undefined result.';
-        echo "<script type='text/javascript' >\n";
-        echo "alert('$msg')";
-        echo "</script>";
-        $_SESSION['glpi_warned_about_full_page_tab'] = true;
-    }
-
-    Html::footer();
-} else {
-    Html::ajaxFooter();
-}
+Profiler::getInstance()->start('CommonGLPI::displayStandardTab');
+CommonGLPI::displayStandardTab($item, $_GET['_glpi_tab'], (int) $_GET["withtemplate"], $options);
+Profiler::getInstance()->stop('CommonGLPI::displayStandardTab');

@@ -1,20 +1,16 @@
-(function (global, factory) {
-    typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
-    typeof define === 'function' && define.amd ? define(factory) :
-    (global = global || self, (global.FullCalendarLocales = global.FullCalendarLocales || {}, global.FullCalendarLocales.ug = factory()));
-}(this, function () { 'use strict';
+var l72 = {
+    code: 'ug',
+    buttonText: {
+        prev: 'ئالدىنقى',
+        next: 'كېيىنكى',
+        today: 'بۈگۈن',
+        year: 'يىل',
+        month: 'ئاي',
+        week: 'ھەپتە',
+        day: 'كۈن',
+        list: 'كۈنتەرتىپ',
+    },
+    allDayText: 'پۈتۈن كۈن',
+};
 
-    var ug = {
-        code: "ug",
-        buttonText: {
-            month: "ئاي",
-            week: "ھەپتە",
-            day: "كۈن",
-            list: "كۈنتەرتىپ"
-        },
-        allDayText: "پۈتۈن كۈن"
-    };
-
-    return ug;
-
-}));
+export { l72 as default };

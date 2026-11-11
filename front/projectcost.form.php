@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,13 +33,14 @@
  * ---------------------------------------------------------------------
  */
 
+require_once(__DIR__ . '/_check_webserver_config.php');
+
+use Glpi\Event;
+use Glpi\Exception\Http\BadRequestHttpException;
+
 /**
  * @since 0.85
  */
-
-use Glpi\Event;
-
-include('../inc/includes.php');
 
 Session::checkCentralAccess();
 
@@ -65,10 +66,10 @@ if (isset($_POST["add"])) {
         );
     }
     Html::back();
-} else if (isset($_POST["purge"])) {
+} elseif (isset($_POST["purge"])) {
     $cost->check($_POST["id"], PURGE);
 
-    if ($cost->delete($_POST, 1)) {
+    if ($cost->delete($_POST, true)) {
         Event::log(
             $cost->fields['projects_id'],
             "project",
@@ -80,7 +81,7 @@ if (isset($_POST["add"])) {
     }
 
     Html::redirect(Toolbox::getItemTypeFormURL('Project') . '?id=' . $cost->fields['projects_id']);
-} else if (isset($_POST["update"])) {
+} elseif (isset($_POST["update"])) {
     $cost->check($_POST["id"], UPDATE);
 
     if ($cost->update($_POST)) {
@@ -96,4 +97,4 @@ if (isset($_POST["add"])) {
     Html::back();
 }
 
-Html::displayErrorAndDie('Lost');
+throw new BadRequestHttpException();

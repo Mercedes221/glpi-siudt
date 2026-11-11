@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -36,17 +36,18 @@
 /**
  * @since 0.84
  **/
-class HTMLTableSubHeader extends HTMLTableHeader
+class HTMLTableSubHeader extends HTMLTableHeader implements HTMLCompositeTableInterface
 {
-   // The headers of each column
-    private $header;
-    public $numberOfSubHeaders;
+    // The headers of each column
+    /** @var HTMLTableSuperHeader The headers of each column */
+    private HTMLTableSuperHeader $header;
+    public int $numberOfSubHeaders;
 
     /**
      * @param HTMLTableSuperHeader $header
      * @param string               $name
      * @param string               $content
-     * @param HTMLTableHeader      $father
+     * @param ?HTMLTableHeader     $father
      **/
     public function __construct(
         HTMLTableSuperHeader $header,
@@ -60,42 +61,41 @@ class HTMLTableSubHeader extends HTMLTableHeader
         $this->copyAttributsFrom($this->header);
     }
 
-
     public function isSuperHeader()
     {
         return false;
     }
 
-
     public function getHeaderAndSubHeaderName(&$header_name, &$subheader_name)
     {
-
         $header_name    = $this->header->getName();
         $subheader_name = $this->getName();
     }
 
-
-    public function getCompositeName()
+    #[Override]
+    public function getCompositeName(): string
     {
         return $this->header->getCompositeName() . $this->getName();
     }
-
 
     protected function getTable()
     {
         return $this->header->getTable();
     }
 
-
+    /**
+     * @return HTMLTableSuperHeader
+     */
     public function getHeader()
     {
         return $this->header;
     }
 
-
     /**
-     * @param $numberOfSubHeaders
-     **/
+     * @param int $numberOfSubHeaders
+     *
+     * @return void
+     */
     public function updateColSpan($numberOfSubHeaders)
     {
         $this->setColSpan($this->header->getColSpan() / $numberOfSubHeaders);

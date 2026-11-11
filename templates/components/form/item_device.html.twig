@@ -5,8 +5,7 @@
  #
  # http://glpi-project.org
  #
- # @copyright 2015-2025 Teclib' and contributors.
- # @copyright 2003-2014 by the INDEPNET Development Team.
+ # @copyright 2015-2026 Teclib' and contributors.
  # @licence   https://www.gnu.org/licenses/gpl-3.0.html
  #
  # ---------------------------------------------------------------------
@@ -51,21 +50,6 @@
          <div class="d-flex flex-row flex-wrap flex-xl-nowrap">
             <div class="row flex-row align-items-start flex-grow-1">
                <div class="row flex-row">
-                  <script>
-                     function showField(item) {
-                        // BC - Remove in 10.1
-                        showDisclosablePasswordField(item);
-                     }
-                     function hideField(item) {
-                        // BC - Remove in 10.1
-                        hideDisclosablePasswordField(item);
-                     }
-                     function copyToClipboard(item) {
-                        // BC - Remove in 10.1
-                        copyDisclosablePasswordFieldToClipboard(item);
-                     }
-                  </script>
-
                   {% set field_options = field_options|merge(params) %}
 
                   <input type="hidden" name={{ get_static(item, 'itemtype_1') }} value={{ item.fields[get_static(item, 'itemtype_1')] }}>
@@ -82,7 +66,7 @@
                   {% else %}
                      {{ fields.htmlField(
                         '',
-                        __('No associated item'),
+                        __('No associated item')|e,
                         __('Itemtype'),
                         field_options
                      ) }}
@@ -182,8 +166,7 @@
                      ) }}
                   {% endif %}
 
-                  {% if item.isField('states_id') %}
-                     {% set condition = item.getType() in config('state_types') ? {('is_visible_' ~ item.getType()|lower): 1} : {} %}
+                  {% if item.isField('states_id') and get_class(item) in config('state_types') %}
                      {{ fields.dropdownField(
                         'State',
                         'states_id',
@@ -191,7 +174,7 @@
                         __('Status'),
                         field_options|merge({
                            'entity': item.fields['entities_id'],
-                           'condition': condition
+                           'condition': item.getStateVisibilityCriteria()
                         })
                      ) }}
                   {% endif %}
@@ -209,7 +192,7 @@
                      ) }}
                   {% endif %}
 
-                  {% if item.isField('groups_id') %}
+                  {% if item.isField('groups_id') or item is usingtrait('Glpi\\Features\\AssignableItem') %}
                      {{ fields.dropdownField(
                         'Group',
                         'groups_id',
@@ -218,6 +201,8 @@
                         field_options|merge({
                            'entity': item.fields['entities_id'],
                            'condition': {'is_itemgroup': 1},
+                           'multiple': item is usingtrait('Glpi\\Features\\AssignableItem') ? true : false,
+                           'templateSelection': item is usingtrait('Glpi\\Features\\AssignableItem') ? 'templateGroupSelection' : null
                         })
                      ) }}
                   {% endif %}

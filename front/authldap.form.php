@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,93 +33,38 @@
  * ---------------------------------------------------------------------
  */
 
-/**
- * @var array $CFG_GLPI
- * @var array $_UPOST
- */
-global $CFG_GLPI, $_UPOST;
+require_once(__DIR__ . '/_check_webserver_config.php');
 
-include('../inc/includes.php');
-
-Session::checkRight("config", UPDATE);
+global $CFG_GLPI;
 
 $config_ldap = new AuthLDAP();
+$config_ldap->checkGlobal(UPDATE);
 
 if (!isset($_GET['id'])) {
     $_GET['id'] = "";
 }
 //LDAP Server add/update/delete
 if (isset($_POST["update"])) {
-    if (array_key_exists('rootdn_passwd', $_POST)) {
-       // Password must not be altered, it will be encrypted and never displayed, so sanitize is not necessary.
-        $_POST['rootdn_passwd'] = $_UPOST['rootdn_passwd'];
-    }
     $config_ldap->update($_POST);
     Html::back();
-} else if (isset($_POST["add"])) {
-    if (array_key_exists('rootdn_passwd', $_POST)) {
-       // Password must not be altered, it will be encrypt and never displayed, so sanitize is not necessary.
-        $_POST['rootdn_passwd'] = $_UPOST['rootdn_passwd'];
-    }
-   //If no name has been given to this configuration, then go back to the page without adding
-    if ($_POST["name"] != "") {
-        if ($newID = $config_ldap->add($_POST)) {
+} elseif (isset($_POST["add"])) {
+    if ($newID = $config_ldap->add($_POST)) {
+        if (isset($_POST["host"]) && trim($_POST["host"]) != "") {
             if (AuthLDAP::testLDAPConnection($newID)) {
-                Session::addMessageAfterRedirect(__('Test successful'));
+                Session::addMessageAfterRedirect(__s('Test successful'));
             } else {
-                Session::addMessageAfterRedirect(__('Test failed'), false, ERROR);
+                Session::addMessageAfterRedirect(__s('Test failed'), false, ERROR);
                 GLPINetwork::addErrorMessageAfterRedirect();
             }
-            Html::redirect($CFG_GLPI["root_doc"] . "/front/authldap.php?next=extauth_ldap&id=" . $newID);
         }
+        Html::redirect($CFG_GLPI["root_doc"] . "/front/authldap.php?next=extauth_ldap&id=" . $newID);
     }
     Html::back();
-} else if (isset($_POST["purge"])) {
-    $config_ldap->delete($_POST, 1);
+} elseif (isset($_POST["purge"])) {
+    $config_ldap->delete($_POST, true);
     $_SESSION['glpi_authconfig'] = 1;
     $config_ldap->redirectToList();
-} else if (isset($_POST["test_ldap"])) {
-    $config_ldap->getFromDB($_POST["id"]);
-
-    if (AuthLDAP::testLDAPConnection($_POST["id"])) {
-                                       //TRANS: %s is the description of the test
-        $_SESSION["LDAP_TEST_MESSAGE"] = sprintf(
-            __('Test successful: %s'),
-            //TRANS: %s is the name of the LDAP main server
-            sprintf(__('Main server %s'), $config_ldap->fields["name"])
-        );
-    } else {
-                                       //TRANS: %s is the description of the test
-        $_SESSION["LDAP_TEST_MESSAGE"] = sprintf(
-            __('Test failed: %s'),
-            //TRANS: %s is the name of the LDAP main server
-            sprintf(__('Main server %s'), $config_ldap->fields["name"])
-        );
-        GLPINetwork::addErrorMessageAfterRedirect();
-    }
-    Html::back();
-} else if (isset($_POST["test_ldap_replicate"])) {
-    $replicate = new AuthLdapReplicate();
-    $replicate->getFromDB($_POST["ldap_replicate_id"]);
-
-    if (AuthLDAP::testLDAPConnection($_POST["id"], $_POST["ldap_replicate_id"])) {
-                                       //TRANS: %s is the description of the test
-        $_SESSION["LDAP_TEST_MESSAGE"] = sprintf(
-            __('Test successful: %s'),
-            //TRANS: %s is the name of the LDAP replica server
-            sprintf(__('Replicate %s'), $replicate->fields["name"])
-        );
-    } else {
-                                        //TRANS: %s is the description of the test
-        $_SESSION["LDAP_TEST_MESSAGE"] = sprintf(
-            __('Test failed: %s'),
-            //TRANS: %s is the name of the LDAP replica server
-            sprintf(__('Replicate %s'), $replicate->fields["name"])
-        );
-        GLPINetwork::addErrorMessageAfterRedirect();
-    }
-    Html::back();
-} else if (isset($_POST["add_replicate"])) {
+} elseif (isset($_POST["add_replicate"])) {
     $replicate = new AuthLdapReplicate();
     unset($_POST["next"]);
     unset($_POST["id"]);
@@ -127,5 +72,5 @@ if (isset($_POST["update"])) {
     Html::back();
 }
 
-$menus = ['config', 'auth', 'ldap'];
+$menus = ['config', 'auth', 'AuthLDAP'];
 AuthLDAP::displayFullPageForItem($_GET['id'], $menus, $_GET);

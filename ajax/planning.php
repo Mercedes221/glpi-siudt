@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,44 +33,49 @@
  * ---------------------------------------------------------------------
  */
 
-use Glpi\Toolbox\Sanitizer;
+use Glpi\Exception\Http\AccessDeniedHttpException;
 
-include('../inc/includes.php');
+use function Safe\json_decode;
+use function Safe\json_encode;
 
 Session::checkCentralAccess();
 
 if (!isset($_REQUEST["action"])) {
-    exit;
+    return;
 }
 
 $extevent = new PlanningExternalEvent();
 
 if ($_REQUEST["action"] == "get_events") {
     header("Content-Type: application/json; charset=UTF-8");
+    if (isset($_REQUEST['state_done'])) {
+        $_REQUEST['state_done'] = filter_var($_REQUEST['state_done'], FILTER_VALIDATE_BOOLEAN);
+    }
     echo json_encode(Planning::constructEventsArray($_REQUEST));
-    exit;
+    return;
 }
 
 if (($_POST["action"] ?? null) == "update_event_times") {
     echo Planning::updateEventTimes($_POST);
-    exit;
+    return;
 }
 
 if (($_POST["action"] ?? null) == "view_changed") {
     Planning::viewChanged($_POST['view']);
-    exit;
+    return;
 }
 
 if (($_POST["action"] ?? null) == "clone_event") {
-    $extevent->check(-1, CREATE);
+    $extevent->checkGlobal(CREATE);
     echo Planning::cloneEvent($_POST['event']);
-    exit;
+    return;
 }
 
 if (($_POST["action"] ?? null) == "delete_event") {
-    $extevent->check(-1, DELETE);
-    echo Planning::deleteEvent($_POST['event']);
-    exit;
+    $event = $_POST['event'];
+    // rights check is done inside `Planning::deleteEvent()`, depending on the event itemtype
+    echo Planning::deleteEvent($event);
+    return;
 }
 
 if ($_REQUEST["action"] == "get_externalevent_template") {
@@ -80,13 +85,17 @@ if ($_REQUEST["action"] == "get_externalevent_template") {
         && $_POST[$key] > 0
     ) {
         $template = new PlanningExternalEventTemplate();
-        $template->getFromDB($_POST[$key]);
+        if (!$template->getFromDB((int) $_POST[$key]) || !$template->canViewItem()) {
+            throw new AccessDeniedHttpException();
+        }
 
-        $template->fields = Sanitizer::decodeHtmlSpecialCharsRecursive($template->fields);
-        $template->fields['rrule'] = json_decode($template->fields['rrule'], true);
+        // Decode rrule field only if not empty
+        if (!empty($template->fields['rrule'])) {
+            $template->fields['rrule'] = json_decode($template->fields['rrule'], true);
+        }
         header("Content-Type: application/json; charset=UTF-8");
         echo json_encode($template->fields, JSON_NUMERIC_CHECK);
-        exit;
+        return;
     }
 }
 
@@ -129,10 +138,6 @@ if ($_REQUEST["action"] == "edit_event_form") {
     Planning::editEventForm($_REQUEST);
 }
 
-if ($_REQUEST["action"] == "get_filters_form") {
-    Planning::showPlanningFilter();
-}
-
 if (($_POST["action"] ?? null) == "toggle_filter") {
     Planning::toggleFilter($_POST);
 }
@@ -144,5 +149,3 @@ if (($_POST["action"] ?? null) == "color_filter") {
 if (($_POST["action"] ?? null) == "delete_filter") {
     Planning::deleteFilter($_POST);
 }
-
-Html::ajaxFooter();

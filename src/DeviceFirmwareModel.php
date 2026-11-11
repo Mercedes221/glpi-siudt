@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -35,7 +35,7 @@
 
 class DeviceFirmwareModel extends CommonDeviceModel
 {
-    public $additional_fields_for_dictionnary = ['manufacturer'];
+    public array $additional_fields_for_dictionnary = ['manufacturer'];
 
 
     public static function getTypeName($nb = 0)

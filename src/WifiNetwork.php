@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -37,11 +37,11 @@
 /// since version 0.84
 class WifiNetwork extends CommonDropdown
 {
-    public $dohistory          = true;
+    public bool $dohistory          = true;
 
-    public static $rightname          = 'internet';
+    public static string $rightname          = 'internet';
 
-    public $can_be_translated  = false;
+    public bool $can_be_translated  = false;
 
 
     public static function getTypeName($nb = 0)
@@ -49,44 +49,63 @@ class WifiNetwork extends CommonDropdown
         return _n('Wifi network', 'Wifi networks', $nb);
     }
 
+    /**
+     * @return array<string,string>
+     */
     public static function getWifiCardVersion()
     {
         return [
             ''          => '',
             'a'         => 'a',
             'b'         => 'b',
+            'g'         => 'g',
+            'n'         => 'n',
             'a/b'       => 'a/b',
             'a/b/g'     => 'a/b/g',
             'a/b/g/n'   => 'a/b/g/n',
             'a/b/g/n/y' => 'a/b/g/n/y',
+            'b/g/n'     => 'b/g/n',
+            'g/n'       => 'g/n',
             'ac'        => 'ac', // Wifi 5
+            'ad'        => 'ad',
+            'af'        => 'af',
+            'ah'        => 'ah',
             'ax'        => 'ax', // Wifi 6/6E
+            'y'         => 'y', // 802.11a on 3,7 GHz - United States only
             'be'        => 'be', // Wifi 7
+            'bn'        => 'bn', // Wifi 8
         ];
     }
 
 
+    /**
+     * @return array<string,string>
+     */
     public static function getWifiCardModes()
     {
 
-        return [''          => Dropdown::EMPTY_VALUE,
-            'ad-hoc'    => __('Ad-hoc'),
-            'managed'   => __('Managed'),
-            'master'    => __('Master'),
-            'repeater'  => __('Repeater'),
-            'secondary' => __('Secondary'),
-            'monitor'   => Monitor::getTypeName(1),
-            'auto'      => __('Automatic')
+        return [
+            ''          => Dropdown::EMPTY_VALUE,
+            'ad-hoc'    => _x('wifi_card_mode', 'Ad-hoc'),
+            'managed'   => _x('wifi_card_mode', 'Managed'),
+            'master'    => _x('wifi_card_mode', 'Master'),
+            'repeater'  => _x('wifi_card_mode', 'Repeater'),
+            'secondary' => _x('wifi_card_mode', 'Secondary'),
+            'monitor'   => _x('wifi_card_mode', 'Monitor'),
+            'auto'      => _x('wifi_card_mode', 'Automatic'),
         ];
     }
 
 
+    /**
+     * @return array<string,string>
+     */
     public static function getWifiNetworkModes()
     {
 
         return [''               => Dropdown::EMPTY_VALUE,
             'infrastructure' => __('Infrastructure (with access point)'),
-            'ad-hoc'         => __('Ad-hoc (without access point)')
+            'ad-hoc'         => __('Ad-hoc (without access point)'),
         ];
     }
 
@@ -96,7 +115,7 @@ class WifiNetwork extends CommonDropdown
 
         $ong  = [];
         $this->addDefaultFormTab($ong);
-        $this->addStandardTab('NetworkPort', $ong, $options);
+        $this->addStandardTab(NetworkPort::class, $ong, $options);
 
         return $ong;
     }
@@ -108,13 +127,13 @@ class WifiNetwork extends CommonDropdown
         return [['name'  => 'essid',
             'label' => __('ESSID'),
             'type'  => 'text',
-            'list'  => true
+            'list'  => true,
         ],
             ['name'  => 'mode',
                 'label' => __('Wifi network type'),
                 'type'  => 'wifi_mode',
-                'list'  => true
-            ]
+                'list'  => true,
+            ],
         ];
     }
 
@@ -152,6 +171,6 @@ class WifiNetwork extends CommonDropdown
 
     public static function getIcon()
     {
-        return "fas fa-wifi";
+        return "ti ti-wifi";
     }
 }

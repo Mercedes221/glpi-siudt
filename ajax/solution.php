@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,72 +33,60 @@
  * ---------------------------------------------------------------------
  */
 
-use Glpi\Http\Response;
+use Glpi\Exception\Http\AccessDeniedHttpException;
+use Glpi\Exception\Http\BadRequestHttpException;
 use Glpi\RichText\RichText;
 
-$AJAX_INCLUDE = 1;
+use function Safe\json_encode;
 
-include('../inc/includes.php');
 header("Content-Type: application/json; charset=UTF-8");
 Html::header_nocache();
-
-Session::checkLoginUser();
 
 // Mandatory parameter: solutiontemplates_id
 $solutiontemplates_id = $_POST['solutiontemplates_id'] ?? null;
 if ($solutiontemplates_id === null) {
-    Response::sendError(400, "Missing or invalid parameter: 'solutiontemplates_id'");
-} else if ($solutiontemplates_id == 0) {
-   // Reset form
+    throw new BadRequestHttpException("Missing or invalid parameter: 'solutiontemplates_id'");
+} elseif ($solutiontemplates_id == 0) {
+    // Reset form
     echo json_encode([
-        'content' => ""
+        'content' => "",
     ]);
-    die;
+    return;
 }
 
-// We can't render the twig template at this state for some cases (e.g. massive
-// actions: we don't have one but multiple items so it net possible to parse the
-// values yet).
-$apply_twig = true;
-
-// Mandatory parameter: items_id
 $parents_id = $_POST['items_id'] ?? 0;
-if ($parents_id == 0) {
-    $apply_twig  = false;
-}
-
-// Mandatory parameter: itemtype
 $parents_itemtype = $_POST['itemtype'] ?? '';
-if (empty($parents_itemtype) || !is_subclass_of($parents_itemtype, CommonITILObject::class)) {
-    $apply_twig  = false;
-}
 
 // Load solution template
 $template = new SolutionTemplate();
 if (!$template->getFromDB($solutiontemplates_id)) {
-    Response::sendError(400, "Unable to load template: $solutiontemplates_id");
+    throw new BadRequestHttpException("Unable to load template: $solutiontemplates_id");
 }
 
-if ($apply_twig) {
-   // Load parent item
+if ($parents_id > 0 && !empty($parents_itemtype) && is_a($parents_itemtype, CommonITILObject::class, true)) {
+    // Load parent item
     $parent = new $parents_itemtype();
     if (!$parent->getFromDB($parents_id)) {
-        Response::sendError(400, "Unable to load parent item: $parents_itemtype $parents_id");
+        throw new BadRequestHttpException("Unable to load parent item: $parents_itemtype $parents_id");
+    }
+    if (!$parent->can($parents_id, READ)) {
+        throw new AccessDeniedHttpException();
     }
 
-   // Render template content using twig
+    // Render template content using twig
     $template->fields['content'] = $template->getRenderedContent($parent);
 } else {
-    $content = $template->fields['content'];
-    if (DropdownTranslation::isDropdownTranslationActive()) {
-        $content = DropdownTranslation::getTranslatedValue(
-            $template->getID(),
-            $template->getType(),
-            'content',
-            $_SESSION['glpilanguage'],
-            $content
-        );
-    }
+    // We can't render the twig template at this state for some cases (e.g. massive
+    // actions: we don't have one but multiple items so it net possible to parse the
+    // values yet).
+
+    $content = DropdownTranslation::getTranslatedValue(
+        $template->getID(),
+        $template::class,
+        'content',
+        $_SESSION['glpilanguage'],
+        $template->fields['content']
+    );
     $template->fields['content'] = RichText::getSafeHtml($content);
 }
 
@@ -108,7 +96,7 @@ if ($apply_twig) {
 $template->fields['solutiontypes_name'] = "";
 if ($template->fields['solutiontypes_id']) {
     $entityRestrict = getEntitiesRestrictCriteria(
-        getTableForItemType(SolutionType::getType()),
+        getTableForItemType(SolutionType::class),
         "",
         $parent->fields['entities_id'] ?? 0,
         true
@@ -121,9 +109,9 @@ if ($template->fields['solutiontypes_id']) {
         ] + $entityRestrict)
     ) {
         $template->fields['solutiontypes_name'] = Dropdown::getDropdownName(
-            getTableForItemType(SolutionType::getType()),
+            getTableForItemType(SolutionType::class),
             $template->fields['solutiontypes_id'],
-            0,
+            false,
             true,
             false,
             //default value like "(id)" is the default behavior of GLPI when field 'name' is empty

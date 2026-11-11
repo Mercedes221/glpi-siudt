@@ -7,8 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
- * @copyright 2003-2014 by the INDEPNET Development Team.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
  * ---------------------------------------------------------------------
@@ -33,27 +32,41 @@
  * ---------------------------------------------------------------------
  */
 
-/**
- * @var \DBmysql $DB
- * @var \Migration $migration
- */
 
- // Add user_dn_hash field
+/**
+ * @var DBmysql $DB
+ * @var Migration $migration
+ */
+// Add user_dn_hash field
 $migration->addField('glpi_users', 'user_dn_hash', 'varchar(32)', [
     'after'  => 'user_dn',
 ]);
 
-$migration->addPostQuery($DB->buildUpdate(
-    'glpi_users',
+
+$users_iterator = $DB->request(
     [
-        'user_dn_hash' => new \QueryExpression('MD5(`user_dn`)'),
-    ],
-    [
-        'NOT' => [
-            'user_dn' => null
-        ]
+        'SELECT' => ['id', 'user_dn'],
+        'FROM'   => 'glpi_users',
+        'WHERE'  => [
+            'NOT' => [
+                'user_dn' => null,
+            ],
+        ],
     ]
-));
+);
+foreach ($users_iterator as $user_data) {
+    $migration->addPostQuery(
+        $DB->buildUpdate(
+            'glpi_users',
+            [
+                'user_dn_hash' => md5($user_data['user_dn']),
+            ],
+            [
+                'id' => $user_data['id'],
+            ]
+        )
+    );
+}
 
 // Add user_dn_hash index
 $migration->addKey('glpi_users', 'user_dn_hash');

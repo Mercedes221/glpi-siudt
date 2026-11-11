@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -34,80 +34,116 @@
  */
 
 use Glpi\Application\View\TemplateRenderer;
+use Glpi\Debug\Profiler;
+use Glpi\Exception\Http\AccessDeniedHttpException;
+use Glpi\Exception\Http\NotFoundHttpException;
+use Glpi\Exception\RedirectException;
+use Glpi\Kernel\Kernel;
 use Glpi\Plugin\Hooks;
-use Glpi\Toolbox\Sanitizer;
+use Glpi\Search\CriteriaFilter;
+use Glpi\Search\FilterableInterface;
+use Glpi\Security\ReAuth\ReAuthManager;
+
+use function Safe\parse_url;
 
 /**
- *  Common GLPI object
- **/
+ * Common GLPI object
+ *
+ * @phpstan-type GlpiMenuOption array{
+ *   title: string,
+ *   page: string,
+ *   icon?: string,
+ *   links?: array{
+ *     search: string,
+ *     add?: string,
+ *     template?: string,
+ *   }
+ * }
+ *
+ * @phpstan-type GlpiMenuEntry array{
+ *   title: string,
+ *   page: string,
+ *   shortcut?: string,
+ *   icon?: string,
+ *   links?: array{
+ *     search?: string,
+ *     add?: string,
+ *     template?: string,
+ *     lists?: '',
+ *     lists_itemtype?: class-string<CommonDBTM>
+ *   },
+ *   options?: array<string, GlpiMenuOption>
+ * }
+ */
 class CommonGLPI implements CommonGLPIInterface
 {
     /**
      * Show the title of the item in the navigation header ?
+     *
      */
-    protected static $showTitleInNavigationHeader = false;
+    protected static bool $showTitleInNavigationHeader = false;
 
-   /**
-    * GLPI Item type cache : set dynamically calling getType
-    *
-    * @var integer
-    */
-    protected $type                 = -1;
-
-   /**
-    * Display list on Navigation Header
-    *
-    * @var boolean
-    */
-    protected $displaylist          = true;
+    /**
+     * Display list on Navigation Header
+     *
+     */
+    protected bool $displaylist          = true;
 
     /**
      * Show Debug
      *
-     * @var boolean
      */
-    public $showdebug               = false;
+    public bool $showdebug               = false;
 
     /**
      * Tab orientation : horizontal or vertical.
      *
-     * @var string
+     * @var self::TAB_HORIZONTAL|self::TAB_VERTICAL
      */
-    public $taborientation          = 'horizontal';
+    public string $taborientation          = self::TAB_HORIZONTAL;
 
     /**
      * Rightname used to check rights to do actions on item.
      *
-     * @var string
      */
-    public static $rightname = '';
+    public static string $rightname = '';
 
     /**
      * Need to get item to show tab
      *
-     * @var boolean
      */
-    public $get_item_to_display_tab = false;
-    protected static $othertabs     = [];
+    public bool $get_item_to_display_tab = false;
 
-
-    public function __construct()
-    {
-    }
+    public const TAB_HORIZONTAL = 'horizontal';
+    public const TAB_VERTICAL   = 'vertical';
 
     /**
-     * Return the localized name of the current Type
-     * Should be overloaded in each new class
+     * List of tabs to add (registered by `self::registerStandardTab()`).
+     * Array structure looks like:
+     *  [
+     *      "Computer" => [ // item on which the tab will be added
+     *          "PluginAwesomeItem" // item that will provide the tab
+     *              => 100, // weight value used when sorting tabs
+     *      ]
+     *  ]
      *
-     * @param integer $nb Number of items
+     * @var array<class-string<CommonGLPI>, array<class-string<CommonGLPI>, int>>
+     */
+    private static array $othertabs = [];
+
+    public function __construct() {}
+
+    /**
+     * Return the localized name of the current item type.
+     *
+     * @param int   $nb Number of items
      *
      * @return string
-     **/
+     */
     public static function getTypeName($nb = 0)
     {
         return __('General');
     }
-
 
     /**
      * Return the simplified localized label of the current Type in the context of a form.
@@ -116,63 +152,125 @@ class CommonGLPI implements CommonGLPIInterface
      * Should be overloaded in each new class
      *
      * @return string
-     **/
+     */
     public static function getFieldLabel()
     {
         return static::getTypeName();
     }
 
-
     /**
-     * Return the type of the object : class name
+     * Return the type of the object, i.e. its class name.
      *
      * @return string
-     **/
+     *
+     * @final
+     */
     public static function getType()
     {
-        return get_called_class();
+        return static::class;
     }
 
     /**
-     * Check rights on CommonGLPI Object (without corresponding table)
-     * Same signature as CommonDBTM::can but in case of this class, we don't check instance rights
-     * so, id and input parameters are unused.
-     *
-     * @param integer $ID    ID of the item (-1 if new item)
-     * @param mixed   $right Right to check : r / w / recursive / READ / UPDATE / DELETE
-     * @param array   $input array of input data (used for adding item) (default NULL)
-     *
-     * @return boolean
-     **/
-    public function can($ID, $right, ?array &$input = null)
+     * @throws RedirectException
+     */
+    final public static function redirectToReauthPrompt(): never
     {
-        switch ($right) {
-            case READ:
-                return static::canView();
+        (ReAuthManager::getInstance())->redirectToReauth();
+    }
 
-            case UPDATE:
-                return static::canUpdate();
-
-            case DELETE:
-                return static::canDelete();
-
-            case PURGE:
-                return static::canPurge();
-
-            case CREATE:
-                return static::canCreate();
-        }
+    /**
+     * Override this method to return true in itemtypes that need re-authentication
+     */
+    protected static function itemTypeRequiresReauthentication(): bool
+    {
         return false;
     }
 
+    /**
+     * Should the user reauthenticate ?
+     *
+     * Depends on
+     * - context : always false on api & cli contexts
+     * - itemtype : may require it ( static::itemTypeRequiresReauthentication() )
+     * - user has a valid reauthentication (ReAuthManager::getInstance())->isReAuthenticated()
+     */
+    final public static function isUserReauthenticationNeeded(): bool
+    {
+        // Itemtype doesn't need re-authentication
+        if (!static::itemTypeRequiresReauthentication()) {
+            return false;
+        }
+
+        // reauthentication only for http requests
+        if (isAPI() || isCommandLine()) {
+            return false;
+        }
+
+        // Check that user is re-authenticated if it's required for this itemtype @see \CommonGLPI::isReautenticationNeeded()
+        return !(ReAuthManager::getInstance())->isReAuthenticated();
+    }
 
     /**
-     * Have I the global right to "create" the Object
-     * May be overloaded if needed (ex KnowbaseItem)
+     * Redirect to reauth prompt ff user is not reauthenticated and the current itemtype requires reauth.
      *
-     * @return boolean
-     **/
-    public static function canCreate()
+     * @throws RedirectException
+     */
+    final public static function checkReAuthenticationOrRedirect(): true
+    {
+        if (static::itemTypeRequiresReauthentication()) {
+            (ReAuthManager::getInstance())->checkReAuthenticationOrRedirect();
+        }
+
+        return true;
+    }
+
+    /**
+     * Check right on an item.
+     *
+     * Parameter $reauth_needed passed by ref : value changes depending on reauthentication is needed
+     *
+     * @param int                  $ID            ID of the item (-1 if new item)
+     * @param int                  $right         Right to check : READ / UPDATE / DELETE / PURGE / CREATE / ...
+     * @param ?array<string,mixed> $input         array of input data (used for adding item)
+     * @param null                 $reauth_needed param is used as a return value (modified by reference) to know if reauth is needed
+     *
+     * @param-out bool $reauth_needed On true, it tells that soly a reauth is needed to perform action. On false, ignore it.
+     *
+     */
+    public function can($ID, int $right, ?array &$input = null, null &$reauth_needed = null): bool
+    {
+        $_reauth_needed = static::isUserReauthenticationNeeded();
+
+        $allowed = match ($right) {
+            READ => static::canView(),
+            UPDATE => static::canUpdate(),
+            DELETE => static::canDelete(),
+            PURGE => static::canPurge(),
+            CREATE => static::canCreate(),
+            default => false,
+        };
+
+        // allowed
+        if ($allowed) {
+            // but need reauth
+            if ($_reauth_needed) {
+                $reauth_needed = true;
+                return false;
+            }
+
+            $reauth_needed = false;
+            return true;
+        }
+
+        // not allowed
+        $reauth_needed = false;
+        return false;
+    }
+
+    /**
+     * Check the global "creation" right on the itemtype.
+     */
+    public static function canCreate(): bool
     {
         if (static::$rightname) {
             return Session::haveRight(static::$rightname, CREATE);
@@ -180,17 +278,12 @@ class CommonGLPI implements CommonGLPIInterface
         return false;
     }
 
-
     /**
-     * Have I the global right to "view" the Object
+     * Check the global "view" right on the itemtype.
      *
-     * Default is true and check entity if the objet is entity assign
-     *
-     * May be overloaded if needed
-     *
-     * @return boolean
-     **/
-    public static function canView()
+     * @return bool
+     */
+    public static function canView(): bool
     {
         if (static::$rightname) {
             return Session::haveRight(static::$rightname, READ);
@@ -198,16 +291,10 @@ class CommonGLPI implements CommonGLPIInterface
         return false;
     }
 
-
     /**
-     * Have I the global right to "update" the Object
-     *
-     * Default is calling canCreate
-     * May be overloaded if needed
-     *
-     * @return boolean
-     **/
-    public static function canUpdate()
+     * Check the global "update" right on the itemtype.
+     */
+    public static function canUpdate(): bool
     {
         if (static::$rightname) {
             return Session::haveRight(static::$rightname, UPDATE);
@@ -215,15 +302,10 @@ class CommonGLPI implements CommonGLPIInterface
         return false;
     }
 
-
     /**
-     * Have I the global right to "delete" the Object
-     *
-     * May be overloaded if needed
-     *
-     * @return boolean
-     **/
-    public static function canDelete()
+     * Check the global "delete" right on the itemtype.
+     */
+    public static function canDelete(): bool
     {
         if (static::$rightname) {
             return Session::haveRight(static::$rightname, DELETE);
@@ -231,15 +313,10 @@ class CommonGLPI implements CommonGLPIInterface
         return false;
     }
 
-
     /**
-     * Have I the global right to "purge" the Object
-     *
-     * May be overloaded if needed
-     *
-     * @return boolean
-     **/
-    public static function canPurge()
+     * Check the global "purge" right on the itemtype.
+     */
+    public static function canPurge(): bool
     {
         if (static::$rightname) {
             return Session::haveRight(static::$rightname, PURGE);
@@ -247,58 +324,60 @@ class CommonGLPI implements CommonGLPIInterface
         return false;
     }
 
-
     /**
      * Register tab on an objet
      *
      * @since 0.83
      *
-     * @param string $typeform object class name to add tab on form
-     * @param string $typetab  object class name which manage the tab
+     * @param class-string<CommonGLPI>  $typeform  object class name to add tab on form
+     * @param class-string<CommonGLPI>  $typetab   object class name which manage the tab
+     * @param int                       $order     Weight value used when sorting tabs.
+     *                                             Lower values will be displayed before higher values.
      *
      * @return void
-     **/
-    public static function registerStandardTab($typeform, $typetab)
+     *
+     * @final
+     */
+    public static function registerStandardTab($typeform, $typetab, int $order = 500)
     {
-
         if (isset(self::$othertabs[$typeform])) {
-            self::$othertabs[$typeform][] = $typetab;
+            self::$othertabs[$typeform][$typetab] = $order;
         } else {
-            self::$othertabs[$typeform] = [$typetab];
+            self::$othertabs[$typeform] = [$typetab => $order];
         }
     }
 
-
     /**
-     * Get the array of Tab managed by other types
-     * Getter for plugin (ex PDF) to access protected property
+     * Get the array of Tab managed by other types.
      *
      * @since 0.83
      *
-     * @param string $typeform object class name to add tab on form
+     * @param class-string<CommonGLPI>  $typeform   object class name on which we want to get managed tabs
      *
-     * @return array array of types
-     **/
+     * @return class-string<CommonGLPI>[]
+     *
+     * @final
+     */
     public static function getOtherTabs($typeform)
     {
-
         if (isset(self::$othertabs[$typeform])) {
-            return self::$othertabs[$typeform];
+            $othertabs = self::$othertabs[$typeform];
+            asort($othertabs);
+            return array_keys($othertabs);
         }
         return [];
     }
 
-
     /**
-     * Define tabs to display
+     * Define tabs to display.
      *
-     * NB : Only called for existing object
-     *
-     * @param array $options Options
+     * @param array{withtemplate?: int} $options Options
      *     - withtemplate is a template view ?
      *
-     * @return array array containing the tabs
-     **/
+     * @return array<string, string|bool> Array where keys are tabs identifier (e.g. `Ticket$main`)
+     *                                    and values are the HTML snippet corresponding to the tab name,
+     *                                    or key is `no_all_tab` and value is a boolean.
+     */
     public function defineTabs($options = [])
     {
 
@@ -306,69 +385,57 @@ class CommonGLPI implements CommonGLPIInterface
         $this->addDefaultFormTab($ong);
         $this->addImpactTab($ong, $options);
 
+        if ($this instanceof FilterableInterface) {
+            $this->addStandardTab(CriteriaFilter::class, $ong, $options);
+        }
+
         return $ong;
     }
 
-
     /**
-     * return all the tabs for current object
+     * Return all the tabs for the current object.
      *
-     * @since 0.83
-     *
-     * @param array $options Options
+     * @param array{withtemplate?: int} $options Options
      *     - withtemplate is a template view ?
      *
-     * @return array array containing the tabs
-     **/
+     * @return array<string, string|bool> Array where keys are tabs identifier (e.g. `Ticket$main`)
+     *                                    and values are the HTML snippet corresponding to the tab name,
+     *                                    or key is `no_all_tab` and value is a boolean.
+     */
     final public function defineAllTabs($options = [])
     {
-        /** @var array $CFG_GLPI */
-        global $CFG_GLPI;
-
         $onglets = [];
-       // Tabs known by the object
-        if ($this->isNewItem()) {
+        // Tabs known by the object
+        if ($this->isNewItem() || (isset($options['withtemplate']) && $options['withtemplate'] == 2)) {
             $this->addDefaultFormTab($onglets);
         } else {
             $onglets = $this->defineTabs($options);
         }
 
-       // Object with class with 'addtabon' attribute
-        if (
-            isset(self::$othertabs[$this->getType()])
-            && !$this->isNewItem()
-        ) {
-            foreach (self::$othertabs[$this->getType()] as $typetab) {
+        // Object with class with 'addtabon' attribute
+        if (!$this->isNewItem()) {
+            $othertabs = self::getOtherTabs(static::class);
+            foreach ($othertabs as $typetab) {
                 $this->addStandardTab($typetab, $onglets, $options);
             }
         }
 
-        $class = $this->getType();
-        if (
-            ($_SESSION['glpi_use_mode'] == Session::DEBUG_MODE)
-            && (!$this->isNewItem() || $this->showdebug)
-            && (method_exists($class, 'showDebug')
-              || Infocom::canApplyOn($class)
-              || in_array($class, $CFG_GLPI["reservation_types"]))
-        ) {
-            $onglets[-2] = __('Debug');
-        }
         return $onglets;
     }
 
-
     /**
-     * Add standard define tab
+     * Add a standard tab.
      *
-     * @param string $itemtype itemtype link to the tab
-     * @param array  $ong      defined tabs
-     * @param array  $options  options (for withtemplate)
+     * @param class-string<CommonGLPI>   $itemtype itemtype link to the tab
+     * @param array<string, string|bool> $ong      defined tabs (see `defineTabs()` return value)
+     * @param array{withtemplate?: int}  $options  options (for withtemplate)
      *
-     * @return CommonGLPI
-     **/
+     * @return static
+     *
+     * @final
+     */
     public function addStandardTab($itemtype, array &$ong, array $options)
     {
-
         $withtemplate = 0;
         if (isset($options['withtemplate'])) {
             $withtemplate = $options['withtemplate'];
@@ -397,56 +464,57 @@ class CommonGLPI implements CommonGLPIInterface
     }
 
     /**
-     * Add the impact tab if enabled for this item type
+     * Add the impact tab if enabled for this item type.
      *
-     * @param array  $ong      defined tabs
-     * @param array  $options  options (for withtemplate)
+     * @param array<string, string|bool> $ong        defined tabs (see `defineTabs()` return value)
+     * @param array{withtemplate?: int}  $options    options (for withtemplate)
      *
-     * @return CommonGLPI
-     **/
+     * @return static
+     *
+     * @final
+     */
     public function addImpactTab(array &$ong, array $options)
     {
-        /** @var array $CFG_GLPI */
-        global $CFG_GLPI;
-
-       // Check if impact analysis is enabled for this item type
+        // Check if impact analysis is enabled for this item type
         if (Impact::isEnabled(static::class)) {
-            $this->addStandardTab('Impact', $ong, $options);
+            $this->addStandardTab(Impact::class, $ong, $options);
         }
 
         return $this;
     }
 
     /**
-     * Add default tab for form
+     * Add the default tab for form.
      *
      * @since 0.85
      *
-     * @param array $ong Tabs
+     * @param array<string, string> $ong    defined tabs (see `defineTabs()` return value)
      *
-     * @return CommonGLPI
-     **/
+     * @return static
+     */
     public function addDefaultFormTab(array &$ong)
     {
-
-        $ong[$this->getType() . '$main'] = $this->getTypeName(1);
+        $icon = '';
+        if (method_exists(static::class, 'getIcon')) {
+            $icon = static::getIcon();
+        }
+        $icon = $icon ? "<i class='" . htmlescape($icon) . " me-2' aria-hidden='true'></i>" : '';
+        $ong[static::class . '$main'] = '<span>' . $icon . htmlescape(static::getTypeName(1)) . '</span>';
         return $this;
     }
 
-
     /**
-     * get menu content
+     * Get the menu specs.
      *
      * @since 0.85
      *
-     * @return false|array array for menu
-     **/
+     * @return false|GlpiMenuEntry|array<string, GlpiMenuEntry|true>
+     */
     public static function getMenuContent()
     {
-
         $menu       = [];
 
-        $type       = static::getType();
+        $type       = static::class;
         $item       = new static();
         $forbidden  = $item->getForbiddenActionsForMenu();
 
@@ -457,7 +525,7 @@ class CommonGLPI implements CommonGLPIInterface
                 $menu['page']            = $item->getSearchURL(false);
                 $menu['links']['search'] = $item->getSearchURL(false);
                 $menu['links']['lists']  = "";
-                $menu['lists_itemtype']  = $item->getType();
+                $menu['lists_itemtype']  = $item::class;
                 $menu['icon']            = $item->getIcon();
 
                 if (
@@ -465,11 +533,11 @@ class CommonGLPI implements CommonGLPIInterface
                     && $item->canCreate()
                 ) {
                     if ($item->maybeTemplate()) {
-                        $menu['links']['add'] = '/front/setup.templates.php?' . 'itemtype=' . $type .
-                                          '&add=1';
+                        $menu['links']['add'] = '/front/setup.templates.php?' . 'itemtype=' . rawurlencode($type)
+                                          . '&add=1';
                         if (!in_array('template', $forbidden)) {
-                              $menu['links']['template'] = '/front/setup.templates.php?' . 'itemtype=' . $type .
-                                                  '&add=0';
+                            $menu['links']['template'] = '/front/setup.templates.php?' . 'itemtype=' . rawurlencode($type)
+                                                . '&add=0';
                         }
                     } else {
                         $menu['links']['add'] = $item->getFormURL(false);
@@ -502,7 +570,7 @@ class CommonGLPI implements CommonGLPIInterface
             $newmenu = [
                 strtolower($type) => $menu,
             ];
-           // Force overwrite existing menu
+            // Force overwrite existing menu
             foreach ($data as $key => $val) {
                 $newmenu[$key] = $val;
             }
@@ -516,135 +584,165 @@ class CommonGLPI implements CommonGLPIInterface
         return false;
     }
 
-
     /**
-     * get additional menu content
+     * Get additional menu specs.
      *
      * @since 0.85
      *
-     * @return false|array array for menu
-     **/
+     * @return false|array<string, GlpiMenuEntry>  Additional menu specs, or false if no additional menu content.
+     */
     public static function getAdditionalMenuContent()
     {
         return false;
     }
 
-
     /**
-     * Get forbidden actions for menu : may be add / template
+     * Get forbidden actions for menu : may be add / template.
      *
      * @since 0.85
      *
-     * @return array array of forbidden actions
-     **/
+     * @return list<'add'|'template'>
+     */
     public static function getForbiddenActionsForMenu()
     {
         return [];
     }
 
-
     /**
-     * Get additional menu options
+     * Get additional menu options.
      *
      * @since 0.85
      *
-     * @return array|false array of additional options, false if no options
-     **/
+     * @return false|array<string, GlpiMenuOption>  Additional menu options, or false if no additional options.
+     */
     public static function getAdditionalMenuOptions()
     {
         return false;
     }
 
-
     /**
-     * Get additional menu links
+     * Get additional menu links.
      *
      * @since 0.85
      *
-     * @return false|array
+     * @return false|array<string, string>  Additional menu links, or false if no additional links.
      **/
     public static function getAdditionalMenuLinks()
     {
         return false;
     }
 
-
     /**
-     * Get menu shortcut
+     * Get menu shortcut char.
      *
      * @since 0.85
      *
-     * @return string character menu shortcut key
-     **/
+     * @return string
+     */
     public static function getMenuShorcut()
     {
         return '';
     }
 
-
     /**
-     * Get menu name
+     * Get menu name.
      *
      * @since 0.85
      *
      * @return string character menu shortcut key
-     **/
+     */
     public static function getMenuName()
     {
         return static::getTypeName(Session::getPluralNumber());
     }
 
-
     /**
-     * Get Tab Name used for itemtype
-     *
-     * NB : Only called for existing object
-     *      Must check right on what will be displayed + template
+     * Get tab name (or array of tabs names) for the given item.
      *
      * @since 0.83
      *
-     * @param CommonGLPI $item         Item on which the tab need to be displayed
-     * @param integer    $withtemplate is a template object ? (default 0)
+     * @param CommonGLPI $item          Item on which the tab need to be displayed
+     * @param int    $withtemplate  is a template object ?
      *
-     *  @return string|array tab name
-     **/
+     *  @return string|string[] The tab(s) name(s).
+     *      Must be:
+     *          a string if there is a single tab;
+     *          an array of string if there are multiple tabs;
+     *          an empty string if there is no tabs.
+     */
     public function getTabNameForItem(CommonGLPI $item, $withtemplate = 0)
     {
         return '';
     }
 
+    /**
+     * Get the sector/item/option definition.
+     *
+     * @return array{0?: string, 1?: class-string, 2?: class-string}
+     *      An array containing optionaly:
+     *          the sector as first element;
+     *          the itemtype as second element;
+     *          the option (sub itemtype) as third element.
+     */
+    public static function getSectorizedDetails(): array
+    {
+        return [];
+    }
 
     /**
-     * show Tab content
+     * Get the parameters to be used in the `Html::header()` method.
+     *
+     * @return array{0: string, 1: '', 2?: string, 3?: class-string, 4?: class-string}
+     *      An array containing optionaly:
+     *          the page title as first element;
+     *          an unused string as second element;
+     *          the sector as third element;
+     *          the itemtype as fourth element;
+     *          the option (sub itemtype) as fifth element.
+     */
+    public static function getHeaderParameters(): array
+    {
+        return [
+            static::getTypeName(Session::getPluralNumber()),
+            '',
+            ...static::getSectorizedDetails(),
+        ];
+    }
+
+    /**
+     * Show the content of the tab having given index.
      *
      * @since 0.83
      *
-     * @param CommonGLPI $item         Item on which the tab need to be displayed
-     * @param integer    $tabnum       tab number (default 1)
-     * @param integer    $withtemplate is a template object ? (default 0)
+     * @param CommonGLPI    $item           Item on which the tab need to be displayed
+     * @param int           $tabnum         The tab index
+     * @param int           $withtemplate   Is a template object ?
      *
-     * @return boolean
-     **/
+     * @return bool
+     *
+     * @TODO Do something with the return value that is currently not used.
+     */
     public static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0)
     {
         return false;
     }
 
-
     /**
-     * display standard tab contents
+     * Display standard tab contents.
      *
-     * @param CommonGLPI $item         Item on which the tab need to be displayed
-     * @param string     $tab          tab name
-     * @param integer    $withtemplate is a template object ? (default 0)
-     * @param array      $options      additional options to pass
+     * @param CommonGLPI          $item          Item on which the tab need to be displayed
+     * @param string|int<-1,-1>   $tab           Tab identifier (see `defineTabs()` return value)
+     * @param int                 $withtemplate  Is a template object ? (default 0)
+     * @param array<string,mixed> $options       Additional options to pass
      *
-     * @return boolean true
-     **/
+     * @return bool
+     *
+     * @TODO Do something with the return value that is currently not used.
+     */
     public static function displayStandardTab(CommonGLPI $item, $tab, $withtemplate = 0, $options = [])
     {
         switch ($tab) {
-           // All tab
+            // All tab
             case -1:
                 // get tabs and loop over
                 $ong = $item->defineAllTabs(['withtemplate' => $withtemplate]);
@@ -652,15 +750,11 @@ class CommonGLPI implements CommonGLPIInterface
                 if (count($ong)) {
                     foreach ($ong as $key => $val) {
                         if ($key != 'empty') {
-                            echo "<div class='alltab'>$val</div>";
+                            echo "<div class='alltab'>" . $val . "</div>"; // $val is expected to be a safe HTML string
                             self::displayStandardTab($item, $key, $withtemplate, $options);
                         }
                     }
                 }
-                return true;
-
-            case -2:
-                $item->showDebugInfo();
                 return true;
 
             default:
@@ -683,16 +777,13 @@ class CommonGLPI implements CommonGLPIInterface
                     return $ret;
                 }
 
-                if (
-                    !is_integer($itemtype) && ($itemtype != 'empty')
-                    && ($obj = getItemForItemtype($itemtype))
-                ) {
+                if ($obj = getItemForItemtype($itemtype)) {
                     $options['tabnum'] = $tabnum;
                     $options['itemtype'] = $itemtype;
                     Plugin::doHook(Hooks::PRE_SHOW_TAB, [ 'item' => $item, 'options' => &$options]);
-                    \Glpi\Debug\Profiler::getInstance()->start(get_class($obj) . '::displayTabContentForItem');
-                    $ret = $obj->displayTabContentForItem($item, $tabnum, $withtemplate);
-                    \Glpi\Debug\Profiler::getInstance()->stop(get_class($obj) . '::displayTabContentForItem');
+                    Profiler::getInstance()->start(get_class($obj) . '::displayTabContentForItem');
+                    $ret = $obj->displayTabContentForItem($item, (int) $tabnum, $withtemplate);
+                    Profiler::getInstance()->stop(get_class($obj) . '::displayTabContentForItem');
 
                     Plugin::doHook(Hooks::POST_SHOW_TAB, ['item' => $item, 'options' => $options]);
                     return $ret;
@@ -702,155 +793,213 @@ class CommonGLPI implements CommonGLPIInterface
         return false;
     }
 
-
     /**
-     * create tab text entry
-     *
-     * @param string  $text text to display
-     * @param integer $nb   number of items (default 0)
-     *
-     *  @return string
-     **/
-    public static function createTabEntry($text, $nb = 0)
+     * @param class-string<CommonGLPI>|null $form_itemtype
+     * @return string
+     */
+    private static function getTabIconClass(?string $form_itemtype = null): string
     {
+        $default_icon = CommonDBTM::getIcon();
+        $icon = $default_icon;
+        $tab_itemtype = static::class;
+        $itemtype = $tab_itemtype;
+        $form_item = $form_itemtype === null ? null : getItemForItemtype($form_itemtype);
 
-        if ($nb) {
-           //TRANS: %1$s is the name of the tab, $2$d is number of items in the tab between ()
-            $text = sprintf(__('%1$s %2$s'), $text, "<span class='badge'>$nb</span>");
+        if (is_subclass_of($tab_itemtype, CommonDBRelation::class) && $form_item instanceof CommonDBTM) {
+            // Get opposite itemtype than this
+            $new_itemtype = $tab_itemtype::getOppositeItemtype($form_item::class);
+            if ($new_itemtype !== null) {
+                $itemtype = $new_itemtype;
+            }
         }
-        return $text;
+        if ($icon === $default_icon && !class_exists($itemtype)) {
+            $itemtype = $tab_itemtype;
+        }
+        if ($icon === $default_icon && method_exists($itemtype, 'getIcon')) {
+            $icon = $itemtype::getIcon();
+        }
+        return $icon;
     }
 
+    /**
+     * Create tab text entry.
+     *
+     * This should be called on the itemtype whose form is being displayed and not on the tab itemtype for the correct
+     * icon to be displayed, unless you manually specify the icon.
+     *
+     * @param string                        $text           text to display
+     * @param int                           $nb             number of items displayed
+     * @param class-string<CommonGLPI>|null $form_itemtype  itemtype whose form is being displayed
+     * @param string                        $icon           icon class
+     * @param ?int                          $total_nb       total number of items
+     *
+     * @return string The tab HTML snippet (including icon and counter if applicable)
+     *
+     * @final
+     */
+    public static function createTabEntry($text, $nb = 0, ?string $form_itemtype = null, string $icon = '', ?int $total_nb = null)
+    {
+        if ($icon === '') {
+            $icon = self::getTabIconClass($form_itemtype);
+        }
+        if (str_contains($icon, 'fa-empty-icon')) {
+            $icon = '';
+        }
+
+        $icon_html = $icon !== '' ? sprintf('<i class="%s me-2" aria-hidden="true"></i>', htmlescape($icon)) : '';
+        $counter_html = '';
+        if ($nb > 0) {
+            $badge_content = $total_nb !== null ? "$nb/$total_nb" : "$nb";
+            $counter_html = sprintf(' <span class="badge glpi-badge" data-testid="tab-count-badge">%s</span>', htmlescape($badge_content));
+        }
+
+        return sprintf(
+            '<span class="d-flex align-items-center">%s%s%s</span>',
+            $icon_html,
+            htmlescape($text),
+            $counter_html
+        );
+    }
 
     /**
-     * Redirect to the list page from which the item was selected
-     * Default to the search engine for the type
+     * Redirect to the list page from which the item was selected.
      *
-     * @return void
-     **/
-    public function redirectToList()
+     * @return never
+     *
+     * @final
+     */
+    public function redirectToList(): void
     {
-        /** @var array $CFG_GLPI */
+        Html::redirect($this->getRedirectToListUrl());
+    }
+
+    /**
+     * Get the URL of the list page from which the item was selected.
+     * Default to the search engine for the type.
+     *
+     * @return string
+     *
+     * @final
+     */
+    public function getRedirectToListUrl(): string
+    {
         global $CFG_GLPI;
 
-        if (
-            isset($_GET['withtemplate'])
-            && !empty($_GET['withtemplate'])
-        ) {
-            Html::redirect($CFG_GLPI["root_doc"] . "/front/setup.templates.php?add=0&itemtype=" .
-                        $this->getType());
-        } else if (
-            isset($_SESSION['glpilisturl'][$this->getType()])
-                 && !empty($_SESSION['glpilisturl'][$this->getType()])
-        ) {
-            Html::redirect($_SESSION['glpilisturl'][$this->getType()]);
-        } else {
-            Html::redirect($this->getSearchURL());
+        if (!empty($_GET['withtemplate'])) {
+            return $CFG_GLPI["root_doc"] . "/front/setup.templates.php?add=0&itemtype=" . rawurlencode(static::class);
         }
+
+        if (
+            isset($_SESSION['glpilisturl'][static::class])
+            && !empty($_SESSION['glpilisturl'][static::class])
+        ) {
+            return $_SESSION['glpilisturl'][static::class];
+        }
+
+        return static::getSearchURL();
     }
 
-
     /**
-     * is the current object a new  one - Always false here (virtual Objet)
+     * Is the current object a new one?
      *
      * @since 0.83
      *
-     * @return boolean
-     **/
+     * @return bool
+     */
     public function isNewItem()
     {
         return false;
     }
 
-
     /**
-     * is the current object a new one - Always true here (virtual Objet)
+     * Is the given ID an ID used for new items?
      *
      * @since 0.84
      *
-     * @param integer $ID Id to check
+     * @param int $ID
      *
-     * @return boolean
-     **/
+     * @return bool
+     */
     public static function isNewID($ID)
     {
         return true;
     }
 
-
     /**
-     * Get the search page URL for the current classe
+     * Get the tabs URL for the current class.
      *
-     * @param boolean $full path or relative one (true by default)
+     * @param bool  $full   If true, will return the full path of the URL,
+     *                      otherwise, it will return the path relative to GLPI root.
      *
      * @return string
-     **/
+     *
+     * @final
+     */
     public static function getTabsURL($full = true)
     {
-        return Toolbox::getItemTypeTabsURL(get_called_class(), $full);
+        return Toolbox::getItemTypeTabsURL(static::class, $full);
     }
 
-
     /**
-     * Get the search page URL for the current class
+     * Get the search page URL for the current class.
      *
-     * @param boolean $full path or relative one (true by default)
+     * @param bool  $full   If true, will return the full path of the URL,
+     *                      otherwise, it will return the path relative to GLPI root.
      *
      * @return string
-     **/
+     */
     public static function getSearchURL($full = true)
     {
-        return Toolbox::getItemTypeSearchURL(get_called_class(), $full);
+        return Toolbox::getItemTypeSearchURL(static::class, $full);
     }
 
-
     /**
-     * Get the form page URL for the current class
+     * Get the form page URL for the current class.
      *
-     * @param boolean $full path or relative one (true by default)
+     * @param bool  $full   If true, will return the full path of the URL,
+     *                      otherwise, it will return the path relative to GLPI root.
      *
      * @return string
      **/
     public static function getFormURL($full = true)
     {
-        return Toolbox::getItemTypeFormURL(get_called_class(), $full);
+        return Toolbox::getItemTypeFormURL(static::class, $full);
     }
 
-
     /**
-     * Get the form page URL for the current class and point to a specific ID
+     * Get the form page URL for the current class and point to a specific ID.
      *
      * @since 0.90
      *
-     * @param integer $id   Id (default 0)
-     * @param boolean $full Full path or relative one (true by default)
+     * @param int   $id     Item ID.
+     * @param bool  $full   If true, will return the full path of the URL,
+     *                      otherwise, it will return the path relative to GLPI root.
      *
      * @return string
-     **/
+     */
     public static function getFormURLWithID($id = 0, $full = true)
     {
-
-        $itemtype = get_called_class();
-        $link     = $itemtype::getFormURL($full);
-        $link    .= (strpos($link, '?') ? '&' : '?') . 'id=' . $id;
+        $link     = static::getFormURL($full);
+        $link    .= (strpos($link, '?') ? '&' : '?') . 'id=' . ((int) $id);
         return $link;
     }
 
-
     /**
-     * Show tabs content
+     * Show tabs content.
      *
-     * @since 0.85
-     *
-     * @param array $options parameters to add to URLs and ajax
+     * @param array<string,mixed> $options parameters to add to URLs and ajax
      *     - withtemplate is a template view ?
      *
      * @return void
-     **/
+     *
+     * @final
+     */
     public function showTabsContent($options = [])
     {
+        /** @var Kernel $kernel */
+        global $kernel;
 
-       // for objects not in table like central
+        // for objects not in table like central
         if (isset($this->fields['id'])) {
             $ID = $this->fields['id'];
         } else {
@@ -864,7 +1013,8 @@ class CommonGLPI implements CommonGLPIInterface
         $cleaned_options = $options;
         unset($cleaned_options['id'], $cleaned_options['stock_image']);
 
-        $target         = $_SERVER['PHP_SELF'];
+        $request        = $kernel->getMainRequest();
+        $target         = $request->getBasePath() . $request->getPathInfo();
         $withtemplate   = "";
 
         // TODO - There should be a better option than checking whether or not
@@ -881,13 +1031,10 @@ class CommonGLPI implements CommonGLPIInterface
             if ($this instanceof CommonITILObject && $this->isNewItem()) {
                 $this->input = $cleaned_options;
                 $this->saveInput();
-               // $extraparamhtml can be too long in case of ticket with content
-               // (passed in GET in ajax request)
+                // $extraparamhtml can be too long in case of ticket with content
+                // (passed in GET in ajax request)
                 unset($cleaned_options['content']);
             }
-
-            // prevent double sanitize, because the includes.php sanitize all data
-            $cleaned_options = Sanitizer::unsanitize($cleaned_options);
         }
 
         $onglets     = $this->defineAllTabs($options);
@@ -898,7 +1045,7 @@ class CommonGLPI implements CommonGLPIInterface
         }
 
         if (count($onglets)) {
-            $tabs_url   = $this->getTabsURL();
+            $tabs_url   = static::getTabsURL();
             $parsed_url = parse_url($tabs_url);
             $tab_path   = $parsed_url['path'];
             $tab_params = [];
@@ -912,16 +1059,20 @@ class CommonGLPI implements CommonGLPIInterface
                 $tab_params,
                 [
                     '_target' => $target,
-                    '_itemtype' => $this->getType(),
+                    '_itemtype' => static::class,
                     'id' => $ID,
                 ]
             );
 
             $tabs = [];
             foreach ($onglets as $key => $val) {
+                if ($val === null) {
+                    // This is a placeholder tab
+                    continue;
+                }
                 $tabs[$key] = ['title'  => $val,
                     'url'    => $tab_path,
-                    'params' => Toolbox::append_params(['_glpi_tab' => $key] + $tab_params, '&amp;'),
+                    'params' => Toolbox::append_params(['_glpi_tab' => $key] + $tab_params, '&'),
                 ];
             }
 
@@ -931,9 +1082,9 @@ class CommonGLPI implements CommonGLPIInterface
                 && empty($withtemplate)
                 && (count($tabs) > 1)
             ) {
-                $tabs[-1] = ['title'  => __('All'),
+                $tabs[-1] = ['title'  => static::createTabEntry(__('All'), 0, null, 'ti ti-layout-list'),
                     'url'    => $tab_path,
-                    'params' => Toolbox::append_params(['_glpi_tab' => '-1'] + $tab_params, '&amp;'),
+                    'params' => Toolbox::append_params(['_glpi_tab' => '-1'] + $tab_params, '&'),
                 ];
             }
 
@@ -941,7 +1092,7 @@ class CommonGLPI implements CommonGLPIInterface
                 'tabspanel',
                 'tabcontent',
                 $tabs,
-                $this->getType(),
+                static::class,
                 $ID,
                 $this->taborientation,
                 $options
@@ -949,21 +1100,22 @@ class CommonGLPI implements CommonGLPIInterface
         }
     }
 
-
     /**
-     * Show tabs
+     * Show navigation header.
      *
-     * @param array $options parameters to add to URLs and ajax
+     * @param array<string,mixed> $options parameters to add to URLs and ajax
      *     - withtemplate is a template view ?
      *
      * @return void
-     **/
+     *
+     * @final
+     */
     public function showNavigationHeader($options = [])
     {
-        /** @var array $CFG_GLPI */
-        global $CFG_GLPI;
+        /** @var Kernel $kernel */
+        global $kernel;
 
-       // for objects not in table like central
+        // for objects not in table like central
         if (isset($this->fields['id'])) {
             $ID = $this->fields['id'];
         } else {
@@ -973,7 +1125,9 @@ class CommonGLPI implements CommonGLPIInterface
                 $ID = 0;
             }
         }
-        $target         = $_SERVER['PHP_SELF'];
+
+        $request        = $kernel->getMainRequest();
+        $target         = $request->getBasePath() . $request->getPathInfo();
         $extraparamhtml = "";
 
         if (is_array($options) && count($options)) {
@@ -982,30 +1136,28 @@ class CommonGLPI implements CommonGLPIInterface
                 unset($cleanoptions['withtemplate']);
             }
             foreach (array_keys($cleanoptions) as $key) {
-               // Do not include id options
+                // Do not include id options
                 if (($key[0] == '_') || ($key == 'id')) {
                     unset($cleanoptions[$key]);
                 }
             }
-            $extraparamhtml = "&amp;" . Toolbox::append_params($cleanoptions, '&amp;');
+            $extraparamhtml = "&" . Toolbox::append_params($cleanoptions, '&');
         }
 
         if (
-            !$this->isNewID($ID)
-            && $this->getType()
+            !static::isNewID($ID)
+            && static::class
             && $this->displaylist
         ) {
-            $glpilistitems = & $_SESSION['glpilistitems'][$this->getType()];
-            $glpilisttitle = & $_SESSION['glpilisttitle'][$this->getType()];
-            $glpilisturl   = & $_SESSION['glpilisturl'][$this->getType()];
+            $glpilistitems = & $_SESSION['glpilistitems'][static::class];
+            $glpilisttitle = & $_SESSION['glpilisttitle'][static::class];
+            $glpilisturl   = & $_SESSION['glpilisturl'][static::class];
             if ($this instanceof CommonDBChild && $parent = $this->getItem(true, false)) {
                 $glpilisturl = $parent::getFormURLWithID($parent->fields['id'], true);
             }
             if (empty($glpilisturl)) {
-                $glpilisturl = $this->getSearchURL();
+                $glpilisturl = static::getSearchURL();
             }
-
-           // echo "<div id='menu_navigate'>";
 
             $next = $prev = $first = $last = -1;
             $current = false;
@@ -1032,18 +1184,19 @@ class CommonGLPI implements CommonGLPIInterface
                 }
             }
             $cleantarget = Html::cleanParametersURL($target);
-            echo "<div class='navigationheader justify-content-sm-between'>";
+            $is_deleted = $this instanceof CommonDBTM && $this->isField('is_deleted') && $this->fields['is_deleted'];
+            echo "<div id='navigationheader' class='navigationheader justify-content-sm-between " . ($is_deleted ? 'asset-deleted' : '') . "'>";
 
             // First set of header pagination actions, displayed on the left side of the page
-            echo "<div>";
+            echo "<div class='pagination-left'>";
 
             if (!$glpilisttitle) {
-                $glpilisttitle = __s('List');
+                $glpilisttitle = __('List');
             }
-            $list = "<a href='$glpilisturl' title=\"$glpilisttitle\"
-                  class='btn btn-sm btn-icon btn-ghost-secondary'
+            $list = "<a href='" . htmlescape($glpilisturl) . "' title=\"" . htmlescape($glpilisttitle) . "\"
+                  class='btn btn-sm btn-icon btn-ghost-secondary me-2'
                   data-bs-toggle='tooltip' data-bs-placement='bottom'>
-                  <i class='far fa-lg fa-list-alt'></i>
+                  <i class='ti ti-list-search fs-2' aria-hidden='true'></i>
                </a>";
             $list_shown = false;
 
@@ -1052,10 +1205,10 @@ class CommonGLPI implements CommonGLPIInterface
                 echo $list;
                 $list_shown = true;
             }
-            echo "<a href='$cleantarget?id=$first$extraparamhtml'
-                 class='btn btn-sm btn-icon btn-ghost-secondary " . ($first >= 0 ? '' : 'bs-invisible') . "' title=\"" . __s('First') . "\"
+            echo "<a href='" . htmlescape("$cleantarget?id=$first$extraparamhtml") . "'
+                 class='btn btn-sm btn-icon btn-ghost-secondary me-2 " . ($first >= 0 ? '' : 'bs-invisible') . "' title=\"" . __s('First') . "\"
                  data-bs-toggle='tooltip' data-bs-placement='bottom'>
-                 <i class='fa-lg ti ti-chevrons-left'></i>
+                 <i class='fs-2 ti ti-chevrons-left' aria-hidden='true'></i>
               </a>";
 
             if (!$list_shown && $prev < 0) {
@@ -1063,11 +1216,11 @@ class CommonGLPI implements CommonGLPIInterface
                 echo $list;
                 $list_shown = true;
             }
-            echo "<a href='$cleantarget?id=$prev$extraparamhtml'
+            echo "<a href='" . htmlescape("$cleantarget?id=$prev$extraparamhtml") . "'
                  id='previouspage'
-                 class='btn btn-sm btn-icon btn-ghost-secondary " . ($prev >= 0 ? '' : 'bs-invisible') . "' title=\"" . __s('Previous') . "\"
+                 class='btn btn-sm btn-icon btn-ghost-secondary me-2 " . ($prev >= 0 ? '' : 'bs-invisible') . "' title=\"" . __s('Previous') . "\"
                  data-bs-toggle='tooltip' data-bs-placement='bottom'>
-                 <i class='fa-lg ti ti-chevron-left'></i>
+                 <i class='fs-2 ti ti-chevron-left' aria-hidden='true'></i>
               </a>";
             if ($prev >= 0) {
                 $js = '$("body").keydown(function(e) {
@@ -1088,44 +1241,46 @@ class CommonGLPI implements CommonGLPIInterface
             echo "</div>";
 
             if (static::$showTitleInNavigationHeader && $this instanceof CommonDBTM) {
-                echo "<h3 class='navigationheader-title strong d-flex align-items-center'>";
+                // Page title as <h1> for heading hierarchy; fs-3 keeps the size (the class has no font-size of its own)
+                echo "<h1 class='navigationheader-title strong fs-3 d-flex align-items-center order-2'>";
                 if (method_exists($this, 'getStatusIcon') && $this->isField('status')) {
                     echo "<span class='me-1'>" . $this->getStatusIcon($this->fields['status']) . '</span>';
                 }
-                echo $this->getNameID([
-                    'forceid' => $this instanceof CommonITILObject
-                ]);
+                echo htmlescape($this->getNameID([
+                    'forceid' => $this instanceof CommonITILObject,
+                ]));
                 if ($this->isField('is_deleted') && $this->fields['is_deleted']) {
                     $title = $this->isField('date_mod')
-                                ? sprintf(__s('Item has been deleted on %s'), Html::convDateTime($this->fields['date_mod']))
+                                ? htmlescape(sprintf(__('Item has been deleted on %s'), Html::convDateTime($this->fields['date_mod'])))
                                 : __s('Deleted');
-                    echo "<span class='mx-2 bg-danger status rounded-1' title=\"" . $title . "\"
+                    echo "<span class='mx-2 status rounded-1' title=\"" . $title . "\"
                         data-bs-toggle='tooltip'>
-                        <i class='ti ti-trash'></i>";
-                        echo __s('Deleted');
+                        <i class='ti ti-trash' aria-hidden='true'></i>";
+                    echo __s('Deleted');
                     echo "</span>";
                 }
-                echo "</h3>";
+                echo "</h1>";
             } else {
                 echo TemplateRenderer::getInstance()->render('components/form/header_content.html.twig', [
                     'item'          => $this,
                     'params'        => $options,
                     'in_navheader'  => true,
+                    'level'         => 1,
                     'header_toolbar' => $this->getFormHeaderToolbar(),
                 ]);
             }
 
             // Second set of header pagination actions, displayed on the right side of the page
-            echo "<div>";
+            echo "<div class='pagination-right'>";
 
-            echo "<span class='m-1 ms-3 " . ($current !== false ? '' : 'bs-invisible') . "'>" . ($current + 1) . "/" . count($glpilistitems ?? []) . "</span>";
+            echo "<span class='py-1 px-3 " . ($current !== false ? '' : 'bs-invisible') . "'>" . ($current + 1) . "/" . count($glpilistitems ?? []) . "</span>";
 
-            echo "<a href='$cleantarget?id=$next$extraparamhtml'
+            echo "<a href='" . htmlescape("$cleantarget?id=$next$extraparamhtml") . "'
                  id='nextpage'
-                 class='btn btn-sm btn-icon btn-ghost-secondary " . ($next >= 0 ? '' : 'bs-invisible') . "'
+                 class='btn btn-sm btn-icon btn-ghost-secondary ms-2 " . ($next >= 0 ? '' : 'bs-invisible') . "'
                  title=\"" . __s('Next') . "\"
-                 data-bs-toggle='tooltip' data-bs-placement='bottom'>" .
-            "<i class='fa-lg ti ti-chevron-right'></i>
+                 data-bs-toggle='tooltip' data-bs-placement='bottom'>"
+            . "<i class='fs-2 ti ti-chevron-right' aria-hidden='true'></i>
                 </a>";
             if ($next >= 0) {
                 $js = '$("body").keydown(function(e) {
@@ -1138,11 +1293,11 @@ class CommonGLPI implements CommonGLPIInterface
                 echo Html::scriptBlock($js);
             }
 
-            echo "<a href='$cleantarget?id=$last $extraparamhtml'
-                 class='btn btn-sm btn-icon btn-ghost-secondary " . ($last >= 0 ? '' : 'bs-invisible') . "'
+            echo "<a href='" . htmlescape("$cleantarget?id=$last$extraparamhtml") . "'
+                 class='btn btn-sm btn-icon btn-ghost-secondary ms-2 " . ($last >= 0 ? '' : 'bs-invisible') . "'
                  title=\"" . __s('Last') . "\"
-                 data-bs-toggle='tooltip' data-bs-placement='bottom'>" .
-            "<i class='fa-lg ti ti-chevrons-right'></i></a>";
+                 data-bs-toggle='tooltip' data-bs-placement='bottom'>"
+            . "<i class='fs-2 ti ti-chevrons-right' aria-hidden='true'></i></a>";
 
             echo "</div>";
 
@@ -1151,32 +1306,42 @@ class CommonGLPI implements CommonGLPIInterface
     }
 
     /**
-     * Compute the name to be used in the main header of this item
+     * Whether to display the type icon and name title in the form header.
+     *
+     * Override this method and return false to hide the icon ribbon and type/name title
+     * from the form header (e.g. for items that render their own title inside the form body).
+     */
+    public function showFriendlyNameBadgeInForm(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Compute the name to be used in the main header of this item.
      *
      * @return string
+     *
+     * @final
      */
     public function getHeaderName(): string
     {
         $name = '';
         if (isset($this->fields['id']) && ($this instanceof CommonDBTM)) {
-            $name = $this->getName();
-            if ($_SESSION['glpiis_ids_visible'] || empty($name)) {
-                $name = sprintf(__('%1$s - ID %2$d'), $name, $this->fields['id']);
-            }
+            $name = sprintf(__('%1$s - ID %2$d'), $this->getName(), $this->fields['id']);
         }
 
-        return Sanitizer::unsanitize($name);
+        return $name;
     }
 
     /**
-     * Display item with tabs
+     * Display item with tabs.
      *
-     * @since 0.85
-     *
-     * @param array $options Options
+     * @param array{id?: positive-int, loaded?: bool, show_nav_header?: bool} $options Options
      *                       show_nav_header (default true): show navigation header (link to list of items)
      *
      * @return void
+     *
+     * @final
      */
     public function display($options = [])
     {
@@ -1187,10 +1352,10 @@ class CommonGLPI implements CommonGLPIInterface
             if (
                 $this instanceof CommonDBTM
                 && isset($options['id'])
-                && !$this->isNewID($options['id'])
+                && !static::isNewID($options['id'])
             ) {
                 if (!$this->getFromDB($options['id'])) {
-                    Html::displayNotFoundError();
+                    throw new NotFoundHttpException();
                 }
             }
             // in case of lefttab layout, we couldn't see "right error" message
@@ -1200,18 +1365,15 @@ class CommonGLPI implements CommonGLPIInterface
                 && $_GET["id"]
                 && !$this->can($_GET["id"], READ)
             ) {
-                // This triggers from a profile switch.
-                // If we don't have right, redirect instead to central page
-                Toolbox::handleProfileChangeRedirect();
-                Html::displayRightError();
+                throw new AccessDeniedHttpException();
             }
         }
 
-       // try to lock object
-       // $options must contains the id of the object, and if locked by manageObjectLock will contains 'locked' => 1
+        // try to lock object
+        // $options must contain the id of the object, and if locked by manageObjectLock will contain 'locked' => 1
         ObjectLock::manageObjectLock(get_class($this), $options);
 
-       // manage custom options passed to tabs
+        // manage custom options passed to tabs
         if (isset($_REQUEST['tab_params']) && is_array($_REQUEST['tab_params'])) {
             $options += $_REQUEST['tab_params'];
         }
@@ -1220,310 +1382,72 @@ class CommonGLPI implements CommonGLPIInterface
         echo "<div class='row'>";
         if ($this instanceof CommonDBTM) {
             TemplateRenderer::getInstance()->display('layout/parts/saved_searches.html.twig', [
-                'itemtype' => $this->getType(),
+                'itemtype' => static::class,
             ]);
         }
+
         echo "<div class='col'>";
         if (($options['show_nav_header'] ?? true)) {
             $this->showNavigationHeader($options);
         }
+        echo "<div class=\"row\">";
+        $left_side_content = $this->getLeftSideContent();
+        if ($left_side_content !== null) {
+            // The data-main-page-aside attribute allow custom styles to be applied per itemtype.
+            $slug = Toolbox::slugify(static::class);
+            echo "<aside class=\"col card border-radius-0 p-0\" data-main-page-aside=\"$slug\">";
+            echo $left_side_content;
+            echo "</aside>";
+        }
+        echo "<div class=\"col\">";
         $this->showTabsContent($options);
         echo "</div>";
         echo "</div>";
+        echo "</div>";
+        echo "</div>";
     }
-
-
-    /**
-     * List infos in debug tab
-     *
-     * @return void
-     **/
-    public function showDebugInfo()
-    {
-        /** @var array $CFG_GLPI */
-        global $CFG_GLPI;
-
-        if (method_exists($this, 'showDebug')) {
-            $this->showDebug();
-        }
-
-        if (!($this instanceof CommonDBTM)) {
-            return;
-        }
-
-        $class = $this->getType();
-
-        if (Infocom::canApplyOn($class)) {
-            $infocom = new Infocom();
-            if ($infocom->getFromDBforDevice($class, $this->fields['id'])) {
-                $infocom->showDebug();
-            }
-        }
-
-        if (in_array($class, $CFG_GLPI["reservation_types"])) {
-            $resitem = new ReservationItem();
-            if ($resitem->getFromDBbyItem($class, $this->fields['id'])) {
-                $resitem->showDebugResa();
-            }
-        }
-    }
-
-
-    /**
-     * Update $_SESSION to set the display options.
-     *
-     * @since 0.84
-     *
-     * @param array  $input        data to update
-     * @param string $sub_itemtype sub itemtype if needed (default '')
-     *
-     * @return void
-     **/
-    public static function updateDisplayOptions($input = [], $sub_itemtype = '')
-    {
-
-        $options = static::getAvailableDisplayOptions();
-        if (count($options)) {
-            if (empty($sub_itemtype)) {
-                $display_options = &$_SESSION['glpi_display_options'][self::getType()];
-            } else {
-                $display_options = &$_SESSION['glpi_display_options'][self::getType()][$sub_itemtype];
-            }
-           // reset
-            if (isset($input['reset'])) {
-                foreach ($options as $option_group) {
-                    foreach ($option_group as $option_name => $attributs) {
-                        $display_options[$option_name] = $attributs['default'];
-                    }
-                }
-            } else {
-                foreach ($options as $option_group) {
-                    foreach ($option_group as $option_name => $attributs) {
-                        if (isset($input[$option_name]) && ($input[$option_name] == 'on')) {
-                            $display_options[$option_name] = true;
-                        } else {
-                            $display_options[$option_name] = false;
-                        }
-                    }
-                }
-            }
-           // Store new display options for user
-            if ($uid = Session::getLoginUserID()) {
-                $user = new User();
-                if ($user->getFromDB($uid)) {
-                    $user->update([
-                        'id' => $uid,
-                        'display_options' => Sanitizer::sanitize(exportArrayToDB($_SESSION['glpi_display_options']))
-                    ]);
-                }
-            }
-        }
-    }
-
-
-    /**
-     * Load display options to $_SESSION
-     *
-     * @since 0.84
-     *
-     * @param string $sub_itemtype sub itemtype if needed (default '')
-     *
-     * @return void
-     **/
-    public static function getDisplayOptions($sub_itemtype = '')
-    {
-
-        if (!isset($_SESSION['glpi_display_options'])) {
-           // Load display_options from user table
-            $_SESSION['glpi_display_options'] = [];
-            if ($uid = Session::getLoginUserID()) {
-                $user = new User();
-                if ($user->getFromDB($uid)) {
-                    $_SESSION['glpi_display_options'] = importArrayFromDB($user->fields['display_options']);
-                }
-            }
-        }
-        if (!isset($_SESSION['glpi_display_options'][self::getType()])) {
-            $_SESSION['glpi_display_options'][self::getType()] = [];
-        }
-
-        if (!empty($sub_itemtype)) {
-            if (!isset($_SESSION['glpi_display_options'][self::getType()][$sub_itemtype])) {
-                $_SESSION['glpi_display_options'][self::getType()][$sub_itemtype] = [];
-            }
-            $display_options = &$_SESSION['glpi_display_options'][self::getType()][$sub_itemtype];
-        } else {
-            $display_options = &$_SESSION['glpi_display_options'][self::getType()];
-        }
-
-       // Load default values if not set
-        $options = static::getAvailableDisplayOptions();
-        if (count($options)) {
-            foreach ($options as $option_group) {
-                foreach ($option_group as $option_name => $attributs) {
-                    if (!isset($display_options[$option_name])) {
-                        $display_options[$option_name] = $attributs['default'];
-                    }
-                }
-            }
-        }
-        return $display_options;
-    }
-
-
-
-    /**
-     * Show display options
-     *
-     * @since 0.84
-     *
-     * @param string $sub_itemtype sub_itemtype if needed (default '')
-     *
-     * @return void
-     **/
-    public static function showDislayOptions($sub_itemtype = '')
-    {
-        /** @var array $CFG_GLPI */
-        global $CFG_GLPI;
-
-        $options      = static::getAvailableDisplayOptions();
-
-        if (count($options)) {
-            if (empty($sub_itemtype)) {
-                $display_options = $_SESSION['glpi_display_options'][self::getType()];
-            } else {
-                $display_options = $_SESSION['glpi_display_options'][self::getType()][$sub_itemtype];
-            }
-            echo "<div class='center'>";
-            echo "\n<form method='get' action='" . $CFG_GLPI['root_doc'] . "/front/display.options.php'>\n";
-            echo "<input type='hidden' name='itemtype' value='NetworkPort'>\n";
-            echo "<input type='hidden' name='sub_itemtype' value='$sub_itemtype'>\n";
-            echo "<table class='tab_cadre'>";
-            echo "<tr><th colspan='2'>" . __s('Display options') . "</th></tr>\n";
-            echo "<tr><td colspan='2'>";
-            echo "<input type='submit' class='btn btn-primary' name='reset' value=\"" .
-                __('Reset display options') . "\">";
-            echo "</td></tr>\n";
-
-            foreach ($options as $option_group_name => $option_group) {
-                if (count($option_group) > 0) {
-                    echo "<tr><th colspan='2'>$option_group_name</th></tr>\n";
-                    foreach ($option_group as $option_name => $attributs) {
-                        echo "<tr>";
-                        echo "<td>";
-                        echo "<input type='checkbox' name='$option_name' " .
-                        ($display_options[$option_name] ? 'checked' : '') . ">";
-                        echo "</td>";
-                        echo "<td>" . $attributs['name'] . "</td>";
-                        echo "</tr>\n";
-                    }
-                }
-            }
-            echo "<tr><td colspan='2' class='center'>";
-            echo "<input type='submit' class='btn btn-primary' name='update' value=\"" . _sx('button', 'Save') . "\">";
-            echo "</td></tr>\n";
-            echo "</table>";
-            echo "</form>";
-
-            echo "</div>";
-        }
-    }
-
-
-    /**
-     * Get available display options array
-     *
-     * @since 0.84
-     *
-     * @return array all the options
-     **/
-    public static function getAvailableDisplayOptions()
-    {
-        return [];
-    }
-
-
-    /**
-     * Get link for display options
-     *
-     * @since 0.84
-     *
-     * @param string $sub_itemtype sub itemtype if needed for display options
-     *
-     * @return string
-     **/
-    public static function getDisplayOptionsLink($sub_itemtype = '')
-    {
-        /** @var array $CFG_GLPI */
-        global $CFG_GLPI;
-
-        $rand = mt_rand();
-
-        $link = "<span class='fa fa-wrench pointer' title=\"";
-        $link .= __s('Display options') . "\" ";
-        $link .= " data-bs-toggle='modal' data-bs-target='#displayoptions$rand'";
-        $link .= "><span class='sr-only'>" . __s('Display options') . "</span></span>";
-        $link .= Ajax::createIframeModalWindow(
-            "displayoptions" . $rand,
-            $CFG_GLPI['root_doc'] .
-                                                "/front/display.options.php?itemtype=" .
-                                                static::getType() . "&sub_itemtype=$sub_itemtype",
-            ['display'       => false,
-                'width'         => 600,
-                'height'        => 500,
-                'reloadonclose' => true
-            ]
-        );
-
-        return $link;
-    }
-
 
     /**
      * Get error message for item
      *
      * @since 0.85
      *
-     * @param integer $error  error type see define.php for ERROR_*
-     * @param string  $object string to use instead of item link (default '')
+     * @param int       $error  error type (ERROR_* constant)
+     * @param string    $object string to use instead of item link
+     *
+     * @phpstan-param ERROR_ALREADY_DEFINED|ERROR_COMPAT|ERROR_NOT_FOUND|ERROR_ON_ACTION|ERROR_RIGHT $error
      *
      * @return string
-     **/
+     *
+     * @final
+     *
+     * @psalm-taint-specialize (to report each unsafe usage as a distinct error)
+     * @psalm-taint-sink html $object (string will be added to HTML source)
+     */
     public function getErrorMessage($error, $object = '')
     {
-
         if (empty($object) && $this instanceof CommonDBTM) {
             $object = $this->getLink();
         }
-        switch ($error) {
-            case ERROR_NOT_FOUND:
-                return sprintf(__('%1$s: %2$s'), $object, __('Unable to get item'));
-
-            case ERROR_RIGHT:
-                return sprintf(__('%1$s: %2$s'), $object, __('Authorization error'));
-
-            case ERROR_COMPAT:
-                return sprintf(__('%1$s: %2$s'), $object, __('Incompatible items'));
-
-            case ERROR_ON_ACTION:
-                return sprintf(__('%1$s: %2$s'), $object, __('Error on executing the action'));
-
-            case ERROR_ALREADY_DEFINED:
-                return sprintf(__('%1$s: %2$s'), $object, __('Item already defined'));
-        }
-
-        return '';
+        return match ($error) {
+            ERROR_NOT_FOUND => sprintf(__s('%1$s: %2$s'), $object, __s('Unable to get item')),
+            ERROR_RIGHT => sprintf(__s('%1$s: %2$s'), $object, __s('Authorization error')),
+            ERROR_COMPAT => sprintf(__s('%1$s: %2$s'), $object, __s('Incompatible items')),
+            ERROR_ON_ACTION => sprintf(__s('%1$s: %2$s'), $object, __s('Error on executing the action')),
+            ERROR_ALREADY_DEFINED => sprintf(__s('%1$s: %2$s'), $object, __s('Item already defined')),
+            default => '',
+        };
     }
 
     /**
-     * Get links to Faq
-     **/
+     * Get links to Faq.
+     *
+     * @return string
+     *
+     * @final
+     */
     public function getKBLinks()
     {
-        /**
-         * @var array $CFG_GLPI
-         * @var \DBmysql $DB
-         */
         global $CFG_GLPI, $DB;
 
         if (!($this instanceof CommonDBTM)) {
@@ -1531,32 +1455,28 @@ class CommonGLPI implements CommonGLPIInterface
         }
 
         $ret = '';
-        $title = __s('FAQ');
-        if (Session::getCurrentInterface() == 'central') {
-            $title = __s('Knowledge base');
-        }
-
         $iterator = $DB->request([
             'SELECT' => [KnowbaseItem::getTable() . '.*'],
             'FROM'   => KnowbaseItem::getTable(),
             'WHERE'  => [
                 KnowbaseItem_Item::getTable() . '.items_id'  => $this->fields['id'],
-                KnowbaseItem_Item::getTable() . '.itemtype'  => $this->getType(),
+                KnowbaseItem_Item::getTable() . '.itemtype'  => static::class,
             ],
             'INNER JOIN'   => [
                 KnowbaseItem_Item::getTable() => [
                     'ON'  => [
                         KnowbaseItem_Item::getTable() => KnowbaseItem::getForeignKeyField(),
-                        KnowbaseItem::getTable()      => 'id'
-                    ]
-                ]
+                        KnowbaseItem::getTable()      => 'id',
+                    ],
+                ],
             ],
             'ORDER' => [
-                KnowbaseItem::getTable()      => 'name'
-            ]
+                KnowbaseItem::getTable()      => 'name',
+            ],
         ]);
 
         $found_kbitem = [];
+        $kbitem_ids = [];
         foreach ($iterator as $line) {
             $found_kbitem[$line['id']] = $line;
             $kbitem_ids[$line['id']] = $line['id'];
@@ -1568,9 +1488,9 @@ class CommonGLPI implements CommonGLPIInterface
             $kbitem->getFromDB(reset($found_kbitem)['id']);
             $ret .= "<div class='faqadd_block'>";
             $ret .= "<label for='display_faq_chkbox$rand'>";
-            $ret .= "<i class='ti ti-zoom-question'></i>";
+            $ret .= "<i class='ti ti-zoom-question cursor-pointer'></i>";
             $ret .= "</label>";
-            $ret .= "<input type='checkbox'  class='display_faq_chkbox' id='display_faq_chkbox$rand'>";
+            $ret .= "<input type='checkbox' class='display_faq_chkbox' id='display_faq_chkbox$rand'>";
             $ret .= "<div class='faqadd_entries' style='position:relative;'>";
             if (count($found_kbitem) == 1) {
                 $ret .= "<div class='faqadd_block_content' id='faqadd_block_content$rand'>";
@@ -1588,16 +1508,16 @@ class CommonGLPI implements CommonGLPIInterface
                     );
                 };
                 ");
-                $ret .= "<label for='dropdown_knowbaseitems_id$rand'>" .
-                    KnowbaseItem::getTypeName() . "</label>&nbsp;";
+                $ret .= "<label for='dropdown_knowbaseitems_id$rand'>"
+                    . htmlescape(KnowbaseItem::getTypeName()) . "</label>&nbsp;";
                 $ret .= KnowbaseItem::dropdown([
                     'value'     => reset($found_kbitem)['id'],
                     'display'   => false,
                     'rand'      => $rand,
                     'condition' => [
-                        KnowbaseItem::getTable() . '.id' => $kbitem_ids
+                        KnowbaseItem::getTable() . '.id' => $kbitem_ids,
                     ],
-                    'on_change' => "getKnowbaseItemAnswer$rand()"
+                    'on_change' => "getKnowbaseItemAnswer$rand()",
                 ]);
                 $ret .= "<div class='faqadd_block_content' id='faqadd_block_content$rand'>";
                 $ret .= $kbitem->showFull(['display' => false]);
@@ -1610,11 +1530,17 @@ class CommonGLPI implements CommonGLPIInterface
     }
 
     /**
-     * Get array of extra form header toolbar buttons
-     * @return array Array of HTML elements
+     * Get array of extra form header toolbar buttons.
+     *
+     * @return string[] Array of HTML elements
      */
     protected function getFormHeaderToolbar(): array
     {
         return [];
+    }
+
+    protected function getLeftSideContent(): ?string
+    {
+        return null;
     }
 }

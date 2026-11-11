@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,18 +33,22 @@
  * ---------------------------------------------------------------------
  */
 
+require_once(__DIR__ . '/_check_webserver_config.php');
+
 use Glpi\Event;
+use Glpi\Exception\Http\NotFoundHttpException;
 
-/** @var \DBmysql $DB */
 global $DB;
-
-include('../inc/includes.php');
-
-Session::checkLoginUser();
 
 $solution = new ITILSolution();
 $track = getItemForItemtype($_POST['itemtype']);
-$track->getFromDB($_POST['items_id']);
+
+if (
+    !($track instanceof CommonITILObject)
+    || !$track->getFromDB($_POST['items_id'])
+) {
+    throw new NotFoundHttpException();
+}
 
 $redirect = null;
 $handled = false;
@@ -53,7 +57,7 @@ if (isset($_POST["add"])) {
     $solution->check(-1, CREATE, $_POST);
     if (!$track->canSolve()) {
         Session::addMessageAfterRedirect(
-            __('You cannot solve this item!'),
+            __s('You cannot solve this item!'),
             false,
             ERROR
         );
@@ -66,7 +70,7 @@ if (isset($_POST["add"])) {
         }
         $handled = true;
     }
-} else if (isset($_POST['update'])) {
+} elseif (isset($_POST['update'])) {
     $solution->getFromDB($_POST['id']);
     $solution->check($_POST['id'], UPDATE);
     $solution->update($_POST);
@@ -85,16 +89,16 @@ if (isset($_POST["add"])) {
 
 if ($handled) {
     if (isset($_POST['kb_linked_id']) && (int) $_POST['kb_linked_id'] > 0) {
-       //if solution should be linked to selected KB entry
+        //if solution should be linked to selected KB entry
         $params = [
             'knowbaseitems_id' => $_POST['kb_linked_id'],
-            'itemtype'         => $track->getType(),
-            'items_id'         => $track->getID()
+            'itemtype'         => $track::class,
+            'items_id'         => $track->getID(),
         ];
-        $existing = $DB->request(
-            'glpi_knowbaseitems_items',
-            $params
-        );
+        $existing = $DB->request([
+            'FROM' => 'glpi_knowbaseitems_items',
+            'WHERE' => $params,
+        ]);
         if ($existing->numrows() == 0) {
             $kb_item_item = new KnowbaseItem_Item();
             $kb_item_item->add($params);
@@ -103,14 +107,14 @@ if ($handled) {
 
     if ($track->can($_POST["items_id"], READ)) {
         $toadd = '';
-       // Copy solution to KB redirect to KB
+        // Copy solution to KB redirect to KB
         if (isset($_POST['_sol_to_kb']) && $_POST['_sol_to_kb']) {
             $toadd = "&_sol_to_kb=1";
         }
         $redirect = $track->getLinkURL() . $toadd;
     } else {
         Session::addMessageAfterRedirect(
-            __('You have been redirected because you no longer have access to this ticket'),
+            __s('You have been redirected because you no longer have access to this ticket'),
             true,
             ERROR
         );

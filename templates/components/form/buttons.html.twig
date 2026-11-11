@@ -5,8 +5,7 @@
  #
  # http://glpi-project.org
  #
- # @copyright 2015-2025 Teclib' and contributors.
- # @copyright 2003-2014 by the INDEPNET Development Team.
+ # @copyright 2015-2026 Teclib' and contributors.
  # @licence   https://www.gnu.org/licenses/gpl-3.0.html
  #
  # ---------------------------------------------------------------------
@@ -35,22 +34,35 @@
 {% set candel       = params['candel'] ?? true %}
 {% set canedit      = params['canedit'] ?? true %}
 {% set id           = item.fields['id'] ?? -1 %}
+{% set in_modal     = params['in_modal']|default(_get._in_modal|default(false)) %}
 
-         <div class="row">
-         {{ call_plugin_hook(constant('Glpi\\Plugin\\Hooks::POST_ITEM_FORM'), {'item': item, 'options': params}) }}
-         </div>
+{% if item is defined %}
 
-{% if canedit or item.canEdit(item.fields['id']) %}
-      <div class="card-body mx-n2 mb-4 border-top d-flex flex-row-reverse align-items-start flex-wrap">
+     {{ call_plugin_hook(constant('Glpi\\Plugin\\Hooks::POST_ITEM_FORM'), {'item': item, 'options': params}) }}
+
+    {% if canedit or item.canEdit(item.fields['id']) %}
+      <div class="form-button-separator card-body mx-n2 border-top d-flex flex-row-reverse align-items-start flex-wrap  {{ in_modal ? 'p-2' : '' }}">
          {% if withtemplate > 0 or item.isNewID(id) %}
             {% if id <= 0 or withtemplate == 2 %}
-               <button class="btn btn-primary me-2" type="submit" name="add" value="1">
-                  <i class="fas fa-plus"></i>
+               <button
+                  class="btn btn-primary me-2"
+                  type="submit"
+                  name="add"
+                  value="1"
+                  aria-label="{{ _x('button', 'Add') }}"
+               >
+                  <i class="ti ti-plus" aria-hidden="true"></i>
                   <span>{{ _x('button', 'Add') }}</span>
                </button>
             {% else %}
-               <button class="btn btn-primary me-2" type="submit" name="update" value="1">
-                  <i class="far fa-save"></i>
+               <button
+                  class="btn btn-primary me-2"
+                  type="submit"
+                  name="update"
+                  value="1"
+                  aria-label="{{ _x('button', 'Save') }}"
+               >
+                  <i class="ti ti-device-floppy" aria-hidden="true"></i>
                   <span>{{ _x('button', 'Save') }}</span>
                </button>
             {% endif %}
@@ -60,8 +72,14 @@
             {% endif %}
 
             {% if canedit and item.can(id, constant('UPDATE')) %}
-               <button class="btn btn-primary me-2" type="submit" name="update" value="1">
-                  <i class="far fa-save"></i>
+               <button
+                  class="btn btn-primary me-2"
+                  type="submit"
+                  name="update"
+                  value="1"
+                  aria-label="{{ _x('button', 'Save') }}"
+               >
+                  <i class="ti ti-device-floppy" aria-hidden="true"></i>
                   <span>{{ _x('button', 'Save') }}</span>
                </button>
             {% endif %}
@@ -69,9 +87,14 @@
             {% if candel %}
                {% if item.isDeleted() %}
                   {% if item.can(id, constant('DELETE')) %}
-                     <button class="btn btn-outline-secondary me-2" type="submit"
-                             name="restore" value="1">
-                        <i class="ti ti-trash-off"></i>
+                     <button
+                        class="btn btn-outline-secondary me-2"
+                        type="submit"
+                        name="restore"
+                        value="1"
+                        aria-label="{{ _x('button', 'Restore') }}"
+                     >
+                        <i class="ti ti-trash-off" aria-hidden="true"></i>
                         <span>{{ _x('button', 'Restore') }}</span>
                      </button>
                   {% endif %}
@@ -86,10 +109,15 @@
                     {% endif %}
 
                      <span class="{{ span_cls }}">
-                        <button class="btn btn-danger me-2" type="submit" name="purge"
-                              value="1"
-                              onclick="return confirm('{{ __('Confirm the final deletion?') }}');">
-                           <i class="ti ti-trash"></i>
+                        <button
+                           class="btn btn-danger me-2"
+                           type="submit"
+                           name="purge"
+                           value="1"
+                           onclick="return confirm('{{ __('Confirm the final deletion?')|e('js') }}');"
+                           aria-label="{{ _x('button', 'Delete permanently') }}"
+                        >
+                           <i class="ti ti-trash" aria-hidden="true"></i>
                            <span>{{ _x('button', 'Delete permanently') }}</span>
                         </button>
                         {% if show_keep_devices %}
@@ -102,22 +130,32 @@
                                 </label>
                             </span>
                         {% endif %}
-                     <span>
+                     </span>
                   {% endif %}
                {% else %}
                   {% if (not item.maybeDeleted() or item.useDeletedToLockIfDynamic()) %}
                      {% if item.can(id, constant('PURGE')) %}
-                        <button class="btn btn-outline-danger me-2" type="submit" name="purge"
-                                onclick="return confirm('{{ __('Confirm the final deletion?') }}');"
-                                value="1">
-                           <i class="ti ti-trash"></i>
+                        <button
+                           class="btn btn-outline-danger me-2"
+                           type="submit"
+                           name="purge"
+                           onclick="return confirm('{{ __('Confirm the final deletion?')|e('js') }}');"
+                           value="1"
+                           aria-label="{{ _x('button', 'Delete permanently') }}"
+                        >
+                           <i class="ti ti-trash" aria-hidden="true"></i>
                            <span>{{ _x('button', 'Delete permanently') }}</span>
                         </button>
                      {% endif %}
                   {% elseif not item.isDeleted() and item.can(id, constant('DELETE')) %}
-                     <button class="btn btn-outline-warning me-2" type="submit"
-                             name="delete" value="1">
-                        <i class="ti ti-trash"></i>
+                     <button
+                        class="btn btn-outline-warning me-2"
+                        type="submit"
+                        name="delete"
+                        value="1"
+                        aria-label="{{ _x('button', 'Put in trashbin') }}"
+                     >
+                        <i class="ti ti-trash" aria-hidden="true"></i>
                         <span>{{ _x('button', 'Put in trashbin') }}</span>
                      </button>
                   {% endif %}
@@ -133,12 +171,17 @@
             <input type="hidden" name="id" value="{{ id }}" />
          {% endif %}
 
-         {% if canedit and params['addbuttons']|length > 0 %}
+         {% if canedit and (params['addbuttons'] ?? [])|length > 0 %}
             {% for key, val in params['addbuttons'] %}
-               <button class="btn btn-outline-secondary me-2" type="submit" name="{{ key }}" value="1">
+                {% if (val.add_attribs ?? []) is not empty %}
+                    {% set extra_attribs = call('Html::parseAttributes', {options: val.add_attribs}) %}
+                {% else %}
+                    {% set extra_attribs = '' %}
+                {% endif %}
+               <button class="btn {{ val.btn_class ?? 'btn-outline-secondary' }} me-2 {{ val.add_class ?? '' }}" type="{{ val.type ?? 'submit' }}" name="{{ key }}" value="1" title="{{ val.title ?? '' }}" onclick="{{ val.onclick ?? '' }}" {{ extra_attribs|raw }}>
                   {% if val is iterable %}
                      {% if val.icon is defined %}
-                        <i class="{{ val.icon }}"></i>
+                        <i class="{{ val.icon }}" aria-hidden="true"></i>
                      {% endif %}
                      <span>{{ val.text|default('') }}</span>
                   {% else %}
@@ -150,9 +193,9 @@
 
       </div>
 
-      <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}" />
    </div> {# #mainformtable #}
 </form> {# [name=asset_form] #}
-{% else %}
+    {% else %}
    </div> {# #mainformtable #}
+    {% endif %}
 {% endif %}

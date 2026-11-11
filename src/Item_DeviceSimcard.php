@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,22 +33,32 @@
  * ---------------------------------------------------------------------
  */
 
-/**
- * @since 9.2
- */
-
+use Glpi\Features\AssignableItem;
+use Glpi\Features\AssignableItemInterface;
 
 /**
  * Relation between item and devices
+ * @since 9.2
  **/
-class Item_DeviceSimcard extends Item_Devices
+class Item_DeviceSimcard extends Item_Devices implements AssignableItemInterface
 {
-    public static $itemtype_2 = 'DeviceSimcard';
-    public static $items_id_2 = 'devicesimcards_id';
+    use AssignableItem;
 
-    protected static $notable = false;
+    public static ?string $itemtype_2 = DeviceSimcard::class;
+    public static ?string $items_id_2 = 'devicesimcards_id';
 
-    public static $undisclosedFields      = ['pin', 'pin2', 'puk', 'puk2'];
+    protected static bool $notable = false;
+
+    public static array $undisclosedFields      = ['pin', 'pin2', 'puk', 'puk2'];
+
+    public function getCloneRelations(): array
+    {
+        $relations = parent::getCloneRelations();
+
+        $relations[] = Infocom::class;
+
+        return $relations;
+    }
 
     public static function getSpecificities($specif = '')
     {
@@ -61,11 +71,11 @@ class Item_DeviceSimcard extends Item_Devices
                 'short name' => __('PIN code'),
                 'size'       => 20,
                 'id'         => 15,
-                'datatype'   => 'text',
+                'datatype'   => 'string',
                 'right'      => 'devicesimcard_pinpuk',
                 'nosearch'   => true,
                 'nodisplay'  => true,
-                'protected'  => true
+                'protected'  => true,
             ],
             'pin2'            => ['long name'  => __('PIN2 code'),
                 'short name' => __('PIN2 code'),
@@ -75,7 +85,7 @@ class Item_DeviceSimcard extends Item_Devices
                 'right'      => 'devicesimcard_pinpuk',
                 'nosearch'   => true,
                 'nodisplay'  => true,
-                'protected'  => true
+                'protected'  => true,
             ],
             'puk'             => ['long name'  => __('PUK code'),
                 'short name' => __('PUK code'),
@@ -85,7 +95,7 @@ class Item_DeviceSimcard extends Item_Devices
                 'right'      => 'devicesimcard_pinpuk',
                 'nosearch'   => true,
                 'nodisplay'  => true,
-                'protected'  => true
+                'protected'  => true,
             ],
             'puk2'            => ['long name'  => __('PUK2 code'),
                 'short name' => __('PUK2 code'),
@@ -95,33 +105,76 @@ class Item_DeviceSimcard extends Item_Devices
                 'right'      => 'devicesimcard_pinpuk',
                 'nosearch'   => true,
                 'nodisplay'  => true,
-                'protected'  => true
+                'protected'  => true,
             ],
             'lines_id'        => ['long name'  => Line::getTypeName(1),
                 'short name' => Line::getTypeName(1),
                 'size'       => 20,
                 'id'         => 19,
-                'datatype'   => 'dropdown'
+                'datatype'   => 'dropdown',
             ],
             'msin'           => ['long name'  => __('Mobile Subscriber Identification Number'),
                 'short name' => __('MSIN'),
                 'size'       => 20,
                 'id'         => 20,
                 'datatype'   => 'string',
-                'tooltip'    => __('MSIN is the last 8 or 10 digits of IMSI')
+                'tooltip'    => __('MSIN is the last 8 or 10 digits of IMSI'),
             ],
             'users_id'        => ['long name'  => User::getTypeName(1),
                 'short name' => User::getTypeName(1),
                 'size'       => 20,
                 'id'         => 21,
                 'datatype'   => 'dropdown',
-                'dropdown_options' => ['right' => 'all']
+                'dropdown_options' => ['right' => 'all'],
             ],
-            'groups_id'        => ['long name'  => Group::getTypeName(1),
+            'groups_id'        => [
+                'long name'  => Group::getTypeName(1),
                 'short name' => Group::getTypeName(1),
                 'size'       => 20,
                 'id'         => 22,
-                'datatype'   => 'dropdown'
+                'joinparams'         => [
+                    'beforejoin'         => [
+                        'table'              => 'glpi_groups_items',
+                        'joinparams'         => [
+                            'jointype'           => 'itemtype_item',
+                            'condition'          => ['NEWTABLE.type' => Group_Item::GROUP_TYPE_NORMAL],
+                        ],
+                    ],
+                ],
+                'forcegroupby'       => true,
+                'massiveaction'      => false,
+                'datatype'           => 'dropdown',
+                'dropdown_options' => ['multiple' => true],
+            ],
+            'users_id_tech'  => [
+                'long name'  => __('Technician in charge'),
+                'short name' => __('Technician in charge'),
+                'size'       => 20,
+                'id'         => 23,
+                'datatype'   => 'dropdown',
+                'dropdown_options' => ['right' => 'own_ticket'],
+            ],
+            'groups_id_tech' => [
+                'long name'  => __('Group in charge'),
+                'short name' => __('Group in charge'),
+                'size'       => 20,
+                'id'         => 24,
+                'joinparams' => [
+                    'beforejoin'         => [
+                        'table'              => 'glpi_groups_items',
+                        'joinparams'         => [
+                            'jointype'           => 'itemtype_item',
+                            'condition'          => ['NEWTABLE.type' => Group_Item::GROUP_TYPE_TECH],
+                        ],
+                    ],
+                ],
+                'forcegroupby'     => true,
+                'massiveaction'    => false,
+                'datatype'         => 'dropdown',
+                'dropdown_options' => [
+                    'condition' => ['is_assign' => 1],
+                    'multiple' => true,
+                ],
             ],
         ];
     }
@@ -137,5 +190,17 @@ class Item_DeviceSimcard extends Item_Devices
             'serial' => 'equal',
             'msin' => 'equal',
         ];
+    }
+
+    public function getRights($interface = 'central')
+    {
+        $rights = parent::getRights($interface);
+        // Update labels to match other assets
+        $rights[READ] = __('View all');
+        $rights[UPDATE] = __('Update all');
+        unset($rights[CREATE]);
+        unset($rights[DELETE]);
+        unset($rights[PURGE]);
+        return $rights;
     }
 }

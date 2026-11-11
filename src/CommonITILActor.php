@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -38,76 +38,66 @@
  **/
 abstract class CommonITILActor extends CommonDBRelation
 {
-   // items_id_1, items_id_2, itemtype_1 and itemtype_2 are defined inside the inherited classes
-    public static $checkItem_2_Rights  = self::DONT_CHECK_ITEM_RIGHTS;
-    public static $logs_for_item_2     = false;
-    public $auto_message_on_action     = false;
+    // items_id_1, items_id_2, itemtype_1 and itemtype_2 are defined inside the inherited classes
+    public static int $checkItem_2_Rights  = self::DONT_CHECK_ITEM_RIGHTS;
+    public static bool $logs_for_item_2     = false;
+    public bool $auto_message_on_action     = false;
 
-   // Requester
-    const REQUESTER = 1;
-   // Assign
-    const ASSIGN    = 2;
-   // Observer
-    const OBSERVER  = 3;
+    public const REQUESTER = 1;
+    public const ASSIGN    = 2;
+    public const OBSERVER  = 3;
 
-
+    /**
+     * @return ?string
+     */
     public function getActorForeignKey()
     {
         return static::$items_id_2;
     }
 
-
+    /**
+     * @return ?string
+     */
     public static function getItilObjectForeignKey()
     {
         return static::$items_id_1;
     }
 
-
-    /**
-     * @since 0.84
-     *
-     * @param $input  array of data to be added
-     *
-     * @see CommonDBRelation::isAttach2Valid()
-     **/
     public function isAttach2Valid(array &$input)
     {
-
-       // Anonymous user is valid if 'alternative_email' field is not empty
+        // Anonymous user is valid if 'alternative_email' field is not empty
         if (
-            isset($input['users_id']) && ($input['users_id'] == 0)
-            && isset($input['alternative_email']) && !empty($input['alternative_email'])
+            isset($input['users_id']) && (int) $input['users_id'] === 0 && !empty($input['alternative_email'])
         ) {
             return true;
         }
-       // Anonymous supplier is valid if 'alternative_email' field is not empty
+        // Anonymous supplier is valid if 'alternative_email' field is not empty
         if (
-            isset($input['suppliers_id']) && ($input['suppliers_id'] == 0)
-            && isset($input['alternative_email']) && !empty($input['alternative_email'])
+            isset($input['suppliers_id']) && (int) $input['suppliers_id'] === 0 && !empty($input['alternative_email'])
         ) {
             return true;
         }
         return false;
     }
 
-
     /**
-     * @param $items_id
+     * @param int $items_id
+     * @phpstan-param positive-int $items_id
+     * @return array Array of actors
      **/
-    public function getActors($items_id)
+    public function getActors(int $items_id): array
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
-        if (empty($items_id)) {
+        if ($items_id <= 0) {
             return [];
         }
 
         $users = [];
         $iterator = $DB->request([
-            'FROM'   => $this->getTable(),
+            'FROM'   => static::getTable(),
             'WHERE'  => [static::getItilObjectForeignKey() => $items_id],
-            'ORDER'  => 'id ASC'
+            'ORDER'  => 'id ASC',
         ]);
         foreach ($iterator as $data) {
             $users[$data['type']][] = $data;
@@ -115,199 +105,123 @@ abstract class CommonITILActor extends CommonDBRelation
         return $users;
     }
 
+    final protected function getForceLogOption(): int
+    {
+        if ($this->_force_log_option !== 0) {
+            // if _force_log_option is already set by other code
+            // parts just return it to not change existing behavior
+            return $this->_force_log_option;
+        }
 
+        $type = $this->input['type'] ?? $this->fields['type'] ?? null;
+
+        if ($type === null) {
+            // keep existing behavior if type is not explicitly set
+            return $this->_force_log_option;
+        }
+
+        // Values from CommonITILObject::getSearchOptionsActors()
+        if (static::$itemtype_2 === User::class) {
+            switch ($type) {
+                case CommonITILActor::REQUESTER:
+                    return 4;
+                case CommonITILActor::OBSERVER:
+                    return 66;
+                case CommonITILActor::ASSIGN:
+                    return 5;
+            }
+        } elseif (static::$itemtype_2 === Group::class) {
+            switch ($type) {
+                case CommonITILActor::REQUESTER:
+                    return 71;
+                case CommonITILActor::OBSERVER:
+                    return 65;
+                case CommonITILActor::ASSIGN:
+                    return 8;
+            }
+        } elseif (static::$itemtype_2 === Supplier::class) {
+            // Suppliers are special the can only be assigned, not observe or request
+            switch ($type) {
+                case CommonITILActor::ASSIGN:
+                    return 6;
+            }
+        }
+        return $this->_force_log_option; // again just return default
+    }
     /**
-     * @param $items_id
-     * @param $email
-     **/
+     * @param int $items_id
+     * @param string $email
+     *
+     * @return bool
+     */
     public function isAlternateEmailForITILObject($items_id, $email)
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
             'FROM'   => static::getTable(),
             'WHERE'  => [
                 static::getItilObjectForeignKey()   => $items_id,
-                'alternative_email'                 => $email
+                'alternative_email'                 => $email,
             ],
             'START'  => 0,
-            'LIMIT'  => 1
+            'LIMIT'  => 1,
         ]);
-        if (count($iterator) > 0) {
-            return true;
-        }
-        return false;
+        return count($iterator) > 0;
     }
 
-
-    public function canUpdateItem()
+    public function canUpdateItem(): bool
     {
-
         return (parent::canUpdateItem()
               || (isset($this->fields['users_id'])
-                  && ($this->fields['users_id'] == Session::getLoginUserID())));
+                  && ((int) $this->fields['users_id'] === Session::getLoginUserID())));
     }
 
-
-    /**
-     * @since 0.84
-     **/
-    public function canDeleteItem()
+    public function canDeleteItem(): bool
     {
-
         return (parent::canDeleteItem()
               || (isset($this->fields['users_id'])
-                  && ($this->fields['users_id'] == Session::getLoginUserID())));
+                  && ((int) $this->fields['users_id'] === Session::getLoginUserID())));
     }
 
     /**
-     * Print the object user form for notification
+     * Get the deletion notification event name and the `_old_*` option key matching
+     * this actor's role (requester/observer/assign) and itemtype (user/group/supplier).
      *
-     * @param $ID              integer ID of the item
-     * @param $options   array
-     *
-     * @return void
-     **/
-    public function showUserNotificationForm($ID, $options = [])
+     * @return array{event: string, option_key: string}|null
+     */
+    private function getActorDeletionNotificationContext(): ?array
     {
+        $type_names = [
+            self::REQUESTER => 'requester',
+            self::ASSIGN    => 'assign',
+            self::OBSERVER  => 'observer',
+        ];
+        $fkey_names = [
+            'users_id'     => 'user',
+            'groups_id'    => 'group',
+            'suppliers_id' => 'supplier',
+        ];
 
-        $this->check($ID, UPDATE);
-
-        if (!isset($this->fields['users_id'])) {
-            return false;
-        }
-        $item = new static::$itemtype_1();
-
-        echo "<br><form method='post' action='" . $_SERVER['PHP_SELF'] . "'>";
-        echo "<div class='center'>";
-        echo "<table class='tab_cadre' width='80%'>";
-        echo "<tr class='tab_bg_2'><td>" . $item->getTypeName(1) . "</td>";
-        echo "<td>";
-        if ($item->getFromDB($this->fields[static::getItilObjectForeignKey()])) {
-            echo $item->getField('name');
-        }
-        echo "</td></tr>";
-
-        $user          = new User();
-        $default_email = "";
-        $emails = [];
-        if ($user->getFromDB($this->fields["users_id"])) {
-            $default_email = $user->getDefaultEmail();
-            $emails        = $user->getAllEmails();
+        $type = (int) ($this->fields['type'] ?? 0);
+        if (!isset($type_names[$type])) {
+            return null;
         }
 
-        echo "<tr class='tab_bg_2'><td>" . User::getTypeName(1) . "</td>";
-        echo "<td>" . $user->getName() . "</td></tr>";
-
-        echo "<tr class='tab_bg_1'><td>" . __('Email Followup') . "</td>";
-        echo "<td>";
-        Dropdown::showYesNo('use_notification', $this->fields['use_notification']);
-        echo "</td></tr>";
-
-        echo "<tr class='tab_bg_1'><td>" . _n('Email', 'Emails', 1) . "</td>";
-        echo "<td>";
-        if (
-            (count($emails) ==  1)
-            && !empty($default_email)
-            && NotificationMailing::isUserAddressValid($default_email)
-        ) {
-            echo $default_email;
-        } else if (count($emails) > 1) {
-           // Several emails : select in the list
-            $emailtab = [];
-            foreach ($emails as $new_email) {
-                $emailtab[$new_email] = $new_email;
+        foreach ($fkey_names as $fkey => $itemtype_name) {
+            if (isset($this->fields[$fkey])) {
+                return [
+                    'event'      => sprintf('remove_%s_%s', $type_names[$type], $itemtype_name),
+                    'option_key' => '_old_' . $itemtype_name,
+                ];
             }
-            Dropdown::showFromArray(
-                "alternative_email",
-                $emailtab,
-                ['value'   => $this->fields['alternative_email']]
-            );
-        } else {
-            echo "<input type='text' size='40' name='alternative_email' value='" .
-                $this->fields['alternative_email'] . "'>";
         }
-        echo "</td></tr>";
 
-        echo "<tr class='tab_bg_2'>";
-        echo "<td class='center' colspan='2'>";
-        echo "<input type='submit' name='update' value=\"" . _sx('button', 'Save') . "\" class='btn btn-primary'>";
-        echo "<input type='hidden' name='id' value='$ID'>";
-        echo "</td></tr>";
-
-        echo "</table></div>";
-        Html::closeForm();
+        return null;
     }
-
-
-    /**
-     * Print the object user form for notification
-     *
-     * @since 0.85
-     *
-     * @param $ID              integer ID of the item
-     * @param $options   array
-     *
-     * @return void
-     **/
-    public function showSupplierNotificationForm($ID, $options = [])
-    {
-
-        $this->check($ID, UPDATE);
-
-        if (!isset($this->fields['suppliers_id'])) {
-            return false;
-        }
-        $item = new static::$itemtype_1();
-
-        echo "<br><form method='post' action='" . $_SERVER['PHP_SELF'] . "'>";
-        echo "<div class='center'>";
-        echo "<table class='tab_cadre' width='80%'>";
-        echo "<tr class='tab_bg_2'><td>" . $item->getTypeName(1) . "</td>";
-        echo "<td>";
-        if ($item->getFromDB($this->fields[static::getItilObjectForeignKey()])) {
-            echo $item->getField('name');
-        }
-        echo "</td></tr>";
-
-        $supplier      = new Supplier();
-        $default_email = "";
-        if ($supplier->getFromDB($this->fields["suppliers_id"])) {
-            $default_email = $supplier->fields['email'];
-        }
-
-        echo "<tr class='tab_bg_2'><td>" . Supplier::getTypeName(1) . "</td>";
-        echo "<td>" . $supplier->getName() . "</td></tr>";
-
-        echo "<tr class='tab_bg_1'><td>" . __('Email Followup') . "</td>";
-        echo "<td>";
-        Dropdown::showYesNo('use_notification', $this->fields['use_notification']);
-        echo "</td></tr>";
-
-        echo "<tr class='tab_bg_1'><td>" . _n('Email', 'Emails', 1) . "</td>";
-        echo "<td>";
-        if (empty($this->fields['alternative_email'])) {
-            $this->fields['alternative_email'] = $default_email;
-        }
-        echo "<input type='text' size='40' name='alternative_email' value='" .
-             $this->fields['alternative_email'] . "'>";
-        echo "</td></tr>";
-
-        echo "<tr class='tab_bg_2'>";
-        echo "<td class='center' colspan='2'>";
-        echo "<input type='submit' name='update' value=\"" . _sx('button', 'Save') . "\" class='btn btn-primary'>";
-        echo "<input type='hidden' name='id' value='$ID'>";
-        echo "</td></tr>";
-
-        echo "</table></div>";
-        Html::closeForm();
-    }
-
 
     public function post_deleteFromDB()
     {
-        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $donotif = !isset($this->input['_disablenotif']) && $CFG_GLPI["use_notifications"];
@@ -315,44 +229,50 @@ abstract class CommonITILActor extends CommonDBRelation
         $item = $this->getConnexityItem(static::$itemtype_1, static::getItilObjectForeignKey());
 
         if ($item instanceof CommonITILObject) {
+            $notification_context = $this->getActorDeletionNotificationContext();
+            $options = $notification_context !== null
+                ? [$notification_context['option_key'] => $this->fields]
+                : [];
+
             if (
-                ($item->countSuppliers(CommonITILActor::ASSIGN) == 0)
-                && ($item->countUsers(CommonITILActor::ASSIGN) == 0)
-                && ($item->countGroups(CommonITILActor::ASSIGN) == 0)
-                && ($item->fields['status'] != CommonITILObject::CLOSED)
-                && ($item->fields['status'] != CommonITILObject::SOLVED)
+                ($item->countSuppliers(self::ASSIGN) === 0)
+                && ($item->countUsers(self::ASSIGN) === 0)
+                && ($item->countGroups(self::ASSIGN) === 0)
+                && ((int) $item->fields['status'] !== CommonITILObject::CLOSED)
+                && ((int) $item->fields['status'] !== CommonITILObject::SOLVED)
+                && !isset($this->input['_do_not_compute_status'])
             ) {
                 $status = CommonITILObject::INCOMING;
-                if (in_array($item->fields['status'], Change::getNewStatusArray())) {
+                if (in_array((int) $item->fields['status'], Change::getNewStatusArray(), true)) {
                     $status = $item->fields['status'];
                 }
-                $item->update(['id'     => $this->fields[static::getItilObjectForeignKey()],
-                    'status' => $status
+                $item->update([
+                    'id'     => $this->fields[static::getItilObjectForeignKey()],
+                    'status' => $status,
                 ]);
+                if ($donotif && $notification_context !== null) {
+                    NotificationEvent::raiseEvent($notification_context['event'], $item, $options);
+                }
             } else {
                 $item->updateDateMod($this->fields[static::getItilObjectForeignKey()]);
 
                 if ($donotif) {
-                    $options = [];
-                    if (isset($this->fields['users_id'])) {
-                        $options = ['_old_user' => $this->fields];
-                    }
                     NotificationEvent::raiseEvent("update", $item, $options);
+                    if ($notification_context !== null) {
+                        NotificationEvent::raiseEvent($notification_context['event'], $item, $options);
+                    }
                 }
             }
         }
+
+        $current_log_option = $this->_force_log_option;
+        $this->_force_log_option = $this->getForceLogOption();
         parent::post_deleteFromDB();
+        $this->_force_log_option = $current_log_option;
     }
 
-
-    /**
-     * @since 0.85
-     *
-     * @see CommonDBRelation::prepareInputForAdd()
-     **/
     public function prepareInputForAdd($input)
     {
-
         // don't duplicate actors (search for existing before adding)
         // actors with $fk_field=0 are "email" actors
         $fk_field = $this->getActorForeignKey();
@@ -361,13 +281,16 @@ abstract class CommonITILActor extends CommonDBRelation
             $actor_id        = $input[$fk_field];
 
             // check if the actor exists in database
-            $itemtype = getItemtypeForForeignKeyField($fk_field);
-            $actor = new $itemtype();
+            $actor = getItemForForeignKeyField($fk_field);
             if (!$actor->getFromDB($actor_id)) {
                 return false;
             }
 
-            $existing_actors = $this->getActors($input[static::getItilObjectForeignKey()] ?? 0);
+            $itil_items_id = $input[static::getItilObjectForeignKey()];
+            $existing_actors = [];
+            if (is_numeric($itil_items_id) && $itil_items_id > 0) {
+                $existing_actors = $this->getActors((int) $itil_items_id);
+            }
             $existing_ids    = array_column($existing_actors[$current_type] ?? [], $fk_field);
 
             // actor already exists
@@ -378,9 +301,9 @@ abstract class CommonITILActor extends CommonDBRelation
 
         if (!isset($input['alternative_email']) || is_null($input['alternative_email'])) {
             $input['alternative_email'] = '';
-        } else if ($input['alternative_email'] != '' && !NotificationMailing::isUserAddressValid($input['alternative_email'])) {
+        } elseif ($input['alternative_email'] != '' && !NotificationMailing::isUserAddressValid($input['alternative_email'])) {
             Session::addMessageAfterRedirect(
-                __('Invalid email address'),
+                __s('Invalid email address'),
                 false,
                 ERROR
             );
@@ -410,7 +333,7 @@ abstract class CommonITILActor extends CommonDBRelation
             && !NotificationMailing::isUserAddressValid($input['alternative_email'])
         ) {
             Session::addMessageAfterRedirect(
-                __('Invalid email address'),
+                __s('Invalid email address'),
                 false,
                 ERROR
             );
@@ -423,18 +346,21 @@ abstract class CommonITILActor extends CommonDBRelation
 
     public function post_addItem()
     {
+        $item = getItemForItemtype(static::$itemtype_1);
 
-        $item = new static::$itemtype_1();
+        if (!($item instanceof CommonITILObject)) {
+            throw new RuntimeException();
+        }
 
         $no_stat_computation = true;
         if ($this->input['type'] == CommonITILActor::ASSIGN) {
-           // Compute "take into account delay" unless "do not compute" flag was set by business rules
+            // Compute "take into account delay" unless "do not compute" flag was set by business rules
             $no_stat_computation = $item->isTakeIntoAccountComputationBlocked($this->input);
         }
         $item->updateDateMod($this->fields[static::getItilObjectForeignKey()], $no_stat_computation);
 
         if ($item->getFromDB($this->fields[static::getItilObjectForeignKey()])) {
-           // Check object status and update it if needed
+            // Check object status and update it if needed
             if (
                 $this->input['type'] == CommonITILActor::ASSIGN
                 && !isset($this->input['_from_object'])
@@ -443,30 +369,27 @@ abstract class CommonITILActor extends CommonDBRelation
             ) {
                 $item->update(['id'               => $item->getID(),
                     'status'           => CommonITILObject::ASSIGNED,
-                    '_from_assignment' => true
+                    '_from_assignment' => true,
                 ]);
             }
 
-           // raise notification for this actor addition
+            // raise notification for this actor addition
             if (!isset($this->input['_disablenotif'])) {
-                $string_type = "";
-                switch ($this->input['type']) {
-                    case self::REQUESTER:
-                        $string_type = "requester";
-                        break;
-                    case self::OBSERVER:
-                        $string_type = "observer";
-                        break;
-                    case self::ASSIGN:
-                        $string_type = "assign";
-                        break;
-                }
-               // example for event: assign_group
+                $string_type = match ($this->input['type']) {
+                    self::REQUESTER => 'requester',
+                    self::OBSERVER  => 'observer',
+                    self::ASSIGN    => 'assign',
+                    default         => '',
+                };
+                // example for event: assign_group
                 $event = $string_type . "_" . strtolower($this::$itemtype_2);
                 NotificationEvent::raiseEvent($event, $item);
             }
         }
 
+        $current_log_option = $this->_force_log_option;
+        $this->_force_log_option = $this->getForceLogOption();
         parent::post_addItem();
+        $this->_force_log_option = $current_log_option;
     }
 }

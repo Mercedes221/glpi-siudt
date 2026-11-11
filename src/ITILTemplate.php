@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,6 +33,11 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\Application\View\TemplateRenderer;
+use Glpi\Search\SearchOption;
+
+use function Safe\preg_replace;
+
 /**
  * ITIL Template class
  *
@@ -40,49 +45,65 @@
  **/
 abstract class ITILTemplate extends CommonDropdown
 {
-   // From CommonDBTM
-    public $dohistory                 = true;
+    // From CommonDBTM
+    public bool $dohistory                 = true;
 
-   // From CommonDropdown
-    public $first_level_menu          = "helpdesk";
+    public bool $display_dropdowntitle     = false;
 
-    public $display_dropdowntitle     = false;
+    public static string $rightname                 = 'itiltemplate';
 
-    public static $rightname                 = 'itiltemplate';
+    public bool $can_be_translated            = false;
 
-    public $can_be_translated            = false;
+    // Specific fields
+    /**
+     * Mandatory Fields
+     */
+    public array $mandatory  = [];
+    /**
+     * Hidden fields
+     */
+    public array $hidden     = [];
+    /**
+     * Predefined fields
+     */
+    public array $predefined = [];
+    /**
+     * Readonly fields
+     */
+    public array $readonly   = [];
+    /// Related ITIL type
 
-   // Specific fields
-   /// Mandatory Fields
-    public $mandatory  = [];
-   /// Hidden fields
-    public $hidden     = [];
-   /// Predefined fields
-    public $predefined = [];
-   /// Related ITIL type
+    /**
+     * Predefined field instance to use to set the concrete items's data
+     */
+    abstract public static function getPredefinedFields(): ITILTemplatePredefinedField;
 
 
     /**
      * Retrieve an item from the database with additional datas
      *
-     * @since 0.83
+     * @param int  $ID                  ID of the item to get
+     * @param bool $withtypeandcategory with type and category (true by default)
      *
-     * @param $ID                    integer  ID of the item to get
-     * @param $withtypeandcategory   boolean  with type and category (true by default)
-     *
-     * @return boolean
-     **/
+     * @return bool
+     */
     public function getFromDBWithData($ID, $withtypeandcategory = true)
     {
         if ($this->getFromDB($ID)) {
-            $itiltype = str_replace('Template', '', static::getType());
-            $itil_object  = new $itiltype();
+            $itiltype = static::getITILObjectClass();
+            $itil_object  = getItemForItemtype($itiltype);
             $itemstable = $itil_object->getItemsTable();
+
             $tth_class = $itiltype . 'TemplateHiddenField';
-            $tth          = new $tth_class();
+            $tth = getItemForItemtype($tth_class);
+            if (!($tth instanceof ITILTemplateHiddenField)) {
+                throw new RuntimeException(
+                    sprintf('`%s` is not an instance of `%s`.', $tth_class, ITILTemplateHiddenField::class)
+                );
+            }
             $this->hidden = $tth->getHiddenFields($ID, $withtypeandcategory);
 
-           // Force items_id if itemtype is defined
+            // Force items_id if itemtype is defined
             if (
                 isset($this->hidden['itemtype'])
                 && !isset($this->hidden['items_id'])
@@ -93,12 +114,17 @@ abstract class ITILTemplate extends CommonDropdown
                     $itemstable
                 );
             }
-           // Always get all mandatory fields
+            // Always get all mandatory fields
             $ttm_class = $itiltype . 'TemplateMandatoryField';
-            $ttm             = new $ttm_class();
+            $ttm = getItemForItemtype($ttm_class);
+            if (!($ttm instanceof ITILTemplateMandatoryField)) {
+                throw new RuntimeException(
+                    sprintf('`%s` is not an instance of `%s`.', $ttm_class, ITILTemplateMandatoryField::class)
+                );
+            }
             $this->mandatory = $ttm->getMandatoryFields($ID);
 
-           // Force items_id if itemtype is defined
+            // Force items_id if itemtype is defined
             if (
                 isset($this->mandatory['itemtype'])
                 && !isset($this->mandatory['items_id'])
@@ -110,10 +136,38 @@ abstract class ITILTemplate extends CommonDropdown
                 );
             }
 
+            // Always get all read only fields
+            $ttr_class = $itiltype . 'TemplateReadonlyField';
+            $ttr = getItemForItemtype($ttr_class);
+            if (!($ttr instanceof ITILTemplateReadonlyField)) {
+                throw new RuntimeException(
+                    sprintf('`%s` is not an instance of `%s`.', $ttr_class, ITILTemplateReadonlyField::class)
+                );
+            }
+            $this->readonly = $ttr->getReadonlyFields($ID, true);
+
+            // Force items_id if itemtype is defined
+            if (
+                isset($this->readonly['itemtype'])
+                && !isset($this->readonly['items_id'])
+            ) {
+                $this->readonly['items_id'] = $itil_object->getSearchOptionIDByField(
+                    'field',
+                    'items_id',
+                    $itemstable
+                );
+            }
+
             $ttp_class = $itiltype . 'TemplatePredefinedField';
-            $ttp              = new $ttp_class();
+            $ttp = getItemForItemtype($ttp_class);
+            if (!($ttp instanceof ITILTemplatePredefinedField)) {
+                throw new RuntimeException(
+                    sprintf('`%s` is not an instance of `%s`.', $ttp_class, ITILTemplatePredefinedField::class)
+                );
+            }
             $this->predefined = $ttp->getPredefinedFields($ID, $withtypeandcategory);
-           // Compute time_to_resolve
+
+            // Compute time_to_resolve
             if (isset($this->predefined['time_to_resolve'])) {
                 $this->predefined['time_to_resolve']
                         = Html::computeGenericDateTimeSearch($this->predefined['time_to_resolve'], false);
@@ -123,17 +177,7 @@ abstract class ITILTemplate extends CommonDropdown
                         = Html::computeGenericDateTimeSearch($this->predefined['time_to_own'], false);
             }
 
-           // Compute internal_time_to_resolve
-            if (isset($this->predefined['internal_time_to_resolve'])) {
-                $this->predefined['internal_time_to_resolve']
-                = Html::computeGenericDateTimeSearch($this->predefined['internal_time_to_resolve'], false);
-            }
-            if (isset($this->predefined['internal_time_to_own'])) {
-                $this->predefined['internal_time_to_own']
-                = Html::computeGenericDateTimeSearch($this->predefined['internal_time_to_own'], false);
-            }
-
-           // Compute date
+            // Compute date
             if (isset($this->predefined['date'])) {
                 $this->predefined['date']
                         = Html::computeGenericDateTimeSearch($this->predefined['date'], false);
@@ -146,27 +190,56 @@ abstract class ITILTemplate extends CommonDropdown
 
     public static function getTypeName($nb = 0)
     {
-        $itiltype = str_replace('Template', '', static::getType());
-       //TRANS %1$S is the ITIL type
+        $itiltype = static::getITILObjectClass();
+        //TRANS %1$S is the ITIL type
         return sprintf(
             _n('%1$s template', '%1$s templates', $nb),
             $itiltype::getTypeName()
         );
     }
 
+    public function getAdditionalFields()
+    {
+        $fields = parent::getAdditionalFields();
+
+        $fields[] = [
+            'name'   => 'allowed_statuses',
+            'label'  => _n('Allowed status', 'Allowed statuses', Session::getPluralNumber()),
+            'type'   => 'specific',
+            'list'   => true,
+        ];
+
+        return $fields;
+    }
+
+    public function displaySpecificTypeField($ID, $field = [], array $options = [])
+    {
+        $itil_itemtype = static::getITILObjectClass();
+        switch ($field['name']) {
+            case 'allowed_statuses':
+                $itil_itemtype::dropdownStatus([
+                    'name'      => $field['name'],
+                    'values'    => $this->fields[$field['name']] ?? [],
+                    'multiple'  => true,
+                ]);
+                break;
+        }
+    }
 
     /**
-     * @param boolean $withtypeandcategory (default 0)
-     * @param boolean $withitemtype        (default 0)
-     **/
+     * @param bool $withtypeandcategory
+     * @param bool $withitemtype
+     *
+     * @return array
+     */
     public static function getAllowedFields($withtypeandcategory = false, $withitemtype = false)
     {
 
         static $allowed_fields = [];
 
-        $itiltype = str_replace('Template', '', static::getType());
+        $itiltype = static::getITILObjectClass();
 
-       // For integer value for index
+        // For integer value for index
         if ($withtypeandcategory) {
             $withtypeandcategory = 1;
         } else {
@@ -180,10 +253,10 @@ abstract class ITILTemplate extends CommonDropdown
         }
 
         if (!isset($allowed_fields[$itiltype][$withtypeandcategory][$withitemtype])) {
-            $itil_object = new $itiltype();
+            $itil_object = getItemForItemtype($itiltype);
             $itemstable = $itil_object->getItemsTable();
 
-           // SearchOption ID => name used for options
+            // SearchOption ID => name used for options
             $allowed_fields[$itiltype][$withtypeandcategory][$withitemtype] = [
                 $itil_object->getSearchOptionIDByField(
                     'field',
@@ -269,10 +342,10 @@ abstract class ITILTemplate extends CommonDropdown
                 $itemstable
             )] = 'items_id';
 
-           // Add validation request
+            // Add validation request
             $allowed_fields[$itiltype][$withtypeandcategory][$withitemtype][-2] = '_add_validation';
 
-           // Add document
+            // Add document
             $allowed_fields[$itiltype][$withtypeandcategory][$withitemtype]
                [$itil_object->getSearchOptionIDByField(
                    'field',
@@ -280,7 +353,7 @@ abstract class ITILTemplate extends CommonDropdown
                    'glpi_documents'
                )] = '_documents_id';
 
-           // Add ITILTask (from task templates)
+            // Add ITILTask (from task templates)
             $allowed_fields[$itiltype][$withtypeandcategory][$withitemtype]
                [$itil_object->getSearchOptionIDByField(
                    'field',
@@ -296,8 +369,8 @@ abstract class ITILTemplate extends CommonDropdown
                     'glpi_locations'
                 )] = 'locations_id';
 
-           //add specific itil type fields
-            $allowed_fields[$itiltype][$withtypeandcategory][$withitemtype] += static::getExtraAllowedFields($withtypeandcategory, $withitemtype);
+            //add specific itil type fields
+            $allowed_fields[$itiltype][$withtypeandcategory][$withitemtype] += static::getExtraAllowedFields((bool) $withtypeandcategory, (bool) $withitemtype);
         }
 
         return $allowed_fields[$itiltype][$withtypeandcategory][$withitemtype];
@@ -308,8 +381,8 @@ abstract class ITILTemplate extends CommonDropdown
      *
      * @since 9.5.0
      *
-     * @param boolean $withtypeandcategory (default 0)
-     * @param boolean $withitemtype        (default 0)
+     * @param bool $withtypeandcategory
+     * @param bool $withitemtype
      *
      * @return array
      *
@@ -322,15 +395,17 @@ abstract class ITILTemplate extends CommonDropdown
 
 
     /**
-     * @param $withtypeandcategory   (default 0)
-     * @param $with_items_id         (default 0)
-     **/
-    public function getAllowedFieldsNames($withtypeandcategory = 0, $with_items_id = 0)
+     * @param bool $withtypeandcategory
+     * @param bool $with_items_id
+     *
+     * @return array
+     */
+    public function getAllowedFieldsNames($withtypeandcategory = false, $with_items_id = false)
     {
 
-        $itiltype = str_replace('Template', '', static::getType());
-        $searchOption = Search::getOptions($itiltype);
-        $tab          = $this->getAllowedFields($withtypeandcategory, $with_items_id);
+        $itiltype = static::getITILObjectClass();
+        $searchOption = SearchOption::getOptionsForItemtype($itiltype);
+        $tab          = static::getAllowedFields($withtypeandcategory, $with_items_id);
         foreach (array_keys($tab) as $ID) {
             switch ($ID) {
                 case -2:
@@ -352,43 +427,18 @@ abstract class ITILTemplate extends CommonDropdown
     }
 
 
-    /**
-     *  ??since version 0.84
-     **/
-    public function getSimplifiedInterfaceFields()
-    {
-
-        $ticket = new Ticket();
-        $fields = [$ticket->getSearchOptionIDByField('field', 'name', 'glpi_tickets'),
-            $ticket->getSearchOptionIDByField('field', 'content', 'glpi_tickets'),
-            $ticket->getSearchOptionIDByField('field', 'urgency', 'glpi_tickets'),
-            $ticket->getSearchOptionIDByField('field', 'completename', 'glpi_locations'),
-            $ticket->getSearchOptionIDByField('field', 'itemtype', 'glpi_tickets'),
-            $ticket->getSearchOptionIDByField(
-                'field',
-                'completename',
-                'glpi_itilcategories'
-            ),
-            $ticket->getSearchOptionIDByField('field', 'type', 'glpi_tickets'),
-            $ticket->getSearchOptionIDByField('field', 'items_id', 'glpi_items_tickets'),
-            $ticket->getSearchOptionIDByField('field', 'name', 'glpi_documents'),
-            66 // users_id_observer
-        ];
-        return $fields;
-    }
-
-
     public function defineTabs($options = [])
     {
         $ong          = [];
         $this->addDefaultFormTab($ong);
-        $itiltype = str_replace('Template', '', static::getType());
+        $itiltype = static::getITILObjectClass();
         $this->addStandardTab($itiltype . 'TemplateMandatoryField', $ong, $options);
         $this->addStandardTab($itiltype . 'TemplatePredefinedField', $ong, $options);
         $this->addStandardTab($itiltype . 'TemplateHiddenField', $ong, $options);
+        $this->addStandardTab($itiltype . 'TemplateReadonlyField', $ong, $options);
         $this->addStandardTab($itiltype . 'Template', $ong, $options);
-        $this->addStandardTab('ITILCategory', $ong, $options);
-        $this->addStandardTab('Log', $ong, $options);
+        $this->addStandardTab(ITILCategory::class, $ong, $options);
+        $this->addStandardTab(Log::class, $ong, $options);
 
         return $ong;
     }
@@ -396,12 +446,8 @@ abstract class ITILTemplate extends CommonDropdown
 
     public static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0)
     {
-        if ($item instanceof ITILTemplate) {
-            switch ($tabnum) {
-                case 1:
-                    $item->showCentralPreview($item);
-                    return true;
-            }
+        if ($item instanceof ITILTemplate && $tabnum === 1) {
+            return $item->showCentralPreview($item);
         }
         return false;
     }
@@ -411,15 +457,14 @@ abstract class ITILTemplate extends CommonDropdown
     {
 
         if (Session::haveRight(static::$rightname, READ)) {
-            switch ($item->getType()) {
+            switch ($item::class) {
                 case 'TicketTemplate':
-                    return [
-                        1 => __('Standard interface'),
-                        2 => __('Simplified interface')
-                    ];
                 case 'ChangeTemplate':
                 case 'ProblemTemplate':
-                    return [1 => __('Preview')];
+                    return [1 => static::createTabEntry(
+                        __('Preview'),
+                        icon: "ti ti-file-search"
+                    )];
             }
         }
         return '';
@@ -429,13 +474,11 @@ abstract class ITILTemplate extends CommonDropdown
     /**
      * Get mandatory mark if field is mandatory
      *
-     * @since 0.83
-     *
-     * @param $field  string   field
-     * @param $force  boolean  force display based on global config (false by default)
+     * @param string $field
+     * @param bool $force force display based on global config (false by default)
      *
      * @return string to display
-     **/
+     */
     public function getMandatoryMark($field, $force = false)
     {
 
@@ -447,14 +490,12 @@ abstract class ITILTemplate extends CommonDropdown
 
 
     /**
-     * Is it an hidden field ?
+     * Is it a hidden field?
      *
-     * @since 0.83
-     *
-     * @param $field string field
+     * @param string $field field
      *
      * @return bool
-     **/
+     */
     public function isHiddenField($field)
     {
 
@@ -466,14 +507,12 @@ abstract class ITILTemplate extends CommonDropdown
 
 
     /**
-     * Is it an predefined field ?
+     * Is it a predefined field?
      *
-     * @since 0.83
-     *
-     * @param $field string field
+     * @param string $field
      *
      * @return bool
-     **/
+     */
     public function isPredefinedField($field)
     {
 
@@ -485,11 +524,9 @@ abstract class ITILTemplate extends CommonDropdown
 
 
     /**
-     * Is it an mandatory field ?
+     * Is it a mandatory field?
      *
-     * @since 0.83
-     *
-     * @param $field string field
+     * @param string $field
      *
      * @return bool
      **/
@@ -504,31 +541,48 @@ abstract class ITILTemplate extends CommonDropdown
 
 
     /**
+     * Is it a read only field?
+     *
+     * @since 11.0.0
+     *
+     * @param string $field
+     *
+     * @return bool
+     */
+    public function isReadonlyField($field)
+    {
+
+        if (isset($this->readonly[$field])) {
+            return true;
+        }
+        return false;
+    }
+
+
+    /**
      * Print preview for ITIL template
      *
-     * @since 0.83
+     * @param ITILTemplate $tt object
      *
-     * @param $tt ITILTemplate object
-     *
-     * @return void
-     **/
-    public static function showCentralPreview(ITILTemplate $tt)
+     * @return bool
+     */
+    public static function showCentralPreview(ITILTemplate $tt): bool
     {
 
         if (!$tt->getID()) {
             return false;
         }
         if ($tt->getFromDBWithData($tt->getID())) {
-            $itiltype = str_replace('Template', '', static::getType());
-            $itil_object = new $itiltype();
-            $itil_object->showForm(0, ['template_preview' => $tt->getID()]);
+            $itil_object = getItemForItemtype(static::getITILObjectClass());
+            return $itil_object->showForm(0, ['template_preview' => $tt->getID()]);
         }
+
+        return false;
     }
 
 
     public function getSpecificMassiveActions($checkitem = null)
     {
-
         $isadmin = static::canUpdate();
         $actions = parent::getSpecificMassiveActions($checkitem);
 
@@ -537,7 +591,7 @@ abstract class ITILTemplate extends CommonDropdown
             &&  $this->maybeRecursive()
             && (count($_SESSION['glpiactiveentities']) > 1)
         ) {
-            $actions[__CLASS__ . MassiveAction::CLASS_ACTION_SEPARATOR . 'merge'] = __('Merge and assign to current entity');
+            $actions[self::class . MassiveAction::CLASS_ACTION_SEPARATOR . 'merge'] = __s('Merge and assign to current entity');
         }
 
         return $actions;
@@ -549,7 +603,7 @@ abstract class ITILTemplate extends CommonDropdown
 
         switch ($ma->getAction()) {
             case 'merge':
-                echo "&nbsp;" . $_SESSION['glpiactive_entity_shortname'];
+                echo "&nbsp;" . htmlescape($_SESSION['glpiactive_entity_shortname']);
                 echo "<br><br>" . Html::submit(_x('button', 'Merge'), ['name' => 'massiveaction']);
                 return true;
         }
@@ -574,30 +628,29 @@ abstract class ITILTemplate extends CommonDropdown
                         if ($item->getEntityID() == $_SESSION['glpiactive_entity']) {
                             if (
                                 $item->update(['id'           => $key,
-                                    'is_recursive' => 1
+                                    'is_recursive' => 1,
                                 ])
                             ) {
-                                 $ma->itemDone($item->getType(), $key, MassiveAction::ACTION_OK);
+                                $ma->itemDone($item::class, $key, MassiveAction::ACTION_OK);
                             } else {
-                                $ma->itemDone($item->getType(), $key, MassiveAction::ACTION_KO);
+                                $ma->itemDone($item::class, $key, MassiveAction::ACTION_KO);
                                 $ma->addMessage($item->getErrorMessage(ERROR_ON_ACTION));
                             }
                         } else {
                             $input2 = $item->fields;
-                         // Change entity
+                            // Change entity
                             $input2['entities_id']  = $_SESSION['glpiactive_entity'];
                             $input2['is_recursive'] = 1;
-                            $input2 = Toolbox::addslashes_deep($input2);
 
                             if (!$item->import($input2)) {
-                                $ma->itemDone($item->getType(), $key, MassiveAction::ACTION_KO);
+                                $ma->itemDone($item::class, $key, MassiveAction::ACTION_KO);
                                 $ma->addMessage($item->getErrorMessage(ERROR_ON_ACTION));
                             } else {
-                                $ma->itemDone($item->getType(), $key, MassiveAction::ACTION_OK);
+                                $ma->itemDone($item::class, $key, MassiveAction::ACTION_OK);
                             }
                         }
                     } else {
-                        $ma->itemDone($item->getType(), $key, MassiveAction::ACTION_NORIGHT);
+                        $ma->itemDone($item::class, $key, MassiveAction::ACTION_NORIGHT);
                         $ma->addMessage($item->getErrorMessage(ERROR_RIGHT));
                     }
                 }
@@ -610,21 +663,20 @@ abstract class ITILTemplate extends CommonDropdown
     /**
      * Merge fields linked to template
      *
-     * @since 0.90
+     * @param int $target_id
+     * @param  int $source_id
      *
-     * @param $target_id
-     * @param  $source_id
-     **/
+     * @return void
+     */
     public function mergeTemplateFields($target_id, $source_id)
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
-       // Tables linked to ticket template
+        // Tables linked to ticket template
         $to_merge = ['predefinedfields', 'mandatoryfields', 'hiddenfields'];
-        $itiltype = str_replace('Template', '', static::getType());
+        $itiltype = static::getITILObjectClass();
 
-       // Source fields
+        // Source fields
         $source = [];
         foreach ($to_merge as $merge) {
             $source[$merge] = $this->formatFieldsToMerge(
@@ -635,7 +687,7 @@ abstract class ITILTemplate extends CommonDropdown
             );
         }
 
-       // Target fields
+        // Target fields
         $target = [];
         foreach ($to_merge as $merge) {
             $target[$merge] = $this->formatFieldsToMerge(
@@ -646,17 +698,17 @@ abstract class ITILTemplate extends CommonDropdown
             );
         }
 
-       // Merge
+        // Merge
         foreach ($source as $merge => $data) {
             foreach ($data as $key => $val) {
                 if (!array_key_exists($key, $target[$merge])) {
                     $DB->update(
                         'glpi_' . $itiltype . 'template' . $merge,
                         [
-                            $itiltype . 'templates_id' => $target_id
+                            $itiltype . 'templates_id' => $target_id,
                         ],
                         [
-                            'id' => $val['id']
+                            'id' => $val['id'],
                         ]
                     );
                 }
@@ -668,39 +720,38 @@ abstract class ITILTemplate extends CommonDropdown
     /**
      * Merge Itilcategories linked to template
      *
-     * @since 0.90
+     * @param int $target_id
+     * @param int $source_id
      *
-     * @param $target_id
-     * @param $source_id
+     * @return void
      */
     public function mergeTemplateITILCategories($target_id, $source_id)
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         $to_merge = [];
-        switch (static::getType()) {
-            case Ticket::getType():
+        switch (static::class) {
+            case Ticket::class:
                 $to_merge = ['tickettemplates_id_incident', 'tickettemplates_id_demand'];
                 break;
             default:
-                $to_merge = [strtolower($this->getType() . 'templates_id')];
+                $to_merge = [strtolower(static::class . 'templates_id')];
                 break;
         }
 
-       // Source categories
+        // Source categories
         $source = [];
         foreach ($to_merge as $merge) {
             $source[$merge] = getAllDataFromTable('glpi_itilcategories', [$merge => $source_id]);
         }
 
-       // Target categories
+        // Target categories
         $target = [];
         foreach ($to_merge as $merge) {
             $target[$merge] = getAllDataFromTable('glpi_itilcategories', [$merge => $target_id]);
         }
 
-       // Merge
+        // Merge
         $template = new static();
         foreach ($source as $merge => $data) {
             foreach ($data as $key => $val) {
@@ -712,10 +763,10 @@ abstract class ITILTemplate extends CommonDropdown
                     $DB->update(
                         'glpi_itilcategories',
                         [
-                            $merge => $target_id
+                            $merge => $target_id,
                         ],
                         [
-                            'id' => $val['id']
+                            'id' => $val['id'],
                         ]
                     );
                 }
@@ -727,10 +778,10 @@ abstract class ITILTemplate extends CommonDropdown
     /**
      * Format template fields to merge
      *
-     * @since 0.90
+     * @param array $data
      *
-     * @param $data
-     **/
+     * @return array
+     */
     public function formatFieldsToMerge($data)
     {
 
@@ -750,7 +801,7 @@ abstract class ITILTemplate extends CommonDropdown
      *
      * @param array $input  array of value to import (name, ...)
      *
-     * @return integer|boolean true in case of success, -1 otherwise
+     * @return int|bool true in case of success, -1 otherwise
      **/
     public function import(array $input)
     {
@@ -758,24 +809,24 @@ abstract class ITILTemplate extends CommonDropdown
         if (!isset($input['name'])) {
             return -1;
         }
-       // Clean datas
+        // Clean datas
         $input['name'] = trim($input['name']);
 
         if (empty($input['name'])) {
             return -1;
         }
 
-       // Check twin
+        // Check twin
         $ID = $this->findID($input);
         if ($ID > 0) {
-           // Merge data
+            // Merge data
             $this->mergeTemplateFields($ID, $input['id']);
             $this->mergeTemplateITILCategories($ID, $input['id']);
 
-           // Delete source
-            $this->delete($input, 1);
+            // Delete source
+            $this->delete($input, true);
 
-           // Update destination with source input
+            // Update destination with source input
             $input['id'] = $ID;
         }
 
@@ -803,6 +854,93 @@ abstract class ITILTemplate extends CommonDropdown
 
     public static function getIcon()
     {
-        return "fas fa-layer-group";
+        return "ti ti-stack-2-filled";
+    }
+
+    public function prepareInputForAdd($input)
+    {
+        $input = parent::prepareInputForAdd($input);
+
+        if (isset($input['allowed_statuses']) && is_array($input['allowed_statuses'])) {
+            $input['allowed_statuses'] = exportArrayToDB($input['allowed_statuses']);
+        }
+
+        return $input;
+    }
+
+    public function prepareInputForUpdate($input)
+    {
+        $input = parent::prepareInputForAdd($input);
+
+        if (isset($input['allowed_statuses']) && is_array($input['allowed_statuses'])) {
+            $input['allowed_statuses'] = exportArrayToDB($input['allowed_statuses']);
+        }
+
+        return $input;
+    }
+
+    public function post_getFromDB()
+    {
+        parent::post_getFromDB();
+
+        if (isset($this->fields['allowed_statuses'])) {
+            $this->fields['allowed_statuses'] = importArrayFromDB($this->fields['allowed_statuses']);
+        }
+    }
+
+    public function post_getEmpty()
+    {
+        $itil_itemtype = static::getITILObjectClass();
+
+        $this->fields['allowed_statuses'] = array_keys($itil_itemtype::getAllStatusArray());
+    }
+
+    /**
+     * Count the number of ITIL Objects currently using the specified template
+     * @param int $templates_id
+     * @return int
+     */
+    public static function countAffectedItems(int $templates_id): int
+    {
+        $itil_itemtype = static::getITILObjectClass();
+
+        $dbu = new DbUtils();
+        return $dbu->countElementsInTable(
+            $itil_itemtype::getTable(),
+            [
+                static::getForeignKeyField() => $templates_id,
+            ]
+        );
+    }
+
+    public function showForm($ID, array $options = [])
+    {
+
+        if (!$this->isNewID($ID)) {
+            $this->check($ID, READ);
+        } else {
+            // Create item
+            $this->checkGlobal(CREATE);
+        }
+
+        $fields = $this->getAdditionalFields();
+
+        echo TemplateRenderer::getInstance()->render('components/itilobject/itiltemplate.html.twig', [
+            'item'   => $this,
+            'params' => $options,
+            'additional_fields' => $fields,
+            'affected_item_count' => static::countAffectedItems($ID),
+        ]);
+
+        return true;
+    }
+
+    /**
+     * Get the ITILObject class related to the current ITILTemplate class
+     * @return class-string<CommonITILObject>
+     */
+    public static function getITILObjectClass(): string
+    {
+        return preg_replace("/Template$/i", "", static::class);
     }
 }

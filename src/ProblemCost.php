@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -40,25 +40,25 @@
  **/
 class ProblemCost extends CommonITILCost
 {
-   // From CommonDBChild
-    public static $itemtype  = 'Problem';
-    public static $items_id  = 'problems_id';
+    // From CommonDBChild
+    public static string $itemtype = Problem::class;
+    public static string $items_id  = 'problems_id';
 
 
-    public static function canCreate()
+    public static function canCreate(): bool
     {
-        return Session::haveRight('problem', UPDATE);
+        return Session::haveRight(Problem::$rightname, UPDATE);
     }
 
 
-    public static function canView()
+    public static function canView(): bool
     {
-        return Session::haveRightsOr('problem', [Problem::READALL, Problem::READMY]);
+        return Session::haveRightsOr(Problem::$rightname, [Problem::READALL, Problem::READMY]);
     }
 
 
-    public static function canUpdate()
+    public static function canUpdate(): bool
     {
-        return Session::haveRight('problem', UPDATE);
+        return Session::haveRight(Problem::$rightname, UPDATE);
     }
 }

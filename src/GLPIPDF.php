@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,17 +33,21 @@
  * ---------------------------------------------------------------------
  */
 
+use Com\Tecnick\Pdf\Font\FontPaths;
+
+use function Safe\file_get_contents;
+use function Safe\json_decode;
+
 /**
  * @since 0.85
  */
 class GLPIPDF extends TCPDF
 {
-    /**
-     * @var int
-     */
-    private $total_count;
+    private int $total_count;
 
-    private static $default_config = [
+    private string $title = '';
+
+    private static array $default_config = [
         'orientation'        => 'P',
         'unit'               => 'mm',
         'mode'               => 'UTF-8',
@@ -60,7 +64,7 @@ class GLPIPDF extends TCPDF
     ];
     private array $config = [];
 
-    public function __construct(array $config = [], ?int $count = null, ?string $title = null)
+    public function __construct(array $config = [], ?int $count = null, ?string $title = null, bool $addpage = true)
     {
         if (
             isset($config['font'])
@@ -85,8 +89,9 @@ class GLPIPDF extends TCPDF
         }
 
         if ($title !== null) {
+            $this->title = $title;
             $this->SetTitle($title);
-            $this->SetHeaderData('', '', $title, '');
+            $this->SetHeaderData('', 0, $title, '');
         }
 
         $this->SetCreator('GLPI');
@@ -103,18 +108,22 @@ class GLPIPDF extends TCPDF
 
         //set auto page breaks
         $this->SetAutoPageBreak(true, $config['margin_bottom']);
-        $this->AddPage();
+        if ($addpage === true) {
+            $this->AddPage();
+        }
     }
 
     /**
      * Page header
      *
      * @see TCPDF::Header()
-    **/
-    public function Header() // phpcs:ignore PSR1.Methods.CamelCapsMethodName
+     *
+     * @return void
+    */
+    public function Header()
     {
         // Title
-        $this->Cell(0, $this->config['margin_bottom'], $this->title, 0, false, 'C', 0, '', 0, false, 'M', 'M');
+        $this->Cell(0, $this->config['margin_bottom'], $this->title, 0, 0, 'C', false, '', 0, false, 'M', 'M');
     }
 
 
@@ -122,8 +131,10 @@ class GLPIPDF extends TCPDF
      * Page footer
      *
      * @see TCPDF::Footer()
-    **/
-    public function Footer() // phpcs:ignore PSR1.Methods.CamelCapsMethodName
+     *
+     * @return void
+    */
+    public function Footer()
     {
         // Position at 15 mm from bottom
         $this->SetY(-$this->config['margin_bottom']);
@@ -134,60 +145,90 @@ class GLPIPDF extends TCPDF
         $text .= sprintf(" - %s/%s", $this->getAliasNumPage(), $this->getAliasNbPages());
 
         // Page number
-        $this->Cell(0, $this->config['margin_footer'], $text, 0, false, 'C', 0, '', 0, false, 'T', 'M');
+        $this->Cell(0, $this->config['margin_footer'], $text, 0, 0, 'C', false, '', 0, false, 'T', 'M');
     }
 
     /**
      * Get the list of available fonts.
      *
-     * @return array Array of "filename" => "font name"
+     * Since TCPDF 7.0, fonts are provided by the `tecnickcom/tc-lib-pdf-font`
+     * library as JSON definition files (the legacy PHP `.php`/`.z` descriptors
+     * are gone). Definition files are searched in the tc-lib font directories
+     * (and in `K_PATH_FONTS` when defined). Font assets must have been generated
+     * beforehand (see the `make fonts` procedure); an empty list means no font
+     * definition is available.
+     *
+     * @return array Array of "font key" => "font name"
      **/
     public static function getFontList()
     {
+        global $GLPI_CACHE;
 
-        $list = [];
+        $list = $GLPI_CACHE->get('pdf_font_list', []);
 
-        $path = TCPDF_FONTS::_getfontpath();
+        if ($list === []) {
+            $register = static function (string $font_path) use (&$list): void {
+                try {
+                    $definition = json_decode(file_get_contents($font_path), true);
+                } catch (Throwable) {
+                    return; // Unreadable or invalid JSON, not a font definition file
+                }
 
-        // Includes will be made inside a function to ensure that declared variables are
-        // only available inside the function scope, and will so not affect other elements from loop.
-        // Also, varibales declared in font file will be automatically garbage collected (some are huge).
-        $include_fct = function ($font_path) use (&$list) {
-            $name = null;
-            $type = null;
+                $name = is_array($definition) ? ($definition['name'] ?? null) : null;
+                $type = is_array($definition) ? ($definition['type'] ?? null) : null;
+                if ($name === null || $name === '') {
+                    return; // Not a font definition file
+                }
 
-            include $font_path;
+                $font = basename($font_path, '.json');
 
-            if ($name === null) {
-                return; // Not a font file
+                // skip subfonts
+                if (
+                    ((str_ends_with($font, 'b')) || (str_ends_with($font, 'i')))
+                    && isset($list[substr($font, 0, -1)])
+                ) {
+                    return;
+                }
+                if (
+                    ((str_ends_with($font, 'bi')))
+                    && isset($list[substr($font, 0, -2)])
+                ) {
+                    return;
+                }
+
+                if ($type === 'cidfont0') {
+                    // cidfont often have the same name (ArialUnicodeMS)
+                    $list[$font] = sprintf(__('%1$s (%2$s)'), $name, $font);
+                } else {
+                    $list[$font] = $name;
+                }
+            };
+
+            // Collect definition files first, then sort them so that base fonts are
+            // processed before their bold/italic variants (needed by the subfont skip).
+            $font_paths = [];
+            foreach (FontPaths::buildAllowedPaths() as $font_dir) {
+                if (!is_dir($font_dir)) {
+                    continue;
+                }
+                $iterator = new RecursiveIteratorIterator(
+                    new RecursiveDirectoryIterator($font_dir, FilesystemIterator::SKIP_DOTS)
+                );
+                foreach ($iterator as $file) {
+                    if ($file->isFile() && strtolower($file->getExtension()) === 'json') {
+                        $font_paths[$file->getPathname()] = true;
+                    }
+                }
+            }
+            $font_paths = array_keys($font_paths);
+            sort($font_paths);
+
+            foreach ($font_paths as $font_path) {
+                $register($font_path);
             }
 
-            $font = basename($font_path, '.php');
-
-            // skip subfonts
-            if (
-                ((substr($font, -1) == 'b') || (substr($font, -1) == 'i'))
-                && isset($list[substr($font, 0, -1)])
-            ) {
-                return;
-            }
-            if (
-                ((substr($font, -2) == 'bi'))
-                && isset($list[substr($font, 0, -2)])
-            ) {
-                return;
-            }
-
-            if ($type == 'cidfont0') {
-                // cidfont often have the same name (ArialUnicodeMS)
-                $list[$font] = sprintf(__('%1$s (%2$s)'), $name, $font);
-            } else {
-                $list[$font] = $name;
-            }
-        };
-
-        foreach (glob($path . '/*.php') as $font_path) {
-            $include_fct($font_path);
+            asort($list);
+            $GLPI_CACHE->set('pdf_font_list', $list);
         }
         return $list;
     }
@@ -195,7 +236,7 @@ class GLPIPDF extends TCPDF
     /**
      * Set total results count
      *
-     * @param integer $count Total number of results
+     * @param int $count Total number of results
      *
      * @return GLPIPDF
      */

@@ -1,11 +1,5 @@
 [
     {
-        "decimal": "Decimal",
-        "name": "Name",
-        "description": "Description",
-        "references": "References"
-    },
-    {
         "decimal": "1",
         "name": "other",
         "description": "none of the following",

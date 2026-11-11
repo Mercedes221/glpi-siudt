@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,22 +33,31 @@
  * ---------------------------------------------------------------------
  */
 
-use Glpi\Toolbox\URL;
+use Glpi\DBAL\QueryExpression;
+use Glpi\Features\AssignableItem;
+use Glpi\Features\AssignableItemInterface;
+use Glpi\Features\Clonable;
 
 /// Class Domain
-class Domain extends CommonDBTM
+class Domain extends CommonDBTM implements AssignableItemInterface
 {
-    use Glpi\Features\Clonable;
+    /** @use Clonable<static> */
+    use Clonable;
+    use AssignableItem {
+        prepareInputForAdd as prepareInputForAddAssignableItem;
+        prepareInputForUpdate as prepareInputForUpdateAssignableItem;
+        post_updateItem as post_updateItemAssignableItem;
+    }
 
-    public static $rightname = 'domain';
-    protected static $forward_entity_to = ['DomainRecord'];
+    public static string $rightname = 'domain';
+    protected static array $forward_entity_to = ['DomainRecord'];
 
-    public $can_be_translated = false;
+    public bool $can_be_translated = false;
 
-    public $dohistory        = true;
-    protected $usenotepadrights = true;
-    protected $usenotepad       = true;
-    public static $tags             = '[DOMAIN_NAME]';
+    public bool $dohistory        = true;
+    protected bool $usenotepadrights = true;
+    protected bool $usenotepad       = true;
+    public static string $tags             = '[DOMAIN_NAME]';
 
     public function getCloneRelations(): array
     {
@@ -57,11 +66,14 @@ class Domain extends CommonDBTM
             Domain_Item::class,
             Infocom::class,
             Item_Ticket::class,
+            Item_TicketRecurrent::class,
             Item_Problem::class,
             Change_Item::class,
             Contract_Item::class,
             Document_Item::class,
             Notepad::class,
+            Certificate_Item::class,
+            ManualLink::class,
         ];
     }
 
@@ -70,9 +82,13 @@ class Domain extends CommonDBTM
         return _n('Domain', 'Domains', $nb);
     }
 
+    public static function getSectorizedDetails(): array
+    {
+        return ['management', self::class];
+    }
+
     public function cleanDBonPurge()
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         $ditem = new Domain_Item();
@@ -84,8 +100,8 @@ class Domain extends CommonDBTM
             'SELECT' => 'id',
             'FROM'   => $record->getTable(),
             'WHERE'  => [
-                'domains_id'   => $this->fields['id']
-            ]
+                'domains_id'   => $this->fields['id'],
+            ],
         ]);
         foreach ($iterator as $row) {
             $row['_linked_purge'] = 1;//flag call when we remove a record from a domain
@@ -99,7 +115,7 @@ class Domain extends CommonDBTM
 
         $tab[] = [
             'id'                 => 'common',
-            'name'               => self::getTypeName(2)
+            'name'               => self::getTypeName(2),
         ];
 
         $tab[] = [
@@ -108,7 +124,7 @@ class Domain extends CommonDBTM
             'field'              => 'name',
             'name'               => __('Name'),
             'datatype'           => 'itemlink',
-            'itemlink_type'      => $this->getType(),
+            'itemlink_type'      => static::class,
         ];
 
         $tab[] = [
@@ -116,7 +132,7 @@ class Domain extends CommonDBTM
             'table'              => 'glpi_domaintypes',
             'field'              => 'name',
             'name'               => _n('Type', 'Types', 1),
-            'datatype'           => 'dropdown'
+            'datatype'           => 'dropdown',
         ];
 
         $tab[] = [
@@ -125,7 +141,7 @@ class Domain extends CommonDBTM
             'field'              => 'name',
             'linkfield'          => 'users_id_tech',
             'name'               => __('Technician in charge'),
-            'datatype'           => 'dropdown'
+            'datatype'           => 'dropdown',
         ];
 
         $tab[] = [
@@ -133,7 +149,7 @@ class Domain extends CommonDBTM
             'table'              => $this->getTable(),
             'field'              => 'date_domaincreation',
             'name'               => __('Registration date'),
-            'datatype'           => 'date'
+            'datatype'           => 'date',
         ];
 
         $tab[] = [
@@ -141,15 +157,15 @@ class Domain extends CommonDBTM
             'table'              => $this->getTable(),
             'field'              => 'date_expiration',
             'name'               => __('Expiration date'),
-            'datatype'           => 'date'
+            'datatype'           => 'date',
         ];
 
         $tab[] = [
             'id'                 => '7',
             'table'              => $this->getTable(),
             'field'              => 'comment',
-            'name'               => __('Comments'),
-            'datatype'           => 'text'
+            'name'               => _n('Comment', 'Comments', Session::getPluralNumber()),
+            'datatype'           => 'text',
         ];
 
         $tab[] = [
@@ -161,18 +177,29 @@ class Domain extends CommonDBTM
             'name'               => _n('Associated item', 'Associated items', Session::getPluralNumber()),
             'forcegroupby'       => true,
             'joinparams'         => [
-                'jointype'           => 'child'
-            ]
+                'jointype'           => 'child',
+            ],
         ];
 
         $tab[] = [
             'id'                 => '10',
             'table'              => 'glpi_groups',
             'field'              => 'name',
-            'linkfield'          => 'groups_id_tech',
+            'linkfield'          => 'groups_id',
             'name'               => __('Group in charge'),
             'condition'          => ['is_assign' => 1],
-            'datatype'           => 'dropdown'
+            'joinparams'         => [
+                'beforejoin'         => [
+                    'table'              => 'glpi_groups_items',
+                    'joinparams'         => [
+                        'jointype'           => 'itemtype_item',
+                        'condition'          => ['NEWTABLE.type' => Group_Item::GROUP_TYPE_TECH],
+                    ],
+                ],
+            ],
+            'forcegroupby'       => true,
+            'massiveaction'      => false,
+            'datatype'           => 'dropdown',
         ];
 
         $tab[] = [
@@ -181,7 +208,7 @@ class Domain extends CommonDBTM
             'field'              => 'date_mod',
             'massiveaction'      => false,
             'name'               => __('Last update'),
-            'datatype'           => 'datetime'
+            'datatype'           => 'datetime',
         ];
 
         $tab[] = [
@@ -190,7 +217,7 @@ class Domain extends CommonDBTM
             'field'              => 'date_creation',
             'name'               => __('Creation date'),
             'datatype'           => 'datetime',
-            'massiveaction'      => false
+            'massiveaction'      => false,
         ];
 
         $tab[] = [
@@ -198,7 +225,7 @@ class Domain extends CommonDBTM
             'table'              => $this->getTable(),
             'field'              => 'is_recursive',
             'name'               => __('Child entities'),
-            'datatype'           => 'bool'
+            'datatype'           => 'bool',
         ];
 
         $tab[] = [
@@ -206,7 +233,7 @@ class Domain extends CommonDBTM
             'table'              => $this->getTable(),
             'field'              => 'id',
             'name'               => __('ID'),
-            'datatype'           => 'number'
+            'datatype'           => 'number',
         ];
 
         $tab[] = [
@@ -214,7 +241,7 @@ class Domain extends CommonDBTM
             'table'              => $this->getTable(),
             'field'              => 'is_active',
             'name'               => __('Active'),
-            'datatype'           => 'bool'
+            'datatype'           => 'bool',
         ];
 
         $tab[] = [
@@ -222,28 +249,33 @@ class Domain extends CommonDBTM
             'table'              => 'glpi_entities',
             'field'              => 'completename',
             'name'               => Entity::getTypeName(1),
-            'datatype'           => 'dropdown'
+            'datatype'           => 'dropdown',
         ];
 
         $tab[] = [
             'id'                 => '81',
             'table'              => self::getTable(),
             'field'              => 'entities_id',
-            'name'               => sprintf('%s-%s', Entity::getTypeName(1), __('ID'))
+            'name'               => sprintf('%s-%s', Entity::getTypeName(1), __('ID')),
         ];
 
         return $tab;
     }
 
+    /**
+     * @param ?class-string<CommonDBTM> $itemtype
+     *
+     * @return array
+     */
     public static function rawSearchOptionsToAdd($itemtype = null)
     {
         $tab = [];
 
         if (in_array($itemtype, Domain::getTypes(true))) {
-            if (Session::haveRight("domain", READ)) {
+            if (Session::haveRight(Domain::$rightname, READ)) {
                 $tab[] = [
                     'id'                 => 'domain',
-                    'name'               => self::getTypeName(Session::getPluralNumber())
+                    'name'               => self::getTypeName(Session::getPluralNumber()),
                 ];
 
                 $tab[] = [
@@ -258,9 +290,9 @@ class Domain extends CommonDBTM
                     'joinparams'         => [
                         'beforejoin' => [
                             'table'      => Domain_Item::getTable(),
-                            'joinparams' => ['jointype' => 'itemtype_item']
-                        ]
-                    ]
+                            'joinparams' => ['jointype' => 'itemtype_item'],
+                        ],
+                    ],
                 ];
 
                 $tab[] = [
@@ -277,11 +309,11 @@ class Domain extends CommonDBTM
                             'joinparams'         => [
                                 'beforejoin' => [
                                     'table'      => Domain_Item::getTable(),
-                                    'joinparams' => ['jointype' => 'itemtype_item']
-                                ]
-                            ]
-                        ]
-                    ]
+                                    'joinparams' => ['jointype' => 'itemtype_item'],
+                                ],
+                            ],
+                        ],
+                    ],
                 ];
             }
         }
@@ -294,22 +326,27 @@ class Domain extends CommonDBTM
         $ong = [];
         $this->addDefaultFormTab($ong);
         $this->addImpactTab($ong, $options);
-        $this->addStandardTab('DomainRecord', $ong, $options);
-        $this->addStandardTab('Domain_Item', $ong, $options);
-        $this->addStandardTab('Infocom', $ong, $options);
-        $this->addStandardTab('Ticket', $ong, $options);
-        $this->addStandardTab('Item_Problem', $ong, $options);
-        $this->addStandardTab('Change_Item', $ong, $options);
-        $this->addStandardTab('Contract_Item', $ong, $options);
-        $this->addStandardTab('Document_Item', $ong, $options);
-        $this->addStandardTab('Certificate_Item', $ong, $options);
-        $this->addStandardTab('ManualLink', $ong, $options);
-        $this->addStandardTab('Notepad', $ong, $options);
-        $this->addStandardTab('Log', $ong, $options);
+        $this->addStandardTab(DomainRecord::class, $ong, $options);
+        $this->addStandardTab(Domain_Item::class, $ong, $options);
+        $this->addStandardTab(Infocom::class, $ong, $options);
+        $this->addStandardTab(Item_Ticket::class, $ong, $options);
+        $this->addStandardTab(Item_Problem::class, $ong, $options);
+        $this->addStandardTab(Change_Item::class, $ong, $options);
+        $this->addStandardTab(Contract_Item::class, $ong, $options);
+        $this->addStandardTab(Document_Item::class, $ong, $options);
+        $this->addStandardTab(Certificate_Item::class, $ong, $options);
+        $this->addStandardTab(ManualLink::class, $ong, $options);
+        $this->addStandardTab(Notepad::class, $ong, $options);
+        $this->addStandardTab(Log::class, $ong, $options);
 
         return $ong;
     }
 
+    /**
+     * @param array $input
+     *
+     * @return array
+     */
     private function prepareInput($input)
     {
         if (isset($input['date_creation']) && empty($input['date_creation'])) {
@@ -324,11 +361,19 @@ class Domain extends CommonDBTM
 
     public function prepareInputForAdd($input)
     {
+        $input = $this->prepareInputForAddAssignableItem($input);
+        if ($input === false) {
+            return false;
+        }
         return $this->prepareInput($input);
     }
 
     public function prepareInputForUpdate($input)
     {
+        $input = $this->prepareInputForUpdateAssignableItem($input);
+        if ($input === false) {
+            return false;
+        }
         return $this->prepareInput($input);
     }
 
@@ -342,13 +387,12 @@ class Domain extends CommonDBTM
      *                   (default -1 : no restriction)
      *    - used : array / Already used items ID: not to display in dropdown (default empty)
      *
-     * @param $options array of possible options
+     * @param array $options possible options
      *
-     * @return void
+     * @return string|int string (rendered html) if $option['display'] is false, else int (rand value)
      * */
     public static function dropdownDomains($options = [])
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         $p = [
@@ -356,6 +400,7 @@ class Domain extends CommonDBTM
             'entity'  => '',
             'used'    => [],
             'display' => true,
+            'rand'    => mt_rand(),
         ];
 
         if (is_array($options) && count($options)) {
@@ -364,10 +409,10 @@ class Domain extends CommonDBTM
             }
         }
 
-        $rand = mt_rand();
+        $rand = $p['rand'];
 
         $where = [
-            'glpi_domains.is_deleted'  => 0
+            'glpi_domains.is_deleted'  => 0,
         ] + getEntitiesRestrictCriteria(self::getTable(), '', $p['entity'], true);
 
         if (count($p['used'])) {
@@ -376,7 +421,7 @@ class Domain extends CommonDBTM
 
         $iterator = $DB->request([
             'FROM'      => self::getTable(),
-            'WHERE'     => $where
+            'WHERE'     => $where,
         ]);
 
         $values = [0 => Dropdown::EMPTY_VALUE];
@@ -390,7 +435,7 @@ class Domain extends CommonDBTM
             [
                 'width'   => '30%',
                 'rand'    => $rand,
-                'display' => false
+                'display' => false,
             ]
         );
 
@@ -408,9 +453,9 @@ class Domain extends CommonDBTM
 
         if ($_SESSION['glpiactiveprofile']['interface'] == 'central') {
             if ($isadmin) {
-                $actions['Domain' . MassiveAction::CLASS_ACTION_SEPARATOR . 'install']   = _x('button', 'Associate');
-                $actions['Domain' . MassiveAction::CLASS_ACTION_SEPARATOR . 'uninstall'] = _x('button', 'Dissociate');
-                $actions['Domain' . MassiveAction::CLASS_ACTION_SEPARATOR . 'duplicate']  = _x('button', 'Duplicate');
+                $actions['Domain' . MassiveAction::CLASS_ACTION_SEPARATOR . 'install']   = "<i class='ti ti-link' aria-hidden='true'></i>" . _sx('button', 'Associate');
+                $actions['Domain' . MassiveAction::CLASS_ACTION_SEPARATOR . 'uninstall'] = "<i class='ti ti-link-off' aria-hidden='true'></i>" . _sx('button', 'Dissociate');
+                $actions['Domain' . MassiveAction::CLASS_ACTION_SEPARATOR . 'duplicate']  = "<i class='ti ti-copy' aria-hidden='true'></i>" . _sx('button', 'Duplicate');
             }
         }
         return $actions;
@@ -421,9 +466,22 @@ class Domain extends CommonDBTM
 
         switch ($ma->getAction()) {
             case 'add_item':
+                Dropdown::show(
+                    'DomainRelation',
+                    [
+                        'name'   => "domainrelations_id",
+                        'value'  => DomainRelation::BELONGS,
+                        'display_emptychoice'   => false,
+                    ]
+                );
                 self::dropdownDomains([]);
-                echo "&nbsp;" .
-                 Html::submit(_x('button', 'Post'), ['name' => 'massiveaction']);
+                echo "&nbsp;"
+                 . Html::submit(_x('button', 'Post'), ['name' => 'massiveaction']);
+                return true;
+            case 'remove_domain':
+                self::dropdownDomains([]);
+                echo "&nbsp;"
+                 . Html::submit(_x('button', 'Post'), ['name' => 'massiveaction']);
                 return true;
             case "install":
                 Dropdown::showSelectItemFromItemtypes([
@@ -434,7 +492,6 @@ class Domain extends CommonDBTM
                 ]);
                 echo Html::submit(_x('button', 'Post'), ['name' => 'massiveaction']);
                 return true;
-            break;
             case "uninstall":
                 Dropdown::showSelectItemFromItemtypes([
                     'items_id_name' => 'item_item',
@@ -444,7 +501,6 @@ class Domain extends CommonDBTM
                 ]);
                 echo Html::submit(_x('button', 'Post'), ['name' => 'massiveaction']);
                 return true;
-            break;
             case "duplicate":
                 Dropdown::show('Entity');
                 break;
@@ -457,40 +513,90 @@ class Domain extends CommonDBTM
         $domain_item = new Domain_Item();
 
         switch ($ma->getAction()) {
-            case "add_item":
+            case 'add_item':
                 $input = $ma->getInput();
+                if (!isset($input['domains_id'])) {
+                    $ma->itemDone($item::class, $ids, MassiveAction::NO_ACTION);
+                    return;
+                }
                 foreach ($ids as $id) {
                     $input = ['domains_id' => $input['domains_id'],
                         'items_id'                  => $id,
-                        'itemtype'                  => $item->getType()
+                        'itemtype'                  => $item::class,
+                        'domainrelations_id'        => $input['domainrelations_id'],
                     ];
-                    if ($domain_item->can(-1, UPDATE, $input)) {
-                        if ($domain_item->add($input)) {
-                             $ma->itemDone($item->getType(), $id, MassiveAction::ACTION_OK);
+                    if ($domain_item->can(-1, CREATE, $input)) {
+                        if ($domain_item->getFromDBByCrit($input)) {
+                            $ma->itemDone($item::class, $id, MassiveAction::NO_ACTION);
                         } else {
-                             $ma->itemDone($item->getType(), $ids, MassiveAction::ACTION_KO);
+                            if ($domain_item->add($input)) {
+                                $ma->itemDone($item::class, $id, MassiveAction::ACTION_OK);
+                            } else {
+                                $ma->itemDone($item::class, $id, MassiveAction::ACTION_KO);
+                            }
                         }
-                    } else {
-                        $ma->itemDone($item->getType(), $ids, MassiveAction::ACTION_KO);
                     }
                 }
                 return;
+            case 'remove_domain':
+                $input = $ma->getInput();
+                foreach ($ids as $id) {
+                    $nolink = true;
+                    $is_ok = true;
 
+                    $domain_item = new Domain_Item();
+                    foreach (
+                        $domain_item->find([
+                            'domains_id' => $input['domains_id'],
+                            'items_id'   => $id,
+                            'itemtype'   => $item::class,
+                        ]) as $data
+                    ) {
+                        $nolink = false;
+
+                        if (!$domain_item->can($data['id'], DELETE)) {
+                            $is_ok = false;
+                            $ma->addMessage($item->getErrorMessage(ERROR_RIGHT));
+                            continue;
+                        }
+
+                        $purge = !$data['is_dynamic']; // dynamic relations should be preserved for inventory lock feature (dynamic + deleted = locked)
+                        if (!$domain_item->delete($data, $purge)) {
+                            $is_ok = false;
+                            $ma->addMessage($item->getErrorMessage(ERROR_ON_ACTION));
+                        }
+                    }
+                    if ($nolink) {
+                        $ma->itemDone($item::class, $id, MassiveAction::NO_ACTION);
+                    } elseif (!$is_ok) {
+                        $ma->itemDone($item::class, $id, MassiveAction::ACTION_KO);
+                    } else {
+                        $ma->itemDone($item::class, $id, MassiveAction::ACTION_OK);
+                    }
+                }
+                return;
             case 'install':
                 $input = $ma->getInput();
                 foreach ($ids as $key) {
                     if ($item->can($key, UPDATE)) {
                         $values = ['domains_id' => $key,
                             'items_id'                  => $input["item_item"],
-                            'itemtype'                  => $input['typeitem']
+                            'itemtype'                  => $input['typeitem'],
                         ];
+
+                        if (!$domain_item->can(-1, CREATE, $values)) {
+                            $ma->itemDone($item::class, $key, MassiveAction::ACTION_NORIGHT);
+                            $ma->addMessage($item->getErrorMessage(ERROR_RIGHT));
+                            continue;
+                        }
+
                         if ($domain_item->add($values)) {
-                            $ma->itemDone($item->getType(), $key, MassiveAction::ACTION_OK);
+                            $ma->itemDone($item::class, $key, MassiveAction::ACTION_OK);
                         } else {
-                            $ma->itemDone($item->getType(), $key, MassiveAction::ACTION_KO);
+                            $ma->itemDone($item::class, $key, MassiveAction::ACTION_KO);
                         }
                     } else {
-                        $ma->itemDone($item->getType(), $key, MassiveAction::ACTION_NORIGHT);
+                        $ma->itemDone($item::class, $key, MassiveAction::ACTION_NORIGHT);
                         $ma->addMessage($item->getErrorMessage(ERROR_RIGHT));
                     }
                 }
@@ -499,27 +605,51 @@ class Domain extends CommonDBTM
             case 'uninstall':
                 $input = $ma->getInput();
                 foreach ($ids as $key) {
-                    if ($domain_item->deleteItemByDomainsAndItem($key, $input['item_item'], $input['typeitem'])) {
-                        $ma->itemDone($item->getType(), $key, MassiveAction::ACTION_OK);
+                    if (!$domain_item->getFromDBbyDomainsAndItem($key, $input['item_item'], $input['typeitem'])) {
+                        $ma->itemDone($item::class, $key, MassiveAction::ACTION_KO);
+                        $ma->addMessage($item->getErrorMessage(ERROR_NOT_FOUND));
+                        continue;
+                    }
+
+                    if (!$domain_item->can($domain_item->getID(), DELETE)) {
+                        $ma->itemDone($item::class, $key, MassiveAction::ACTION_NORIGHT);
+                        $ma->addMessage($item->getErrorMessage(ERROR_RIGHT));
+                        continue;
+                    }
+
+                    if ($domain_item->delete(['id' => $domain_item->getID()])) {
+                        $ma->itemDone($item::class, $key, MassiveAction::ACTION_OK);
                     } else {
-                        $ma->itemDone($item->getType(), $key, MassiveAction::ACTION_KO);
+                        $ma->itemDone($item::class, $key, MassiveAction::ACTION_KO);
                     }
                 }
                 return;
 
             case "duplicate":
-                if ($item->getType() == 'Domain') {
+                if ($item instanceof Domain) {
                     $input     = $ma->getInput();
                     foreach (array_keys($ids) as $key) {
-                        $item->getFromDB($key);
-                        unset($item->fields["id"]);
-                        $item->fields["name"]    = addslashes($item->fields["name"]);
-                        $item->fields["comment"] = addslashes($item->fields["comment"]);
-                        $item->fields["entities_id"] = $input['entities_id'];
-                        if ($item->add($item->fields)) {
-                            $ma->itemDone($item->getType(), $key, MassiveAction::ACTION_OK);
+                        if (!$item->getFromDB($key)) {
+                            $ma->itemDone($item::class, $key, MassiveAction::ACTION_KO);
+                            $ma->addMessage($item->getErrorMessage(ERROR_NOT_FOUND));
+                            continue;
+                        }
+
+                        $values = $item->fields;
+                        unset($values["id"]);
+                        $values["entities_id"] = $input['entities_id'];
+
+                        $duplicate = new Domain();
+                        if (!$item->can($key, READ) || !$duplicate->can(-1, CREATE, $values)) {
+                            $ma->itemDone($item::class, $key, MassiveAction::ACTION_NORIGHT);
+                            $ma->addMessage($item->getErrorMessage(ERROR_RIGHT));
+                            continue;
+                        }
+
+                        if ($duplicate->add($values)) {
+                            $ma->itemDone($item::class, $key, MassiveAction::ACTION_OK);
                         } else {
-                            $ma->itemDone($item->getType(), $key, MassiveAction::ACTION_KO);
+                            $ma->itemDone($item::class, $key, MassiveAction::ACTION_KO);
                         }
                     }
                 }
@@ -528,14 +658,18 @@ class Domain extends CommonDBTM
         parent::processMassiveActionsForOneItemtype($ma, $item, $ids);
     }
 
+    /**
+     * @param string $name
+     *
+     * @return array
+     */
     public static function cronInfo($name)
     {
         switch ($name) {
             case 'DomainsAlert':
                 return [
-                    'description' => __('Expired or expiring domains')
+                    'description' => __('Expired or expiring domains'),
                 ];
-            break;
         }
         return [];
     }
@@ -543,50 +677,53 @@ class Domain extends CommonDBTM
     /**
      * Criteria for expired domains
      *
-     * @param integer $entities_id Entity ID
+     * @param int $entities_id Entity ID
      *
      * @return array
      */
     public static function expiredDomainsCriteria($entities_id): array
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         $delay = Entity::getUsedConfig('send_domains_alert_expired_delay', $entities_id);
+        $date_expr = new QueryExpression("DATEDIFF(CURDATE(), " . $DB->quoteName('date_expiration') . ") > ?");
+        $date_delai_expr = clone $date_expr;
+        $date_zero_expr = clone $date_expr;
         return [
             'FROM'   => self::getTable(),
             'WHERE'  => [
                 'NOT' => ['date_expiration' => null],
                 'entities_id'  => $entities_id,
                 'is_deleted'   => 0,
-                new QueryExpression("DATEDIFF(CURDATE(), " . $DB->quoteName('date_expiration') . ") > $delay"),
-                new QueryExpression("DATEDIFF(CURDATE(), " . $DB->quoteName('date_expiration') . ") > 0")
-            ]
+                $date_delai_expr->setParams([$delay]),
+                $date_zero_expr->setParams([0]),
+            ],
         ];
     }
 
     /**
      * Criteria for domains closed expiries
      *
-     * @param integer $entities_id Entity ID
+     * @param int $entities_id Entity ID
      *
      * @return array
      */
     public static function closeExpiriesDomainsCriteria($entities_id): array
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         $delay = Entity::getUsedConfig('send_domains_alert_close_expiries_delay', $entities_id);
+        $date_delai_expr = new QueryExpression("DATEDIFF(CURDATE(), " . $DB->quoteName('date_expiration') . ") > ?");
+        $date_zero_expr = new QueryExpression("DATEDIFF(CURDATE(), " . $DB->quoteName('date_expiration') . ") < ?");
         return [
             'FROM'   => self::getTable(),
             'WHERE'  => [
                 'NOT' => ['date_expiration' => null],
                 'entities_id'  => $entities_id,
                 'is_deleted'   => 0,
-                new QueryExpression("DATEDIFF(CURDATE(), " . $DB->quoteName('date_expiration') . ") > -$delay"),
-                new QueryExpression("DATEDIFF(CURDATE(), " . $DB->quoteName('date_expiration') . ") < 0")
-            ]
+                $date_delai_expr->setParams([-$delay]),
+                $date_zero_expr->setParams([0]),
+            ],
         ];
     }
 
@@ -600,10 +737,6 @@ class Domain extends CommonDBTM
      */
     public static function cronDomainsAlert($task = null)
     {
-        /**
-         * @var array $CFG_GLPI
-         * @var \DBmysql $DB
-         */
         global $CFG_GLPI, $DB;
 
         if (!$CFG_GLPI["use_notifications"]) {
@@ -622,7 +755,7 @@ class Domain extends CommonDBTM
                 'ExpiredDomains' => [
                     'query' => self::expiredDomainsCriteria($entity),
                     'alert_type' => Alert::END,
-                ]
+                ],
             ];
 
             foreach ($events as $event => $event_specs) {
@@ -637,12 +770,12 @@ class Domain extends CommonDBTM
                             'glpi_domains' => 'id',
                             [
                                 'AND' => [
-                                    'glpi_alerts.itemtype' => __CLASS__,
+                                    'glpi_alerts.itemtype' => self::class,
                                     'glpi_alerts.type'     => $alert_type,
                                 ],
                             ],
-                        ]
-                    ]
+                        ],
+                    ],
                 ];
                 $query['WHERE'][]   = ['glpi_alerts.date' => null];
 
@@ -671,17 +804,17 @@ class Domain extends CommonDBTM
                             $task->log($msg);
                             $task->addVolume(1);
                         } else {
-                            Session::addMessageAfterRedirect($msg);
+                            Session::addMessageAfterRedirect(htmlescape($msg));
                         }
 
                         // Add alert
                         $input = [
                             'type'     => $alert_type,
-                            'itemtype' => __CLASS__,
+                            'itemtype' => self::class,
                             'items_id' => $domain_id,
                         ];
                         $alert = new Alert();
-                        $alert->deleteByCriteria($input, 1);
+                        $alert->deleteByCriteria($input, true);
                         $alert->add($input);
 
                         $total++;
@@ -695,7 +828,7 @@ class Domain extends CommonDBTM
                         if ($task) {
                             $task->log($msg);
                         } else {
-                            Session::addMessageAfterRedirect($msg, false, ERROR);
+                            Session::addMessageAfterRedirect(htmlescape($msg), false, ERROR);
                         }
                     }
                 }
@@ -708,13 +841,12 @@ class Domain extends CommonDBTM
     /**
      * Type than could be linked to a Rack
      *
-     * @param $all boolean, all type, or only allowed ones
+     * @param bool  $all all types, or only allowed ones
      *
      * @return array of types
-     * */
+     */
     public static function getTypes($all = false)
     {
-        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $types = $CFG_GLPI['domain_types'];
@@ -722,9 +854,9 @@ class Domain extends CommonDBTM
             return $types;
         }
 
-       // Only allowed types
+        // Only allowed types
         foreach ($types as $key => $type) {
-            if (!class_exists($type)) {
+            if (!is_a($type, CommonDBTM::class, true)) {
                 continue;
             }
 
@@ -736,24 +868,26 @@ class Domain extends CommonDBTM
         return $types;
     }
 
-    public static function generateLinkContents($link, CommonDBTM $item)
+    public static function generateLinkContents($link, CommonDBTM $item, bool $safe_url = true, array $extra_data = [])
     {
-        $safe_url = func_num_args() === 3 ? func_get_arg(2) : true;
-
-        if (strstr($link, "[DOMAIN]")) {
-            $link = str_replace("[DOMAIN]", $item->getName(), $link);
-            if ($safe_url) {
-                $link = URL::sanitizeURL($link) ?: '#';
-            }
-            return [$link];
-        }
-
-        return parent::generateLinkContents($link, $item, $safe_url);
+        return Link::generateLinkContents(
+            $link,
+            $item,
+            $safe_url,
+            [
+                'DOMAIN' =>  $item->getName(),
+            ]
+        );
     }
 
+    /**
+     * @param array $used
+     * @param int $domaintype
+     *
+     * @return array
+     */
     public static function getUsed(array $used, $domaintype)
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
@@ -761,8 +895,8 @@ class Domain extends CommonDBTM
             'FROM'   => self::getTable(),
             'WHERE'  => [
                 'id'              => $used,
-                'domaintypes_id'  => $domaintype
-            ]
+                'domaintypes_id'  => $domaintype,
+            ],
         ]);
 
         $used = [];
@@ -772,6 +906,9 @@ class Domain extends CommonDBTM
         return $used;
     }
 
+    /**
+     * @return bool
+     */
     public static function canManageRecords()
     {
         return static::canView() && count($_SESSION['glpiactiveprofile']['managed_domainrecordtypes'] ?? []) > 0;
@@ -781,10 +918,9 @@ class Domain extends CommonDBTM
     {
         $links = [];
         if (static::canManageRecords()) {
-            $rooms = "<i class='fa fa-clipboard-list pointer' title=\"" . DomainRecord::getTypeName(Session::getPluralNumber()) . "\"></i>
-            <span class='d-none d-xxl-block ps-1'>
-               " . DomainRecord::getTypeName(Session::getPluralNumber()) . "
-            </span>";
+            $label = htmlescape(DomainRecord::getTypeName(Session::getPluralNumber()));
+            $rooms = "<i class='fa fa-clipboard-list pointer' title=\"$label\"></i>
+            <span class='d-none d-xxl-block ps-1'>$label</span>";
             $links[$rooms] = DomainRecord::getSearchURL(false);
         }
         if (count($links)) {
@@ -797,20 +933,23 @@ class Domain extends CommonDBTM
     {
         if (static::canManageRecords()) {
             return [
-                'domainrecord' => [
+                DomainRecord::class => [
                     'icon'  => DomainRecord::getIcon(),
                     'title' => DomainRecord::getTypeName(Session::getPluralNumber()),
                     'page'  => DomainRecord::getSearchURL(false),
                     'links' => [
                         'add'    => '/front/domainrecord.form.php',
                         'search' => '/front/domainrecord.php',
-                    ]
-                ]
+                    ],
+                ],
             ];
         }
         return false;
     }
 
+    /**
+     * @return string
+     */
     public function getCanonicalName()
     {
         return rtrim($this->fields['name'], '.') . '.';
@@ -823,12 +962,12 @@ class Domain extends CommonDBTM
 
     public static function getIcon()
     {
-        return "fas fa-globe-americas";
+        return "ti ti-world-www";
     }
 
     public function post_updateItem($history = true)
     {
+        $this->post_updateItemAssignableItem($history);
         $this->cleanAlerts([Alert::END, Alert::NOTICE]);
-        parent::post_updateItem($history);
     }
 }

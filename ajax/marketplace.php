@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,35 +33,14 @@
  * ---------------------------------------------------------------------
  */
 
-/** @var array $PLUGINS_EXCLUDED */
-global $PLUGINS_EXCLUDED;
-
 // follow download progress of a plugin with a minimal loading of files
 // So we get a ajax answer in 5ms instead 100ms
-if (($_GET["action"] ?? null) == "get_dl_progress") {
-    if (!defined('GLPI_ROOT')) {
-        define('GLPI_ROOT', dirname(__DIR__));
-    }
-
-    include_once GLPI_ROOT . '/inc/based_config.php';
-    Session::setPath();
-    Session::start();
-
+if (($_GET["action"] ?? null) === "get_dl_progress") {
     echo $_SESSION['marketplace_dl_progress'][$_GET['key']] ?? 0;
-    exit;
+    return;
 }
 
-if (in_array($_POST["action"] ?? null, ['download_plugin', 'update_plugin'])) {
-   // Do not load plugin that will be updated, to be able to load its new information
-   // by redefining its plugin_version_ function after files replacement.
-    $PLUGINS_EXCLUDED = [$_POST['key']];
-}
-
-
-// get common marketplace action, load GLPI framework
-include("../inc/includes.php");
-
-Session::checkRight("config", UPDATE);
+(new Config())->checkGlobal(UPDATE);
 
 use Glpi\Marketplace\Controller as MarketplaceController;
 use Glpi\Marketplace\View as MarketplaceView;
@@ -93,7 +72,7 @@ if (isset($_POST['key']) && isset($_POST["action"])) {
     }
 
     echo MarketplaceView::getButtons($_POST['key']);
-} else if (($_GET["action"] ?? null) == "refresh_plugin_list") {
+} elseif (($_GET["action"] ?? null) == "refresh_plugin_list") {
     switch ($_GET['tab']) {
         default:
         case 'discover':
@@ -110,7 +89,7 @@ if (isset($_POST['key']) && isset($_POST["action"])) {
             MarketplaceView::installed(true, true, $_GET['filter'] ?? "");
             break;
     }
-} else if (($_GET["action"] ?? null) == "getPagination") {
+} elseif (($_GET["action"] ?? null) == "getPagination") {
     echo MarketplaceView::getPaginationHtml(
         (int) $_GET['page'],
         (int) $_GET['total'],

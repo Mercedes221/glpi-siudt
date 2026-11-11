@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,12 +33,11 @@
  * ---------------------------------------------------------------------
  */
 
+require_once(__DIR__ . '/_check_webserver_config.php');
+
 use Glpi\Event;
 
-/** @var array $CFG_GLPI */
 global $CFG_GLPI;
-
-include('../inc/includes.php');
 
 $alias = new NetworkAlias();
 
@@ -55,7 +54,7 @@ if (isset($_POST["add"])) {
     if ($newID = $alias->add($_POST)) {
         Event::log(
             $newID,
-            $alias->getType(),
+            $alias::class,
             4,
             "setup",
             sprintf(__('%1$s adds the item %2$s'), $_SESSION["glpiname"], $_POST["name"])
@@ -65,10 +64,10 @@ if (isset($_POST["add"])) {
         }
     }
     Html::back();
-} else if (isset($_POST["purge"])) {
+} elseif (isset($_POST["purge"])) {
     $alias->check($_POST['id'], PURGE);
     $item = $alias->getItem();
-    $alias->delete($_POST, 1);
+    $alias->delete($_POST, true);
     Event::log(
         $_POST["id"],
         "networkname",
@@ -82,13 +81,13 @@ if (isset($_POST["add"])) {
     } else {
         Html::redirect($CFG_GLPI["root_doc"] . "/front/central.php");
     }
-} else if (isset($_POST["update"])) {
+} elseif (isset($_POST["update"])) {
     $alias->check($_POST["id"], UPDATE);
     $alias->update($_POST);
 
     Event::log(
         $_POST["id"],
-        $alias->getType(),
+        $alias::class,
         4,
         "setup",
         //TRANS: %s is the user login
@@ -98,15 +97,11 @@ if (isset($_POST["add"])) {
 }
 
 if (isset($_GET['_in_modal'])) {
-    Html::popHeader(NetworkAlias::getTypeName(1), $_SERVER['PHP_SELF']);
+    Html::popHeader(NetworkAlias::getTypeName(1));
     $alias->showForm($_GET["id"], $_GET);
     Html::popFooter();
 } else {
-    if (!isset($_GET["id"])) {
-        $_GET["id"] = "";
-    }
-
-    Session::checkRight("internet", UPDATE);
+    Session::checkRight(NetworkName::$rightname, UPDATE);
 
     $menus = ['assets'];
     NetworkAlias::displayFullPageForItem($_GET["id"], $menus, $_GET);

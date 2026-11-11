@@ -5,8 +5,7 @@
  #
  # http://glpi-project.org
  #
- # @copyright 2015-2025 Teclib' and contributors.
- # @copyright 2003-2014 by the INDEPNET Development Team.
+ # @copyright 2015-2026 Teclib' and contributors.
  # @licence   https://www.gnu.org/licenses/gpl-3.0.html
  #
  # ---------------------------------------------------------------------
@@ -37,11 +36,11 @@
 <div class="alert alert-warning">
     <div class="d-flex align-items-center">
         <div class="me-4">
-            <i class="ti ti-alert-triangle fa-2x"></i>
+            <i class="ti ti-alert-triangle fa-2x" aria-hidden="true"></i>
         </div>
         <div>
             <h4 class="alert-title">
-                {{ __("Error") }}
+                {{ _n('Error', 'Errors', 1) }}
             </h4>
             <div>
                 {% for error in errors %}
@@ -50,7 +49,7 @@
             </div>
 
             <a href="{{ login_url }}" class="btn btn-primary mt-3">
-                <i class="ti ti-login"></i>
+                <i class="ti ti-login" aria-hidden="true"></i>
                 <span>{{ __('Log in again') }}</span>
             </a>
         </div>

@@ -11,6 +11,8 @@ use function sprintf;
 
 /**
  * Plural rule evaluator.
+ *
+ * @final
  */
 class Rule
 {
@@ -29,22 +31,18 @@ class Rule
     protected $ast;
 
     /**
-     * Number of plurals in this rule.
-     *
-     * @var int
-     */
-    protected $numPlurals;
-
-    /**
      * Create a new plural rule.
      *
      * @param int   $numPlurals
-     * @param array $ast
      */
-    protected function __construct($numPlurals, array $ast)
-    {
-        $this->numPlurals = $numPlurals;
-        $this->ast        = $ast;
+    protected function __construct(
+        /**
+         * Number of plurals in this rule.
+         */
+        protected $numPlurals,
+        array $ast
+    ) {
+        $this->ast = $ast;
     }
 
     /**
@@ -80,100 +78,63 @@ class Rule
     /**
      * Evaluate a part of an ast.
      *
-     * @param  array $ast
      * @param  int   $number
      * @return int
      * @throws Exception\ParseException
      */
     protected function evaluateAstPart(array $ast, $number)
     {
-        switch ($ast['id']) {
-            case 'number':
-                return $ast['arguments'][0];
-
-            case 'n':
-                return $number;
-
-            case '+':
-                return $this->evaluateAstPart($ast['arguments'][0], $number)
-                       + $this->evaluateAstPart($ast['arguments'][1], $number);
-
-            case '-':
-                return $this->evaluateAstPart($ast['arguments'][0], $number)
-                       - $this->evaluateAstPart($ast['arguments'][1], $number);
-
-            case '/':
-                // Integer division
-                return floor(
-                    $this->evaluateAstPart($ast['arguments'][0], $number)
-                    / $this->evaluateAstPart($ast['arguments'][1], $number)
-                );
-
-            case '*':
-                return $this->evaluateAstPart($ast['arguments'][0], $number)
-                       * $this->evaluateAstPart($ast['arguments'][1], $number);
-
-            case '%':
-                return $this->evaluateAstPart($ast['arguments'][0], $number)
-                       % $this->evaluateAstPart($ast['arguments'][1], $number);
-
-            case '>':
-                return $this->evaluateAstPart($ast['arguments'][0], $number)
-                       > $this->evaluateAstPart($ast['arguments'][1], $number)
-                       ? 1 : 0;
-
-            case '>=':
-                return $this->evaluateAstPart($ast['arguments'][0], $number)
-                       >= $this->evaluateAstPart($ast['arguments'][1], $number)
-                       ? 1 : 0;
-
-            case '<':
-                return $this->evaluateAstPart($ast['arguments'][0], $number)
-                       < $this->evaluateAstPart($ast['arguments'][1], $number)
-                       ? 1 : 0;
-
-            case '<=':
-                return $this->evaluateAstPart($ast['arguments'][0], $number)
-                       <= $this->evaluateAstPart($ast['arguments'][1], $number)
-                       ? 1 : 0;
-
-            case '==':
-                // @codingStandardsIgnoreStart
-                return $this->evaluateAstPart($ast['arguments'][0], $number)
-                       == $this->evaluateAstPart($ast['arguments'][1], $number)
-                       ? 1 : 0;
-
-            case '!=':
-                return $this->evaluateAstPart($ast['arguments'][0], $number)
-                       != $this->evaluateAstPart($ast['arguments'][1], $number)
-                       ? 1 : 0;
-                // @codingStandardsIgnoreEnd
-
-            case '&&':
-                return $this->evaluateAstPart($ast['arguments'][0], $number)
-                       && $this->evaluateAstPart($ast['arguments'][1], $number)
-                       ? 1 : 0;
-
-            case '||':
-                return $this->evaluateAstPart($ast['arguments'][0], $number)
-                       || $this->evaluateAstPart($ast['arguments'][1], $number)
-                       ? 1 : 0;
-
-            case '!':
-                return ! $this->evaluateAstPart($ast['arguments'][0], $number)
-                       ? 1 : 0;
-
-            case '?':
-                return $this->evaluateAstPart($ast['arguments'][0], $number)
-                       ? $this->evaluateAstPart($ast['arguments'][1], $number)
-                       : $this->evaluateAstPart($ast['arguments'][2], $number);
-
-            default:
-                throw new Exception\ParseException(sprintf(
-                    'Unknown token: %s',
-                    $ast['id']
-                ));
-        }
+        return match ($ast['id']) {
+            'number' => $ast['arguments'][0],
+            'n' => $number,
+            '+' => $this->evaluateAstPart($ast['arguments'][0], $number)
+                   + $this->evaluateAstPart($ast['arguments'][1], $number),
+            '-' => $this->evaluateAstPart($ast['arguments'][0], $number)
+                   - $this->evaluateAstPart($ast['arguments'][1], $number),
+            // Integer division
+            '/' => floor(
+                $this->evaluateAstPart($ast['arguments'][0], $number)
+                / $this->evaluateAstPart($ast['arguments'][1], $number)
+            ),
+            '*' => $this->evaluateAstPart($ast['arguments'][0], $number)
+                   * $this->evaluateAstPart($ast['arguments'][1], $number),
+            '%' => $this->evaluateAstPart($ast['arguments'][0], $number)
+                   % $this->evaluateAstPart($ast['arguments'][1], $number),
+            '>' => $this->evaluateAstPart($ast['arguments'][0], $number)
+                   > $this->evaluateAstPart($ast['arguments'][1], $number)
+                   ? 1 : 0,
+            '>=' => $this->evaluateAstPart($ast['arguments'][0], $number)
+                   >= $this->evaluateAstPart($ast['arguments'][1], $number)
+                   ? 1 : 0,
+            '<' => $this->evaluateAstPart($ast['arguments'][0], $number)
+                   < $this->evaluateAstPart($ast['arguments'][1], $number)
+                   ? 1 : 0,
+            '<=' => $this->evaluateAstPart($ast['arguments'][0], $number)
+                   <= $this->evaluateAstPart($ast['arguments'][1], $number)
+                   ? 1 : 0,
+            // @codingStandardsIgnoreStart
+            '==' => $this->evaluateAstPart($ast['arguments'][0], $number)
+                   == $this->evaluateAstPart($ast['arguments'][1], $number)
+                   ? 1 : 0,
+            '!=' => $this->evaluateAstPart($ast['arguments'][0], $number)
+                   != $this->evaluateAstPart($ast['arguments'][1], $number)
+                   ? 1 : 0,
+            '&&' => $this->evaluateAstPart($ast['arguments'][0], $number)
+                   && $this->evaluateAstPart($ast['arguments'][1], $number)
+                   ? 1 : 0,
+            '||' => $this->evaluateAstPart($ast['arguments'][0], $number)
+                   || $this->evaluateAstPart($ast['arguments'][1], $number)
+                   ? 1 : 0,
+            '!' => ! $this->evaluateAstPart($ast['arguments'][0], $number)
+                   ? 1 : 0,
+            '?' => $this->evaluateAstPart($ast['arguments'][0], $number)
+                   ? $this->evaluateAstPart($ast['arguments'][1], $number)
+                   : $this->evaluateAstPart($ast['arguments'][2], $number),
+            default => throw new Exception\ParseException(sprintf(
+                'Unknown token: %s',
+                $ast['id']
+            )),
+        };
     }
 
     /**

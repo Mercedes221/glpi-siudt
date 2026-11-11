@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -34,16 +34,15 @@
  */
 
 /**
- * @since 9.2
- */
-
-
-
-/**
  * NotificationTargetSoftwareLicense Class
+ *
+ * @extends NotificationTarget<Certificate>
+ *
+ * @since 9.2
  **/
 class NotificationTargetCertificate extends NotificationTarget
 {
+    #[Override]
     public function getEvents()
     {
         return ['alert' => __('Alarm on expired certificate')];
@@ -61,25 +60,18 @@ class NotificationTargetCertificate extends NotificationTarget
         );
     }
 
+    #[Override]
     public function addDataForTemplate($event, $options = [])
     {
 
         $events = $this->getAllEvents();
         $certificate = $this->obj;
 
-        if (!isset($options['certificates'])) {
-            $options['certificates'] = [];
-            if (!$certificate->isNewItem()) {
-                $options['certificates'][] = $certificate->fields;// Compatibility with old behaviour
-            }
-        } else {
-            Toolbox::deprecated('Using "certificates" option in NotificationTargetCertificate is deprecated.');
+        $options['certificates'] = [];
+        if (!$certificate->isNewItem()) {
+            $options['certificates'][] = $certificate->fields;// Compatibility with old behaviour
         }
-        if (!isset($options['entities_id'])) {
-            $options['entities_id'] = $certificate->fields['entities_id'];
-        } else {
-            Toolbox::deprecated('Using "entities_id" option in NotificationTargetCertificate is deprecated.');
-        }
+        $options['entities_id'] = $certificate->fields['entities_id'];
 
         $this->data['##certificate.action##'] = $events[$event];
         $this->data['##certificate.entity##'] = Dropdown::getDropdownName(
@@ -120,7 +112,7 @@ class NotificationTargetCertificate extends NotificationTarget
         }
     }
 
-
+    #[Override]
     public function getTags()
     {
 
@@ -135,14 +127,14 @@ class NotificationTargetCertificate extends NotificationTarget
         foreach ($tags as $tag => $label) {
             $this->addTagToList(['tag'   => $tag,
                 'label' => $label,
-                'value' => true
+                'value' => true,
             ]);
         }
 
         $this->addTagToList(['tag'     => 'certificates',
             'label'   => __('Certificates list (deprecated; contains only one element)'),
             'value'   => false,
-            'foreach' => true
+            'foreach' => true,
         ]);
 
         asort($this->tag_descriptions);

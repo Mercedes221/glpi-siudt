@@ -7,8 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
- * @copyright 2003-2014 by the INDEPNET Development Team.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
  * ---------------------------------------------------------------------
@@ -40,25 +39,21 @@
 /**
  * Update from 9.2.2 to 9.2.3
  *
- * @return bool for success (will die for most error)
+ * @return bool
  **/
 function update922to923()
 {
     /**
-     * @var \DBmysql $DB
-     * @var \Migration $migration
+     * @var DBmysql $DB
+     * @var Migration $migration
      */
     global $DB, $migration;
 
-    $current_config   = Config::getConfigurationValues('core');
     $updateresult     = true;
-    $ADDTODISPLAYPREF = [];
 
-   //TRANS: %s is the number of new version
-    $migration->displayTitle(sprintf(__('Update to %s'), '9.2.3'));
     $migration->setVersion('9.2.3');
 
-   //add a column for the model
+    //add a column for the model
     if (!$DB->fieldExists("glpi_devicepcis", "devicenetworkcardmodels_id")) {
         $migration->addField(
             "glpi_devicepcis",
@@ -69,10 +64,10 @@ function update922to923()
         $migration->addKey('glpi_devicepcis', 'devicenetworkcardmodels_id');
     }
 
-   //fix notificationtemplates_id in translations table
+    //fix notificationtemplates_id in translations table
     $notifs = [
         'Certificate',
-        'SavedSearch_Alert'
+        'SavedSearch_Alert',
     ];
     foreach ($notifs as $notif) {
         $notification = new Notification();
@@ -82,7 +77,7 @@ function update922to923()
             $notification->getFromDBByCrit(['itemtype' => $notif, 'event' => 'alert'])
             && $template->getFromDBByCrit(['itemtype' => $notif])
         ) {
-            $DB->updateOrDie(
+            $DB->update(
                 "glpi_notificationtemplatetranslations",
                 ["notificationtemplates_id" => $template->fields['id']],
                 ["notificationtemplates_id" => $notification->fields['id']]
@@ -95,21 +90,21 @@ function update922to923()
                     [
                         'notifications_id'            =>  $notification->fields['id'],
                         'notificationtemplates_id'    => $template->fields['id'],
-                        'mode'                        => Notification_NotificationTemplate::MODE_MAIL
+                        'mode'                        => Notification_NotificationTemplate::MODE_MAIL,
                     ]
                 ) == 0
             ) {
                 //Add missing notification template link for saved searches
-                $DB->insertOrDie("glpi_notifications_notificationtemplates", [
+                $DB->insert("glpi_notifications_notificationtemplates", [
                     'notifications_id'         => $notification->fields['id'],
                     'mode'                     => Notification_NotificationTemplate::MODE_MAIL,
-                    'notificationtemplates_id' => $template->fields['id']
+                    'notificationtemplates_id' => $template->fields['id'],
                 ]);
             }
         }
     }
 
-   // ************ Keep it at the end **************
+    // ************ Keep it at the end **************
     $migration->executeMigration();
 
     return $updateresult;

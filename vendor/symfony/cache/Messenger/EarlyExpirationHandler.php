@@ -13,22 +13,22 @@ namespace Symfony\Component\Cache\Messenger;
 
 use Symfony\Component\Cache\CacheItem;
 use Symfony\Component\DependencyInjection\ReverseContainer;
-use Symfony\Component\Messenger\Handler\MessageHandlerInterface;
+use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 
 /**
  * Computes cached values sent to a message bus.
  */
-class EarlyExpirationHandler implements MessageHandlerInterface
+#[AsMessageHandler]
+class EarlyExpirationHandler
 {
-    private $reverseContainer;
-    private $processedNonces = [];
+    private array $processedNonces = [];
 
-    public function __construct(ReverseContainer $reverseContainer)
-    {
-        $this->reverseContainer = $reverseContainer;
+    public function __construct(
+        private ReverseContainer $reverseContainer,
+    ) {
     }
 
-    public function __invoke(EarlyExpirationMessage $message)
+    public function __invoke(EarlyExpirationMessage $message): void
     {
         $item = $message->getItem();
         $metadata = $item->getMetadata();
@@ -59,8 +59,8 @@ class EarlyExpirationHandler implements MessageHandlerInterface
 
         static $setMetadata;
 
-        $setMetadata ?? $setMetadata = \Closure::bind(
-            function (CacheItem $item, float $startTime) {
+        $setMetadata ??= \Closure::bind(
+            static function (CacheItem $item, float $startTime) {
                 if ($item->expiry > $endTime = microtime(true)) {
                     $item->newMetadata[CacheItem::METADATA_EXPIRY] = $item->expiry;
                     $item->newMetadata[CacheItem::METADATA_CTIME] = (int) ceil(1000 * ($endTime - $startTime));

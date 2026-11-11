@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,11 +33,11 @@
  * ---------------------------------------------------------------------
  */
 
+require_once(__DIR__ . '/_check_webserver_config.php');
+
 use Glpi\Event;
 
-include('../inc/includes.php');
-
-Session::checkRight("datacenter", READ);
+Session::checkRight(DCRoom::$rightname, READ);
 
 if (empty($_GET["id"])) {
     $_GET["id"] = "";
@@ -64,7 +64,7 @@ if (isset($_POST["add"])) {
         }
     }
     Html::back();
-} else if (isset($_POST["delete"])) {
+} elseif (isset($_POST["delete"])) {
     $room->check($_POST["id"], DELETE);
     $room->delete($_POST);
 
@@ -77,7 +77,7 @@ if (isset($_POST["add"])) {
         sprintf(__('%s deletes an item'), $_SESSION["glpiname"])
     );
     $room->redirectToList();
-} else if (isset($_POST["restore"])) {
+} elseif (isset($_POST["restore"])) {
     $room->check($_POST["id"], DELETE);
 
     $room->restore($_POST);
@@ -90,10 +90,10 @@ if (isset($_POST["add"])) {
         sprintf(__('%s restores an item'), $_SESSION["glpiname"])
     );
     $room->redirectToList();
-} else if (isset($_POST["purge"])) {
+} elseif (isset($_POST["purge"])) {
     $room->check($_POST["id"], PURGE);
 
-    $room->delete($_POST, 1);
+    $room->delete($_POST, true);
     Event::log(
         $_POST["id"],
         "dcrooms",
@@ -103,7 +103,7 @@ if (isset($_POST["add"])) {
         sprintf(__('%s purges an item'), $_SESSION["glpiname"])
     );
     $room->redirectToList();
-} else if (isset($_POST["update"])) {
+} elseif (isset($_POST["update"])) {
     $room->check($_POST["id"], UPDATE);
 
     $room->update($_POST);
@@ -129,6 +129,6 @@ if (isset($_POST["add"])) {
         $datacenter->getFromDB($options['datacenters_id']);
         $options['locations_id'] = $datacenter->fields['locations_id'];
     }
-    $menus = ["management", "datacenter", "dcroom"];
+    $menus = ["management", "datacenter", "DCRoom"];
     DCRoom::displayFullPageForItem($_GET["id"], $menus, $options);
 }

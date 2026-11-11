@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -38,62 +38,73 @@
  **/
 class HTMLTableRow extends HTMLTableEntity
 {
-    private $group;
-    private $empty              = true;
-    private $cells              = [];
-    private $numberOfSubRows    = 1;
-    private $linesWithAttributs = [];
-
+    private HTMLTableGroup $group;
+    private bool $empty              = true;
+    /** @var array<string, array<HTMLTableCell>> */
+    private array $cells              = [];
+    private int $numberOfSubRows    = 1;
+    /** @var array<int, array> */
+    private array $linesWithAttributs = [];
 
     /**
-     * @param $group
-     **/
+     * @param HTMLTableGroup $group
+     */
     public function __construct($group)
     {
         $this->group = $group;
     }
 
-
+    /**
+     * @return HTMLTableGroup
+     */
     public function getGroup()
     {
         return $this->group;
     }
 
-
+    /**
+     * @return bool
+     */
     public function notEmpty()
     {
         return !$this->empty;
     }
 
-
+    /**
+     * @return int
+     */
     public function getNumberOfsubRows()
     {
         return $this->numberOfSubRows;
     }
 
-
+    /**
+     * @return HTMLTableRow
+     */
     public function createAnotherRow()
     {
         return $this->group->createRow();
     }
 
-
     /**
-     * @param $lineIndex
-     * @param $attributs
-     **/
+     * @param int $lineIndex
+     * @param array $attributs
+     *
+     * @return void
+     */
     public function addAttributForLine($lineIndex, $attributs)
     {
         $this->linesWithAttributs[$lineIndex] = $attributs;
     }
 
-
     /**
-     * @param $header    HTMLTableHeader object
-     * @param $content
-     * @param $father    HTMLTableCell object (default NULL)
-     * @param $item      CommonDBTM object: The item associated with the current cell (default NULL)
-     **/
+     * @param HTMLTableHeader $header object
+     * @param string|array $content
+     * @param ?HTMLTableCell $father object (default NULL)
+     * @param ?CommonDBTM $item object: The item associated with the current cell (default NULL)
+     *
+     * @return HTMLTableCell
+     */
     public function addCell(
         HTMLTableHeader $header,
         $content,
@@ -102,10 +113,14 @@ class HTMLTableRow extends HTMLTableEntity
     ) {
 
         if (!$this->group->haveHeader($header)) {
-            throw new \Exception('Unavailable header!');
+            throw new Exception('Unavailable header!');
         }
 
-        $header_name = $header->getCompositeName();
+        if ($header instanceof HTMLCompositeTableInterface) {
+            $header_name = $header->getCompositeName();
+        } else {
+            $header_name = $header->getName();
+        }
         if (!isset($this->cells[$header_name])) {
             $this->cells[$header_name] = [];
         }
@@ -116,15 +131,16 @@ class HTMLTableRow extends HTMLTableEntity
         return $cell;
     }
 
-
+    /**
+     * @return bool
+     */
     public function prepareDisplay()
     {
-
         if ($this->empty) {
             return false;
         }
 
-       // First, compute the total nomber of rows ...
+        // First, compute the total nomber of rows ...
         $this->numberOfSubRows = 0;
         foreach ($this->cells as $cellsOfHeader) {
             if (isset($cellsOfHeader[0])) {
@@ -142,12 +158,12 @@ class HTMLTableRow extends HTMLTableEntity
             }
         }
 
-       // Then notify each cell and compute its starting row
+        // Then notify each cell and compute its starting row
         foreach ($this->cells as $cellsOfHeader) {
             if (isset($cellsOfHeader[0])) {
                 $header = $cellsOfHeader[0]->getHeader();
 
-               // Only do this for cells that don't have father: they will propagate this to there sons
+                // Only do this for cells that don't have father: they will propagate this to there sons
                 if (is_null($header->getFather())) {
                     HTMLTableCell::updateCellSteps($cellsOfHeader, $this->numberOfSubRows);
 
@@ -162,13 +178,13 @@ class HTMLTableRow extends HTMLTableEntity
         return true;
     }
 
-
     /**
-     * @param $headers
-     **/
+     * @param HTMLTableHeader[] $headers
+     *
+     * @return void
+     */
     public function displayRow($headers)
     {
-
         echo "\t<tbody";
         $this->displayEntityAttributs();
         echo ">\n";
@@ -180,6 +196,9 @@ class HTMLTableRow extends HTMLTableEntity
             }
             echo "\t\t<tr class='tab_bg_1'>\n";
             foreach ($headers as $header) {
+                if (!$header instanceof HTMLCompositeTableInterface) {
+                    continue;
+                }
                 $header_name = $header->getCompositeName();
                 if (isset($this->cells[$header_name])) {
                     $display = false;
@@ -187,12 +206,12 @@ class HTMLTableRow extends HTMLTableEntity
                         $display |= $cell->displayCell($i, $options);
                     }
                     if (!$display) {
-                        echo "\t\t\t<td colspan='" . $header->getColSpan() . "'";
+                        echo "\t\t\t<td colspan='" . ((int) $header->getColSpan()) . "'";
                         $header->displayEntityAttributs($options);
                         echo "></td>\n";
                     }
                 } else {
-                    echo "\t\t\t<td colspan='" . $header->getColSpan() . "'";
+                    echo "\t\t\t<td colspan='" . ((int) $header->getColSpan()) . "'";
                     $header->displayEntityAttributs($options);
                     echo "></td>\n";
                 }
@@ -202,10 +221,11 @@ class HTMLTableRow extends HTMLTableEntity
         echo "\t</tbody>\n";
     }
 
-
     /**
-     * @param $name
-     * @param $sub_name  (default NULL)
+     * @param string $name
+     * @param ?string $sub_name  (default NULL)
+     *
+     * @return HTMLTableHeader
      */
     public function getHeaderByName($name, $sub_name = null)
     {

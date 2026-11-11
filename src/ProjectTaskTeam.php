@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -44,19 +44,20 @@ use Glpi\Team\Team;
  **/
 class ProjectTaskTeam extends CommonDBRelation
 {
-   // From CommonDBTM
-    public $dohistory                  = true;
-    public $no_form_page               = true;
+    // From CommonDBTM
+    public bool $dohistory                  = true;
+    public bool $no_form_page               = true;
 
-   // From CommonDBRelation
-    public static $itemtype_1          = 'ProjectTask';
-    public static $items_id_1          = 'projecttasks_id';
+    // From CommonDBRelation
+    public static ?string $itemtype_1 = ProjectTask::class;
+    public static ?string $items_id_1          = 'projecttasks_id';
 
-    public static $itemtype_2          = 'itemtype';
-    public static $items_id_2          = 'items_id';
-    public static $checkItem_2_Rights  = self::DONT_CHECK_ITEM_RIGHTS;
+    public static ?string $itemtype_2          = 'itemtype';
+    public static ?string $items_id_2          = 'items_id';
+    public static int $checkItem_2_Rights  = self::DONT_CHECK_ITEM_RIGHTS;
 
-    public static $available_types     = ['User', 'Group', 'Supplier', 'Contact'];
+    /** @var class-string<CommonDBTM>[] */
+    public static array $available_types     = ['User', 'Group', 'Supplier', 'Contact'];
 
 
     /**
@@ -73,6 +74,10 @@ class ProjectTaskTeam extends CommonDBRelation
         return _n('Task team', 'Task teams', $nb);
     }
 
+    public static function getIcon()
+    {
+        return 'ti ti-users';
+    }
 
     public function getForbiddenStandardMassiveAction()
     {
@@ -80,6 +85,100 @@ class ProjectTaskTeam extends CommonDBRelation
         $forbidden   = parent::getForbiddenStandardMassiveAction();
         $forbidden[] = 'update';
         return $forbidden;
+    }
+
+    public static function showMassiveActionsSubForm(MassiveAction $ma)
+    {
+        global $CFG_GLPI;
+
+        switch ($ma->getAction()) {
+            case 'affect_to_team':
+            case 'unaffect_to_team':
+                $rand = Dropdown::showItemTypes('itemtype', static::$available_types);
+                echo '<br>';
+                $params = [
+                    'idtable'             => '__VALUE__',
+                    'display_emptychoice' => true,
+                    'name'                => 'items_id',
+                    'entity_restrict'     => Session::getActiveEntity(),
+                    'rand'                => $rand,
+                ];
+                Ajax::updateItemOnSelectEvent(
+                    "dropdown_itemtype$rand",
+                    "results_itemtype$rand",
+                    $CFG_GLPI['root_doc'] . '/ajax/dropdownAllItems.php',
+                    $params
+                );
+                echo "<span id='results_itemtype$rand'></span>";
+                echo '<br>';
+
+                echo Html::submit(_x('button', 'Post'), ['name' => 'massiveaction']);
+                return true;
+        }
+        return parent::showMassiveActionsSubForm($ma);
+    }
+
+    /**
+     * @param int[] $ids
+     */
+    public static function processMassiveActionsForOneItemtype(
+        MassiveAction $ma,
+        CommonDBTM $item,
+        array $ids
+    ): void {
+        $action = $ma->getAction();
+        $input  = $ma->getInput();
+
+        if (!in_array($action, ['affect_to_team', 'unaffect_to_team'], true)) {
+            parent::processMassiveActionsForOneItemtype($ma, $item, $ids);
+            return;
+        }
+
+        if (
+            empty($input['itemtype'])
+            || !isset($input['items_id'])
+            || (int) $input['items_id'] <= 0
+        ) {
+            foreach ($ids as $id) {
+                $ma->itemDone($item::class, $id, MassiveAction::NO_ACTION);
+            }
+            return;
+        }
+
+        $team = new self();
+
+        foreach ($ids as $id) {
+            if (!$item->can($id, UPDATE)) {
+                $ma->itemDone($item::class, $id, MassiveAction::ACTION_NORIGHT);
+                continue;
+            }
+
+            $criteria = [
+                'projecttasks_id' => $id,
+                'itemtype'        => $input['itemtype'],
+                'items_id'        => (int) $input['items_id'],
+            ];
+
+            if ($action === 'affect_to_team') {
+                if (countElementsInTable(self::getTable(), $criteria) > 0) {
+                    $ma->itemDone($item::class, $id, MassiveAction::NO_ACTION);
+                    continue;
+                }
+                $result = $team->add($criteria);
+            } else {
+                if (countElementsInTable(self::getTable(), $criteria) === 0) {
+                    $ma->itemDone($item::class, $id, MassiveAction::NO_ACTION);
+                    continue;
+                }
+                $result = $team->deleteByCriteria($criteria);
+            }
+
+            if ($result) {
+                $ma->itemDone($item::class, $id, MassiveAction::ACTION_OK);
+            } else {
+                $ma->itemDone($item::class, $id, MassiveAction::ACTION_KO);
+            }
+        }
     }
 
 
@@ -93,7 +192,7 @@ class ProjectTaskTeam extends CommonDBRelation
                     if ($_SESSION['glpishow_count_on_tabs']) {
                         $nb = $item->getTeamCount();
                     }
-                    return self::createTabEntry(self::getTypeName(1), $nb);
+                    return self::createTabEntry(self::getTypeName(1), $nb, $item::class);
             }
         }
         return '';
@@ -114,32 +213,94 @@ class ProjectTaskTeam extends CommonDBRelation
 
     public function post_addItem()
     {
+        $this->getFromDB($this->fields['id']);
+        $task = new ProjectTask();
+        $task->getFromDB($this->fields['projecttasks_id']);
+
         if (!isset($this->input['_disablenotif'])) {
-           // Read again to be sure that the data is up to date
-            $this->getFromDB($this->fields['id']);
-           // Get linked task
-            $task = new ProjectTask();
-            $task->getFromDB($this->fields['projecttasks_id']);
-           // Raise update event on task
             NotificationEvent::raiseEvent("update", $task);
+            // Raise assign event on task, with the new team member
+            NotificationEvent::raiseEvent(
+                'assign',
+                $task,
+                [
+                    'team_member_itemtype' => $this->fields['itemtype'],
+                    'team_member_items_id' => (int) $this->fields['items_id'],
+                ]
+            );
         }
+
+        if ($task->fields['recall'] !== null) {
+            $recall_data = [
+                'itemtype'    => ProjectTask::class,
+                'items_id'    => $task->getID(),
+                'before_time' => (int) $task->fields['recall'],
+                'field'       => 'plan_end_date',
+            ];
+            foreach ($this->resolveToUsers() as $users_id) {
+                if (PlanningRecall::getForItem(ProjectTask::class, $task->getID(), $users_id) !== null) {
+                    continue;
+                }
+                $recall_data['users_id'] = $users_id;
+                PlanningRecall::manageDatas($recall_data);
+            }
+        }
+    }
+
+    public function post_purgeItem()
+    {
+        $projecttasks_id = $this->fields['projecttasks_id'];
+        $still_in_team = array_flip(self::getUserInTeamFor($projecttasks_id));
+
+        foreach ($this->resolveToUsers() as $users_id) {
+            if (isset($still_in_team[$users_id])) {
+                continue;
+            }
+            $recall = PlanningRecall::getForItem(ProjectTask::class, $projecttasks_id, $users_id);
+            if ($recall !== null) {
+                $recall->delete(['id' => $recall->getID()]);
+            }
+        }
+    }
+
+    /** @return array<int> */
+    private function resolveToUsers(): array
+    {
+        global $DB;
+
+        $users = [];
+        switch ($this->fields['itemtype']) {
+            case User::class:
+                $users[] = (int) $this->fields['items_id'];
+                break;
+            case Group::class:
+                $iterator = $DB->request([
+                    'SELECT' => 'users_id',
+                    'FROM'   => Group_User::getTable(),
+                    'WHERE'  => ['groups_id' => $this->fields['items_id']],
+                ]);
+                foreach ($iterator as $row) {
+                    $users[] = (int) $row['users_id'];
+                }
+                break;
+        }
+        return $users;
     }
 
 
     /**
      * Get team for a project task
      *
-     * @param $tasks_id
+     * @param int $tasks_id
      * @param bool $expand If true, the team member data is expanded to include specific properties like firstname, realname, ...
-     * @return array
+     * @return array<class-string<CommonDBTM>, array<array{id: int, projecttasks_id: int, itemtype: class-string<CommonDBTM>, items_id: int, display_name?: string}>>
      **/
     public static function getTeamFor($tasks_id, bool $expand = false)
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         $team = [];
-       // Define empty types
+        // Define empty types
         foreach (static::$available_types as $type) {
             if (!isset($team[$type])) {
                 $team[$type] = [];
@@ -148,7 +309,7 @@ class ProjectTaskTeam extends CommonDBRelation
 
         $criteria = [
             'FROM'   => self::getTable(),
-            'WHERE'  => ['projecttasks_id' => $tasks_id]
+            'WHERE'  => ['projecttasks_id' => $tasks_id],
         ];
         $iterator = $DB->request($criteria);
 
@@ -158,21 +319,58 @@ class ProjectTaskTeam extends CommonDBRelation
         }
 
         if ($expand) {
-           // This call is purposefully going to ProjectTeam because the code would be the same for both it and this (ProjectTaskTeam)
+            // This call is purposefully going to ProjectTeam because the code would be the same for both it and this (ProjectTaskTeam)
             $team = ProjectTeam::expandTeamData($team);
         }
 
         return $team;
     }
 
+    /**
+     * Get team users for a project task (only the list of users ids)
+     *
+     * @param int $tasks_id
+     * @return array<int>
+     **/
+    public static function getUserInTeamFor($tasks_id): array
+    {
+        global $DB;
+
+        $task_team = ProjectTaskTeam::getTeamFor($tasks_id);
+        $user_ids  = [];
+
+        foreach ($task_team as $type => $actors) {
+            switch ($type) {
+                case User::class:
+                    foreach ($actors as $actor) {
+                        $user_ids[] = (int) $actor['items_id'];
+                    }
+                    break;
+                case Group::class:
+                    foreach ($actors as $actor) {
+                        $iterator = $DB->request([
+                            'SELECT' => 'users_id',
+                            'FROM'   => Group_User::getTable(),
+                            'WHERE'  => ['groups_id' => $actor['items_id']],
+                        ]);
+                        foreach ($iterator as $user) {
+                            $user_ids[] = (int) $user['users_id'];
+                        }
+                    }
+                    break;
+            }
+        }
+
+        return $user_ids;
+    }
+
     public function prepareInputForAdd($input)
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         if (!isset($input['itemtype'])) {
             Session::addMessageAfterRedirect(
-                __('An item type is mandatory'),
+                __s('An item type is mandatory'),
                 false,
                 ERROR
             );
@@ -181,7 +379,7 @@ class ProjectTaskTeam extends CommonDBRelation
 
         if (!isset($input['items_id'])) {
             Session::addMessageAfterRedirect(
-                __('An item ID is mandatory'),
+                __s('An item ID is mandatory'),
                 false,
                 ERROR
             );
@@ -190,7 +388,7 @@ class ProjectTaskTeam extends CommonDBRelation
 
         if (!isset($input['projecttasks_id'])) {
             Session::addMessageAfterRedirect(
-                __('A project task is mandatory'),
+                __s('A project task is mandatory'),
                 false,
                 ERROR
             );
@@ -200,33 +398,33 @@ class ProjectTaskTeam extends CommonDBRelation
         $task = new ProjectTask();
         $task->getFromDB($input['projecttasks_id']);
         switch ($input['itemtype']) {
-            case User::getType():
+            case User::class:
                 Planning::checkAlreadyPlanned(
                     $input['items_id'],
                     $task->fields['plan_start_date'],
                     $task->fields['plan_end_date']
                 );
                 break;
-            case Group::getType():
+            case Group::class:
                 $group_iterator = $DB->request([
                     'SELECT' => 'users_id',
                     'FROM'   => Group_User::getTable(),
-                    'WHERE'  => ['groups_id' => $input['items_id']]
+                    'WHERE'  => ['groups_id' => $input['items_id']],
                 ]);
                 foreach ($group_iterator as $row) {
-                     Planning::checkAlreadyPlanned(
-                         $row['users_id'],
-                         $task->fields['plan_start_date'],
-                         $task->fields['plan_end_date']
-                     );
+                    Planning::checkAlreadyPlanned(
+                        $row['users_id'],
+                        $task->fields['plan_start_date'],
+                        $task->fields['plan_end_date']
+                    );
                 }
                 break;
-            case Supplier::getType():
-            case Contact::getType():
-               //only Users can be checked for planning conflicts
+            case Supplier::class:
+            case Contact::class:
+                //only Users can be checked for planning conflicts
                 break;
             default:
-                throw new \RuntimeException($input['itemtype'] . " is not (yet?) handled.");
+                throw new RuntimeException($input['itemtype'] . " is not (yet?) handled.");
         }
 
         return $input;

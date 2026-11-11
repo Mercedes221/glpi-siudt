@@ -74,7 +74,7 @@ It is distributed under the GNU GENERAL PUBLIC LICENSE Version 3 - please consul
 ## Prerequisites
 
 * A web server (Apache, Nginx, IIS, etc.)
-* MariaDB >= 10.2 or MySQL >= 5.7
+* MariaDB >= 10.11 or MySQL >= 8.0
 * PHP (See compatibility matrix below)
 
     | GLPI Version | Minimum PHP | Maximum PHP |
@@ -82,9 +82,11 @@ It is distributed under the GNU GENERAL PUBLIC LICENSE Version 3 - please consul
     | 9.4.X        | 5.6         | 7.4         |
     | 9.5.X        | 7.2         | 8.0         |
     | 10.0.X       | 7.4         | 8.3         |
+    | 12.0.X       | 8.3         | -           |
 * Mandatory PHP extensions:
     - dom, fileinfo, json, session, simplexml (these are enabled in PHP by default)
     - curl (access to remote resources, like inventory agents, marketplace API, RSS feeds, ...)
+    - bcmath and mbstring (required by GLPI 12)
     - gd (pictures handling)
     - intl (internationalization)
     - libxml (XML handling)
@@ -180,14 +182,14 @@ Implementación de una herramienta de software para la gestión de activos tecno
 
 El desarrollo personalizado del proyecto se encuentra en:
 
-`plugins/siudt_front`
+`plugins/siudtfront`
 
 ## Ejecución con Docker Compose
 
-La configuración usa PHP 8.2 con Apache y MariaDB 10.11, versiones compatibles
-con GLPI 10.0.18. La aplicación se sirve desde `public/` y Apache reenvía las
-rutas de GLPI al router, incluido el instalador. La configuración de GLPI, sus
-archivos y los datos de la base de datos se conservan en volúmenes.
+La configuración usa PHP 8.3 con Apache y MariaDB 10.11 para GLPI 12.0.1.
+La aplicación se sirve desde `public/` y Apache reenvía las rutas de GLPI al
+router, incluida la API REST. La configuración de GLPI, sus archivos y los
+datos de la base de datos se conservan en volúmenes.
 
 1. Copia `.env.example` a `.env` y reemplaza ambos valores por contraseñas
    aleatorias seguras.
@@ -201,12 +203,35 @@ archivos y los datos de la base de datos se conservan en volúmenes.
 
 Al cambiar código o plugins, vuelve a ejecutar `docker compose up -d --build`.
 
+### Importar equipos de red por API
+
+Data Injection 2.14.7 no se incluye porque no declara compatibilidad con GLPI
+12.0.1; no copiarlo ni activarlo en esta versión. Para la carga específica de
+equipos de red, usa
+`tools/import-network-equipment.php` y la API REST integrada de GLPI. El
+importador muestra una vista previa por defecto y omite equipos cuyo número
+de inventario ya existe. Importa nombre, número de serie, número de inventario
+y, si están presentes, descripción y comentarios.
+
+```powershell
+$env:GLPI_URL = "http://localhost:8080"
+$env:GLPI_USER_TOKEN = "<token-remoto-del-usuario>"
+php tools/import-network-equipment.php "C:\ruta\equipos_de_red-Prueba.csv"
+php tools/import-network-equipment.php "C:\ruta\equipos_de_red-Prueba.csv" --apply
+```
+
+`--apply` crea los registros en GLPI y requiere que la API esté habilitada y
+que el usuario del token tenga permiso para crear adaptadores de red. No
+guardes tokens en el repositorio ni los compartas por chat. Consulta
+[GUIA-ACTUALIZACION-GLPI.md](./GUIA-ACTUALIZACION-GLPI.md) para el proceso de
+actualización y las copias de seguridad.
+
 ### Cargar computadoras ficticias de prueba
 
 El cargador `tools/seed-demo-computers.php` crea 100 computadoras ficticias
-mediante la API de GLPI. La vista previa no modifica datos; el cargador omite
-las etiquetas de activo de demostración que ya existan, por lo que se puede
-ejecutar más de una vez sin duplicar esos registros.
+mediante la API de GLPI. La vista previa no modifica datos. Al aplicar,
+actualiza los equipos de demostración existentes y crea solo los que falten,
+sin duplicarlos.
 
 La API de GLPI debe estar habilitada y el usuario del token debe tener permiso
 para crear computadoras. En PowerShell, configura la URL de la instancia y el
@@ -220,9 +245,24 @@ php tools/seed-demo-computers.php
 php tools/seed-demo-computers.php --apply
 ```
 
-`--apply` es necesario para insertar registros. No guardes los tokens en el
-repositorio; al terminar puedes quitarlos de la sesión de PowerShell con
-`Remove-Item Env:GLPI_USER_TOKEN, Env:GLPI_APP_TOKEN`.
+`tools/computadoras-prueba-glpi.csv` contiene registros ficticios de prueba y
+`tools/plantilla-computadoras-glpi.csv` es una plantilla vacía. No son usados
+por el cargador; este genera sus propios datos de demostración.
+
+`--check` se conecta a GLPI y comprueba catálogos, técnicos y relaciones
+necesarios, pero no cambia registros. Ejecuta esta comprobación antes de
+`--apply`.
+
+`--apply` sincroniza las 100 computadoras ficticias: actualiza las que ya
+existen usando su número de inventario y crea solo las que falten. También
+asigna fabricante, modelo, tipo, estado, ubicación y técnico; vincula el
+sistema operativo y el procesador como componentes GLPI. Antes de modificar
+computadoras, comprueba que todos esos elementos y los usuarios
+`demo-siudt-tech-01` a `demo-siudt-tech-05` ya existan en GLPI. Si falta un
+catálogo o técnico, se detiene sin crear catálogos ni computadoras.
+
+No guardes los tokens en el repositorio; al terminar puedes quitarlos de la
+sesión de PowerShell con `Remove-Item Env:GLPI_USER_TOKEN, Env:GLPI_APP_TOKEN`.
 
 Apache debe enviar `/apirest.php/...` al enrutador de GLPI porque el contenedor
 publica `public/` como raíz web. Esta regla está incluida en la imagen; si ya

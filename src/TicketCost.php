@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -40,11 +40,11 @@
  **/
 class TicketCost extends CommonITILCost
 {
-   // From CommonDBChild
-    public static $itemtype  = 'Ticket';
-    public static $items_id  = 'tickets_id';
+    // From CommonDBChild
+    public static string $itemtype = Ticket::class;
+    public static string $items_id  = 'tickets_id';
 
-    public static $rightname        = 'ticketcost';
+    public static string $rightname        = 'ticketcost';
 
     public function post_updateItem($history = true)
     {
@@ -72,7 +72,7 @@ class TicketCost extends CommonITILCost
         if ($this->fields['tickets_id']) {
             $item_ticket = new Item_Ticket();
             $item_tickets = $item_ticket->find([
-                'tickets_id' => $this->fields['tickets_id']
+                'tickets_id' => $this->fields['tickets_id'],
             ]);
             foreach ($item_tickets as $it) {
                 $this->updateTCOItem($it['itemtype'], $it['items_id']);
@@ -83,10 +83,10 @@ class TicketCost extends CommonITILCost
     public function updateTCOItem(string $itemtype, int $items_id): void
     {
         $item = getItemForItemtype($itemtype);
-        if ($item && $item->getFromDB($items_id)) {
+        if ($item && $item->isField('ticket_tco') && $item->getFromDB($items_id)) {
             $item->update([
                 'id' => $items_id,
-                'ticket_tco' => Ticket::computeTco($item)
+                'ticket_tco' => Ticket::computeTco($item),
             ]);
         }
     }

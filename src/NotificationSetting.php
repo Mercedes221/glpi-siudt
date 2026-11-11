@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,18 +33,26 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\Config\ConfigContainer;
+
 /**
  * Abstract notifications settings class
  */
 abstract class NotificationSetting extends CommonDBTM
 {
-    public $table           = 'glpi_configs';
-    protected $displaylist  = false;
-    public static $rightname       = 'config';
+    public const ATTACH_INHERIT           = -2;   // Inherit from global config
+    public const ATTACH_NO_DOCUMENT       = 0;    // No document
+    public const ATTACH_ALL_DOCUMENTS     = 1;    // All documents
+    public const ATTACH_FROM_TRIGGER_ONLY = 2;    // Only documents related to the item that triggers the event
 
+    public string $table           = 'glpi_configs';
+    protected bool $displaylist  = false;
+    public static string $rightname       = 'config';
+
+    #[Override]
     public static function getTypeName($nb = 0)
     {
-        throw new \RuntimeException('getTypeName must be implemented');
+        throw new RuntimeException('getTypeName must be implemented');
     }
 
     /**
@@ -54,10 +62,9 @@ abstract class NotificationSetting extends CommonDBTM
      */
     public static function getMode()
     {
-       //For PHP 5.x; a method cannot be abstract and static
-        throw new \RuntimeException('getMode must be implemented');
+        //For PHP 5.x; a method cannot be abstract and static
+        throw new RuntimeException('getMode must be implemented');
     }
-
 
     /**
      * Get label for enable configuration
@@ -73,13 +80,13 @@ abstract class NotificationSetting extends CommonDBTM
      */
     abstract protected function showFormConfig();
 
-
+    #[Override]
     public static function getTable($classname = null)
     {
         return parent::getTable('Config');
     }
 
-
+    #[Override]
     public function defineTabs($options = [])
     {
         $ong = [];
@@ -88,18 +95,18 @@ abstract class NotificationSetting extends CommonDBTM
         return $ong;
     }
 
-
+    #[Override]
     public function getTabNameForItem(CommonGLPI $item, $withtemplate = 0)
     {
-        switch ($item->getType()) {
+        switch ($item::class) {
             case static::class:
-                $tabs[1] = __('Setup');
+                $tabs[1] = self::createTabEntry(__('Setup'));
                 return $tabs;
         }
         return '';
     }
 
-
+    #[Override]
     public static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0)
     {
         if (get_class($item) == static::class) {
@@ -112,27 +119,27 @@ abstract class NotificationSetting extends CommonDBTM
         return true;
     }
 
-
     /**
-     * Disable (temporary) all notifications
+     * Disable (temporary) all notifications for the rest of the request execution
      *
      * @return void
      */
     public static function disableAll()
     {
-        /** @var array $CFG_GLPI */
+        /** @var ConfigContainer $CFG_GLPI */
         global $CFG_GLPI;
 
         $CFG_GLPI['use_notifications'] = 0;
-        foreach (array_keys($CFG_GLPI) as $key) {
-            if (substr($key, 0, strlen('notifications_')) === 'notifications_') {
+        foreach (array_keys($CFG_GLPI->getArrayCopy()) as $key) {
+            if (str_starts_with($key, 'notifications_')) {
                 $CFG_GLPI[$key] = 0;
             }
         }
     }
 
+    #[Override]
     public static function getIcon()
     {
-        return "fas fa-bell";
+        return "ti ti-bell";
     }
 }

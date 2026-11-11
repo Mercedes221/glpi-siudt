@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,11 +33,11 @@
  * ---------------------------------------------------------------------
  */
 
+require_once(__DIR__ . '/_check_webserver_config.php');
+
 use Glpi\Event;
 
-include('../inc/includes.php');
-
-Session::checkRight('database', READ);
+Session::checkRight(DatabaseInstance::$rightname, READ);
 
 if (!isset($_GET["id"])) {
     $_GET["id"] = "";
@@ -48,22 +48,42 @@ if (!isset($_GET["withtemplate"])) {
 
 $instance = new DatabaseInstance();
 if (isset($_POST["add"])) {
-    $instance->check(-1, CREATE, $_POST);
+    if (isset($_POST['databaseinstances_id']) && (int) $_POST['databaseinstances_id'] > 0) {
+        $instance->check($_POST['databaseinstances_id'], UPDATE);
 
-    if ($newID = $instance->add($_POST)) {
-        Event::log(
-            $newID,
-            "databaseinstance",
-            4,
-            "management",
-            //TRANS: %s is the user login
-            sprintf(__('%s adds a database instance'), $_SESSION["glpiname"])
-        );
-        if ($_SESSION['glpibackcreated']) {
-            Html::redirect($instance->getLinkURL());
+        if ($instance->update([
+            'id'       => $_POST['databaseinstances_id'],
+            'items_id' => ($_POST['items_id'] ?? 0),
+            'itemtype' => $_POST['itemtype'],
+        ])) {
+            Event::log(
+                $_POST['databaseinstances_id'],
+                "databaseinstance",
+                4,
+                "management",
+                //TRANS: %s is the user login
+                sprintf(__('%s links a database instance'), $_SESSION["glpiname"])
+            );
         }
+        Html::back();
+    } else {
+        $instance->check(-1, CREATE, $_POST);
+
+        if ($newID = $instance->add($_POST)) {
+            Event::log(
+                $newID,
+                "databaseinstance",
+                4,
+                "management",
+                //TRANS: %s is the user login
+                sprintf(__('%s adds a database instance'), $_SESSION["glpiname"])
+            );
+            if ($_SESSION['glpibackcreated']) {
+                Html::redirect($instance->getLinkURL());
+            }
+        }
+        Html::back();
     }
-    Html::back();
 } elseif (isset($_POST["delete"])) {
     $instance->check($_POST['id'], DELETE);
     $ok = $instance->delete($_POST);
@@ -94,7 +114,7 @@ if (isset($_POST["add"])) {
 } elseif (isset($_POST["purge"])) {
     $instance->check($_POST["id"], PURGE);
 
-    if ($instance->delete($_POST, 1)) {
+    if ($instance->delete($_POST, true)) {
         Event::log(
             $_POST['id'],
             "databaseinstance",
@@ -120,16 +140,8 @@ if (isset($_POST["add"])) {
     }
     Html::back();
 } else {
-    Html::header(
-        DatabaseInstance::getTypeName(Session::getPluralNumber()),
-        $_SERVER['PHP_SELF'],
-        "management",
-        "database",
-        "databaseinstance"
-    );
-
-    $menus = ["database", "databaseinstance"];
+    $menus = ["management", "database", "DatabaseInstance"];
     DatabaseInstance::displayFullPageForItem($_GET['id'], $menus, [
-        'withtemplate' => $_GET['withtemplate']
+        'withtemplate' => $_GET['withtemplate'],
     ]);
 }

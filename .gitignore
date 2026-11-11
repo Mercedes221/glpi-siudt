@@ -2,3 +2,5 @@
 /config/glpicrypt.key
 /files/*
 .env
+.env.*
+!.env.example

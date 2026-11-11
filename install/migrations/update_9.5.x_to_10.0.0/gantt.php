@@ -7,8 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
- * @copyright 2003-2014 by the INDEPNET Development Team.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
  * ---------------------------------------------------------------------
@@ -34,9 +33,8 @@
  */
 
 /**
- * @var \DBmysql $DB
+ * @var DBmysql $DB
  */
-
 $default_charset = DBConnection::getDefaultCharset();
 $default_collation = DBConnection::getDefaultCollation();
 $default_key_sign = DBConnection::getDefaultPrimaryKeySignOption();
@@ -56,5 +54,5 @@ if (!$DB->tableExists('glpi_projecttasklinks')) {
        KEY `projecttasks_id_source` (`projecttasks_id_source`),
        KEY `projecttasks_id_target` (`projecttasks_id_target`)
       ) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARSET = {$default_charset} COLLATE = {$default_collation};";
-    $DB->doQueryOrDie($query, "Adding table glpi_projecttasklinks");
+    $DB->doQuery($query);
 }

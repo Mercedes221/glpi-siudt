@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,6 +33,11 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\DBAL\QueryExpression;
+use Glpi\DBAL\QueryParam;
+use Glpi\DBAL\QuerySubQuery;
+use Glpi\Exception\Database\StatementException;
+
 /**
  * Profile class
  *
@@ -40,11 +45,44 @@
  **/
 class ProfileRight extends CommonDBChild
 {
-   // From CommonDBChild:
-    public static $itemtype = 'Profile';
-    public static $items_id = 'profiles_id'; // Field name
-    public $dohistory       = true;
+    // From CommonDBChild:
+    public static string $itemtype = Profile::class;
+    public static string $items_id = 'profiles_id'; // Field name
+    public bool $dohistory       = true;
 
+    /**
+     * {@inheritDoc}
+     * @note Unlike the default implementation, this one handles the fact that some or all profile rights
+     *       are already in the DB (but set to 0) when the cloned profile is created.
+     *       Therefore, we need to use update or insert DB queries rather than `CommonDBTM::add`.
+     *       The $clone_as_template parameter is ignored.
+     */
+    public function clone(array $override_input = [], bool $history = true, bool $clone_as_template = false, bool $clean_mapper = true)
+    {
+        global $DB;
+
+        if ($DB->isReplica()) {
+            return false;
+        }
+        $new_item = new static();
+        $input = $this->fields;
+        $input['profiles_id'] = $override_input['profiles_id'];
+        unset($input['id']);
+
+        $input = $new_item->prepareInputForClone($input);
+
+        $DB->updateOrInsert(static::getTable(), $input, [
+            'name' => $input['name'],
+            'profiles_id' => $input['profiles_id'],
+        ]);
+        $new_item->getFromDBByCrit([
+            'name' => $input['name'],
+            'profiles_id' => $input['profiles_id'],
+        ]);
+        $new_item->post_clone($this, $history);
+
+        return $new_item->fields['id'];
+    }
 
     /**
      * Get possible rights
@@ -53,10 +91,6 @@ class ProfileRight extends CommonDBChild
      */
     public static function getAllPossibleRights()
     {
-        /**
-         * @var \DBmysql $DB
-         * @var \Psr\SimpleCache\CacheInterface $GLPI_CACHE
-         */
         global $DB, $GLPI_CACHE;
 
         $rights = $GLPI_CACHE->get('all_possible_rights', []);
@@ -65,7 +99,7 @@ class ProfileRight extends CommonDBChild
             $iterator = $DB->request([
                 'SELECT'          => 'name',
                 'DISTINCT'        => true,
-                'FROM'            => self::getTable()
+                'FROM'            => self::getTable(),
             ]);
             foreach ($iterator as $right) {
                 // By default, all rights are NULL ...
@@ -78,30 +112,28 @@ class ProfileRight extends CommonDBChild
     }
 
 
+    /**
+     * @return void
+     */
     public static function cleanAllPossibleRights()
     {
-        /** @var \Psr\SimpleCache\CacheInterface $GLPI_CACHE */
         global $GLPI_CACHE;
         $GLPI_CACHE->delete('all_possible_rights');
     }
 
     /**
-     * @param $profiles_id
-     * @param $rights         array
-     **/
+     * @param int $profiles_id
+     * @param array $rights
+     *
+     * @return array
+     */
     public static function getProfileRights($profiles_id, array $rights = [])
     {
-        /** @var \DBmysql $DB */
         global $DB;
-
-        if (!version_compare(Config::getCurrentDBVersion(), '0.84', '>=')) {
-           //table does not exists.
-            return [];
-        }
 
         $query = [
             'FROM'   => 'glpi_profilerights',
-            'WHERE'  => ['profiles_id' => $profiles_id]
+            'WHERE'  => ['profiles_id' => $profiles_id],
         ];
         if (count($rights) > 0) {
             $query['WHERE']['name'] = $rights;
@@ -118,14 +150,10 @@ class ProfileRight extends CommonDBChild
     /**
      * @param $rights   array
      *
-     * @return boolean
+     * @return bool
      **/
     public static function addProfileRights(array $rights)
     {
-        /**
-         * @var \DBmysql $DB
-         * @var \Psr\SimpleCache\CacheInterface $GLPI_CACHE
-         */
         global $DB, $GLPI_CACHE;
 
         $ok = true;
@@ -133,7 +161,7 @@ class ProfileRight extends CommonDBChild
 
         $iterator = $DB->request([
             'SELECT'   => ['id'],
-            'FROM'     => Profile::getTable()
+            'FROM'     => Profile::getTable(),
         ]);
 
         foreach ($iterator as $profile) {
@@ -143,11 +171,11 @@ class ProfileRight extends CommonDBChild
                     self::getTable(),
                     [
                         'profiles_id'  => $profiles_id,
-                        'name'         => $name
+                        'name'         => $name,
                     ]
                 );
                 if (!$res) {
-                     $ok = false;
+                    $ok = false;
                 }
             }
         }
@@ -158,14 +186,10 @@ class ProfileRight extends CommonDBChild
     /**
      * @param $rights   array
      *
-     * @return boolean
+     * @return bool
      **/
     public static function deleteProfileRights(array $rights)
     {
-        /**
-         * @var \DBmysql $DB
-         * @var \Psr\SimpleCache\CacheInterface $GLPI_CACHE
-         */
         global $DB, $GLPI_CACHE;
 
         $GLPI_CACHE->set('all_possible_rights', []);
@@ -174,43 +198,7 @@ class ProfileRight extends CommonDBChild
             $result = $DB->delete(
                 self::getTable(),
                 [
-                    'name' => $name
-                ]
-            );
-            if (!$result) {
-                 $ok = false;
-            }
-        }
-        return $ok;
-    }
-
-
-    /**
-     * @param $right
-     * @param $value
-     * @param $condition
-     *
-     * @return boolean
-     **/
-    public static function updateProfileRightAsOtherRight($right, $value, $condition)
-    {
-        /** @var \DBmysql $DB */
-        global $DB;
-
-        $profiles = [];
-        $ok       = true;
-        foreach ($DB->request(self::getTable(), $condition) as $data) {
-            $profiles[] = $data['profiles_id'];
-        }
-        if (count($profiles)) {
-            $result = $DB->update(
-                'glpi_profilerights',
-                [
-                    'rights' => new \QueryExpression($DB->quoteName('rights') . ' | ' . (int)$value)
-                ],
-                [
-                    'name'         => $right,
-                    'profiles_id'  => $profiles
+                    'name' => $name,
                 ]
             );
             if (!$result) {
@@ -220,77 +208,33 @@ class ProfileRight extends CommonDBChild
         return $ok;
     }
 
-
     /**
-     * @since 0.85
+     * @param int $profiles_id
      *
-     * @param $newright      string   new right name
-     * @param $initialright  string   right name to check
-     * @param $condition              (default '')
-     *
-     * @return boolean
-     **/
-    public static function updateProfileRightsAsOtherRights($newright, $initialright, array $condition = [])
-    {
-        /** @var \DBmysql $DB */
-        global $DB;
-
-        $profiles = [];
-        $ok       = true;
-
-        $criteria = [
-            'FROM'   => self::getTable(),
-            'WHERE'  => ['name' => $initialright] + $condition
-        ];
-        $iterator = $DB->request($criteria);
-
-        foreach ($iterator as $data) {
-            $profiles[$data['profiles_id']] = $data['rights'];
-        }
-        if (count($profiles)) {
-            foreach ($profiles as $key => $val) {
-                $res = $DB->update(
-                    self::getTable(),
-                    [
-                        'rights' => $val
-                    ],
-                    [
-                        'profiles_id'  => $key,
-                        'name'         => $newright
-                    ]
-                );
-                if (!$res) {
-                     $ok = false;
-                }
-            }
-        }
-        return $ok;
-    }
-
-    /**
-     * @param $profiles_id
-     **/
+     * @return void
+     */
     public static function fillProfileRights($profiles_id)
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
-        $subq = new \QuerySubQuery([
+        $subq = new QuerySubQuery([
             'FROM'   => 'glpi_profilerights AS CURRENT',
             'WHERE'  => [
                 'CURRENT.profiles_id'   => $profiles_id,
-                'CURRENT.NAME'          => new \QueryExpression('POSSIBLE.NAME')
-            ]
+                'CURRENT.NAME'          => new QueryExpression('POSSIBLE.NAME'),
+            ],
         ]);
 
         $expr = 'NOT EXISTS ' . $subq->getQuery();
+        $qexpr = new QueryExpression($expr, values: $subq->getParams());
+
         $iterator = $DB->request([
             'SELECT'          => 'POSSIBLE.name AS NAME',
             'DISTINCT'        => true,
             'FROM'            => 'glpi_profilerights AS POSSIBLE',
             'WHERE'           => [
-                new \QueryExpression($expr)
-            ]
+                $qexpr,
+            ],
         ]);
 
         if ($iterator->count() === 0) {
@@ -306,17 +250,28 @@ class ProfileRight extends CommonDBChild
         );
         $stmt = $DB->prepare($query);
         foreach ($iterator as $right) {
-            $stmt->bind_param('ss', $profiles_id, $right['NAME']);
-            $DB->executeStatement($stmt);
+            try {
+                $DB->executeStatement($stmt, [$profiles_id, $right['NAME']]);
+            } catch (StatementException $e) {
+                // Ignore duplicate entry errors (code 1062): a concurrent
+                // request may have inserted the same right for this profile
+                // between our `NOT EXISTS` check and the insert. The row we
+                // wanted already exists, which is the desired end state.
+                if ($e->getCode() !== 1062) {
+                    throw $e;
+                }
+            }
         }
     }
 
 
     /**
-     * Update the rights of a profile (static since 0.90.1)
+     * Update the rights of a profile
      *
-     * @param $profiles_id
-     * @param $rights         array
+     * @param int $profiles_id
+     * @param array $rights
+     *
+     * @return void
      */
     public static function updateProfileRights($profiles_id, array $rights = [])
     {
@@ -326,48 +281,130 @@ class ProfileRight extends CommonDBChild
             if (isset($right)) {
                 if (
                     $me->getFromDBByCrit(['profiles_id'   => $profiles_id,
-                        'name'          => $name
+                        'name'          => $name,
                     ])
                 ) {
                     $input = ['id'          => $me->getID(),
-                        'rights'      => $right
+                        'rights'      => $right,
                     ];
                     $me->update($input);
                 } else {
                     $input = ['profiles_id' => $profiles_id,
                         'name'        => $name,
-                        'rights'      => $right
+                        'rights'      => $right,
                     ];
-                    $me->add($input);
+                    try {
+                        $me->add($input);
+                    } catch (RuntimeException $e) {
+                        // A concurrent request may have inserted this
+                        // (profiles_id, name) between our check above and this
+                        // insert (e.g. through fillProfileRights(), which only
+                        // sets the default rights). Recover from the duplicate
+                        // entry error by updating the existing row so it ends up
+                        // with the rights value we intended.
+                        if (!str_contains($e->getMessage(), '(1062)')) {
+                            throw $e;
+                        }
+                        if ($me->getFromDBByCrit(['profiles_id' => $profiles_id, 'name' => $name])) {
+                            $me->update(['id' => $me->getID(), 'rights' => $right]);
+                        }
+                    }
                 }
             }
         }
 
-       // Don't forget to complete the profile rights ...
+        // Don't forget to complete the profile rights ...
         self::fillProfileRights($profiles_id);
     }
 
 
-    /**
-     * To avoid log out and login when rights change (very useful in debug mode)
-     *
-     * @see CommonDBChild::post_updateItem()
-     **/
-    public function post_updateItem($history = true)
+    public function prepareInputForAdd($input)
     {
-
-       // update current profile
-        if (
-            isset($_SESSION['glpiactiveprofile']['id'])
-            && $_SESSION['glpiactiveprofile']['id'] == $this->fields['profiles_id']
-            && (!isset($_SESSION['glpiactiveprofile'][$this->fields['name']])
-              || $_SESSION['glpiactiveprofile'][$this->fields['name']] != $this->fields['rights'])
-        ) {
-            $_SESSION['glpiactiveprofile'][$this->fields['name']] = $this->fields['rights'];
-            unset($_SESSION['glpimenu']);
+        if (isset($input['name'], $input['rights'])) {
+            $input['rights'] = self::removeRightsNotHeldByCurrentUser($input['name'], (int) $input['rights'], 0);
         }
+        return parent::prepareInputForAdd($input);
     }
 
+    public function prepareInputForUpdate($input)
+    {
+        // A right entry can't be renamed or moved to another profile.
+        unset($input['name'], $input['profiles_id']);
+
+        if (isset($input['rights'])) {
+            $input['rights'] = self::removeRightsNotHeldByCurrentUser(
+                $this->fields['name'],
+                (int) $input['rights'],
+                (int) $this->fields['rights']
+            );
+        }
+        return parent::prepareInputForUpdate($input);
+    }
+
+    /**
+     * Prevent privilege escalation: the current user cannot grant a right they do not hold.
+     * Rights already present on the profile are kept, so editing a profile having more rights than
+     * the current user does not drop them.
+     *
+     * @param string $name        Right name
+     * @param int    $new_rights  Requested rights
+     * @param int    $old_rights  Rights currently stored
+     *
+     * @return int Requested rights, without the added rights the current user does not hold
+     */
+    private static function removeRightsNotHeldByCurrentUser(string $name, int $new_rights, int $old_rights): int
+    {
+        if (
+            Session::isRightChecksDisabled()
+            || Session::isCron()
+            || !isset($_SESSION['glpiactiveprofile'])
+            // A `config` UPDATE holder already controls the whole instance.
+            || Session::haveRight(Config::$rightname, UPDATE)
+        ) {
+            return $new_rights;
+        }
+
+        $forbidden = $new_rights & ~$old_rights & ~(int) ($_SESSION['glpiactiveprofile'][$name] ?? 0);
+        if ($forbidden !== 0) {
+            Session::addMessageAfterRedirect(
+                __s('You cannot grant rights that you do not have.'),
+                true,
+                ERROR
+            );
+        }
+        return $new_rights & ~$forbidden;
+    }
+
+    /**
+     * @param bool $history
+     *
+     * @return void
+     */
+    public function post_addItem($history = true)
+    {
+        // Refresh session rights to avoid log out and login when rights change
+        $this->updateProfileLastRightsUpdate($this->fields['profiles_id']);
+    }
+
+    public function post_updateItem($history = true)
+    {
+        // Refresh session rights to avoid log out and login when rights change
+        $this->updateProfileLastRightsUpdate($this->fields['profiles_id']);
+    }
+
+    /**
+     * Update last rights update for given profile.
+     *
+     * @param int $profile_id
+     * @return void
+     */
+    private function updateProfileLastRightsUpdate(int $profile_id): void
+    {
+        Profile::getById($profile_id)->update([
+            'id'                 => $profile_id,
+            'last_rights_update' => Session::getCurrentTime(),
+        ]);
+    }
 
     /**
      * @since 085
@@ -380,11 +417,13 @@ class ProfileRight extends CommonDBChild
     {
 
         $itemtype = $options['searchopt']['rightclass'];
-        $item     = new $itemtype();
+        if (!($item = getItemForItemtype($itemtype))) {
+            return __s('None');
+        }
         $rights   = '';
         $prem     = true;
         foreach ($item->getRights() as $val => $name) {
-            if (is_numeric($values['rights']) && ((int)$values['rights'] & $val)) {
+            if (is_numeric($values['rights']) && ((int) $values['rights'] & $val)) {
                 if ($prem) {
                     $prem = false;
                 } else {
@@ -397,7 +436,7 @@ class ProfileRight extends CommonDBChild
                 }
             }
         }
-        return ($rights ? $rights : __('None'));
+        return htmlescape($rights ?: __('None'));
     }
 
 

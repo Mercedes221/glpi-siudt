@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,20 +33,37 @@
  * ---------------------------------------------------------------------
  */
 
-// Class NotificationTarget
+use function Safe\strtotime;
+
+/**
+ * @extends NotificationTarget<User>
+ */
 class NotificationTargetUser extends NotificationTarget
 {
+    #[Override]
     public function getEvents()
     {
         return [
             'passwordexpires' => __('Password expires'),
             'passwordforget'  => __('Forgotten password?'),
+            'passwordinit'    => __('Password initialization'),
         ];
     }
 
+    #[Override()]
+    public function getEventsToSendImmediately(): array
+    {
+        return [
+            'passwordexpires',
+            'passwordforget',
+            'passwordinit',
+        ];
+    }
+
+    #[Override]
     public function canNotificationContentBeDisclosed(string $event): bool
     {
-        if ($event === 'passwordforget') {
+        if ($event === 'passwordforget' || $event === 'passwordinit') {
             return false;
         }
 
@@ -56,6 +73,7 @@ class NotificationTargetUser extends NotificationTarget
     /**
      * @see NotificationTarget::addNotificationTargets()
      **/
+    #[Override]
     public function addNotificationTargets($entity)
     {
         $this->addTarget(Notification::USER, User::getTypeName(1));
@@ -65,6 +83,16 @@ class NotificationTargetUser extends NotificationTarget
         }
     }
 
+    #[Override]
+    protected function canNotificationBeDisabled(string $event): bool
+    {
+        if (in_array($event, ['passwordinit', 'passwordforget', 'passwordexpires'])) {
+            // Notifications related to passwords should never be disabled.
+            return false;
+        }
+
+        return true;
+    }
 
     /**
      * @see NotificationTarget::addSpecificTargets()
@@ -72,7 +100,7 @@ class NotificationTargetUser extends NotificationTarget
     public function addSpecificTargets($data, $options)
     {
 
-       //Look for all targets whose type is Notification::ITEM_USER
+        //Look for all targets whose type is Notification::ITEM_USER
         switch ($data['type']) {
             case Notification::USER_TYPE:
                 switch ($data['items_id']) {
@@ -85,18 +113,16 @@ class NotificationTargetUser extends NotificationTarget
                         // Do not set users_id
                         $data = ['name'     => $this->obj->getName(),
                             'email'    => $this->obj->getDefaultEmail(),
-                            'language' => $this->obj->getField('language'),
-                            'usertype' => $usertype
+                            'language' => $this->obj->fields['language'],
+                            'usertype' => $usertype,
                         ];
                         $this->addToRecipientsList($data);
                 }
         }
     }
 
-
     public function addDataForTemplate($event, $options = [])
     {
-        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $events = $this->getEvents();
@@ -114,20 +140,20 @@ class NotificationTargetUser extends NotificationTarget
                 );
 
                 $this->data['##user.account.lock.date##']  = null;
-                $lock_delay = (int)$CFG_GLPI['password_expiration_lock_delay'];
+                $lock_delay = (int) $CFG_GLPI['password_expiration_lock_delay'];
                 if (-1 !== $lock_delay) {
-                     $this->data['##user.account.lock.date##'] = Html::convDateTime(
-                         date(
-                             'Y-m-d H:i:s',
-                             strtotime(
-                                 sprintf(
-                                     '+ %s days',
-                                     $lock_delay
-                                 ),
-                                 $expiration_time
-                             )
-                         )
-                     );
+                    $this->data['##user.account.lock.date##'] = Html::convDateTime(
+                        date(
+                            'Y-m-d H:i:s',
+                            strtotime(
+                                sprintf(
+                                    '+ %s days',
+                                    $lock_delay
+                                ),
+                                $expiration_time
+                            )
+                        )
+                    );
                 }
                 $this->data['##user.password.has_expired##'] = $this->obj->hasPasswordExpired() ? '1' : '0';
                 $this->data['##user.password.update.url##'] = urldecode(
@@ -135,10 +161,27 @@ class NotificationTargetUser extends NotificationTarget
                 );
                 break;
             case 'passwordforget':
-                $this->data['##user.token##']             = $this->obj->getField("password_forget_token");
-                $this->data['##user.passwordforgeturl##'] = urldecode($CFG_GLPI["url_base"]
-                . "/front/lostpassword.php?password_forget_token="
-                . $this->obj->getField("password_forget_token"));
+            case 'passwordinit':
+                $encrypted_token = $this->obj->fields['password_forget_token'];
+                $token = (new GLPIKey())->decrypt($encrypted_token);
+
+                $this->data['##user.token##'] = $token;
+
+                $routes = [
+                    'passwordforget' => [
+                        'key'  => '##user.passwordforgeturl##',
+                        'path' => '/front/lostpassword.php',
+                    ],
+                    'passwordinit' => [
+                        'key'  => '##user.passwordiniturl##',
+                        'path' => '/front/initpassword.php',
+                    ],
+                ];
+
+                $this->data[$routes[$event]['key']] = $this->getUrlBase()
+                    . $routes[$event]['path']
+                    . '?password_forget_token='
+                    . rawurlencode((string) $token);
                 break;
         }
 
@@ -150,11 +193,11 @@ class NotificationTargetUser extends NotificationTarget
         }
     }
 
-
+    #[Override]
     public function getTags()
     {
 
-       // Common value tags
+        // Common value tags
         $tags = [
             'user.name'      => __('Login'),
             'user.realname'  => __('Name'),
@@ -187,7 +230,7 @@ class NotificationTargetUser extends NotificationTarget
      *
      * @return void
      */
-    private function addTagsForEvent($event)
+    private function addTagsForEvent(string $event): void
     {
         $lang_tags = [];
         $values_tags = [];
@@ -215,6 +258,17 @@ class NotificationTargetUser extends NotificationTarget
                 $lang_tags = [
                     'passwordforget.information' => __('You have been made a request to reset your account password.'),
                     'passwordforget.link'        => __('Just follow this link (you have one day):'),
+                ];
+                break;
+            case 'passwordinit':
+                $values_tags = [
+                    'user.token'           => __('Token'),
+                    'user.passwordiniturl' => __('URL'),
+                ];
+
+                $lang_tags = [
+                    'passwordinit.information' => __('Your account has just been created. Please set your password.'),
+                    'passwordinit.link'        => __('Just follow this link:'),
                 ];
                 break;
         }

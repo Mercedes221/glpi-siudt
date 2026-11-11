@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -35,17 +35,19 @@
 
 class SingletonRuleList
 {
-   /// Items list
-    public $list = [];
-   /// Items loaded ?
-    public $load = 0;
+    /** @var Rule[] */
+    public array $list = [];
+    /**
+     * Items loaded?
+     */
+    public int $load = 0;
 
 
     /**
      * get a unique instance of a SingletonRuleList for a type of RuleCollection
      *
      * @param string $type   type of the Rule listed
-     * @param string $entity entity where the rule Rule is processed
+     * @param int    $entity entity ID where the rule Rule is processed
      *
      * @return SingletonRuleList unique instance of an object
      **/

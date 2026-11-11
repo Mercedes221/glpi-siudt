@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,6 +33,8 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\Features\Clonable;
+
 /**
  * Problem template class
  *
@@ -40,14 +42,23 @@
  **/
 class ProblemTemplate extends ITILTemplate
 {
-    use Glpi\Features\Clonable;
+    /** @use Clonable<static> */
+    use Clonable;
 
-    public $second_level_menu         = "problem";
-    public $third_level_menu          = "ProblemTemplate";
+    #[Override]
+    public static function getPredefinedFields(): ITILTemplatePredefinedField
+    {
+        return new ProblemTemplatePredefinedField();
+    }
 
     public static function getTypeName($nb = 0)
     {
         return _n('Problem template', 'Problem templates', $nb);
+    }
+
+    public static function getSectorizedDetails(): array
+    {
+        return ['helpdesk', Problem::class, self::class];
     }
 
     public function getCloneRelations(): array
@@ -56,7 +67,19 @@ class ProblemTemplate extends ITILTemplate
             ProblemTemplateHiddenField::class,
             ProblemTemplateMandatoryField::class,
             ProblemTemplatePredefinedField::class,
+            ProblemTemplateReadonlyField::class,
         ];
+    }
+
+    public function cleanDBonPurge()
+    {
+        $this->deleteChildrenAndRelationsFromDb(
+            [
+                ProblemTemplateHiddenField::class,
+                ProblemTemplateMandatoryField::class,
+                ProblemTemplatePredefinedField::class,
+            ]
+        );
     }
 
     public static function getExtraAllowedFields($withtypeandcategory = false, $withitemtype = false)

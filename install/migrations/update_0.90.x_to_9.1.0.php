@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,17 +33,20 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\DBAL\QueryExpression;
+use Glpi\Search\SearchOption;
+
 /**
  * Update from 0.90.5 to 9.1
  *
- * @return bool for success (will die for most error)
+ * @return bool
  **/
 function update090xto910()
 {
     /**
      * @var array $CFG_GLPI
-     * @var \DBmysql $DB
-     * @var \Migration $migration
+     * @var DBmysql $DB
+     * @var Migration $migration
      */
     global $DB, $migration, $CFG_GLPI;
 
@@ -51,35 +54,11 @@ function update090xto910()
     $updateresult     = true;
     $ADDTODISPLAYPREF = [];
 
-   //TRANS: %s is the number of new version
-    $migration->displayTitle(sprintf(__('Update to %s'), '9.1'));
     $migration->setVersion('9.1');
-
-    $backup_tables = false;
-   // table already exist but deleted during the migration
-   // not table created during the migration
-    $newtables     = [];
-
-    foreach ($newtables as $new_table) {
-       // rename new tables if exists ?
-        if ($DB->tableExists($new_table)) {
-            $migration->dropTable("backup_$new_table");
-            $migration->displayWarning("$new_table table already exists. " .
-                                    "A backup have been done to backup_$new_table.");
-            $backup_tables = true;
-            $migration->renameTable("$new_table", "backup_$new_table");
-        }
-    }
-    if ($backup_tables) {
-        $migration->displayWarning(
-            "You can delete backup tables if you have no need of them.",
-            true
-        );
-    }
 
     $migration->displayMessage(sprintf(__('Add of - %s to database'), 'Object Locks'));
 
-   /************** Lock Objects *************/
+    /************** Lock Objects *************/
     if (!$DB->tableExists('glpi_objectlocks')) {
         $query = "CREATE TABLE `glpi_objectlocks` (
                  `id` INT NOT NULL AUTO_INCREMENT,
@@ -89,10 +68,10 @@ function update090xto910()
                  `date_mod` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Timestamp of the lock',
                  PRIMARY KEY (`id`),
                  UNIQUE INDEX `item` (`itemtype`, `items_id`)
-               ) ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci";
-        $DB->doQueryOrDie($query, "9.1 add table glpi_objectlocks");
+               ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci";
+        $DB->doQuery($query);
 
-       // insert new profile (read only access for locks)
+        // insert new profile (read only access for locks)
         $query = "INSERT INTO `glpi_profiles`
                        (`name`, `interface`, `is_default`, `helpdesk_hardware`, `helpdesk_item_type`,
                         `ticket_status`, `date_mod`, `comment`, `problem_status`,
@@ -105,9 +84,9 @@ function update090xto910()
                         0, 0,
                         '{\"1\":{\"9\":0,\"10\":0,\"7\":0,\"4\":0,\"11\":0,\"12\":0,\"5\":0,\"8\":0,\"6\":0},\"9\":{\"1\":0,\"10\":0,\"7\":0,\"4\":0,\"11\":0,\"12\":0,\"5\":0,\"8\":0,\"6\":0},\"10\":{\"1\":0,\"9\":0,\"7\":0,\"4\":0,\"11\":0,\"12\":0,\"5\":0,\"8\":0,\"6\":0},\"7\":{\"1\":0,\"9\":0,\"10\":0,\"4\":0,\"11\":0,\"12\":0,\"5\":0,\"8\":0,\"6\":0},\"4\":{\"1\":0,\"9\":0,\"10\":0,\"7\":0,\"11\":0,\"12\":0,\"5\":0,\"8\":0,\"6\":0},\"11\":{\"1\":0,\"9\":0,\"10\":0,\"7\":0,\"4\":0,\"12\":0,\"5\":0,\"8\":0,\"6\":0},\"12\":{\"1\":0,\"9\":0,\"10\":0,\"7\":0,\"4\":0,\"11\":0,\"5\":0,\"8\":0,\"6\":0},\"5\":{\"1\":0,\"9\":0,\"10\":0,\"7\":0,\"4\":0,\"11\":0,\"12\":0,\"8\":0,\"6\":0},\"8\":{\"1\":0,\"9\":0,\"10\":0,\"7\":0,\"4\":0,\"11\":0,\"12\":0,\"5\":0,\"6\":0},\"6\":{\"1\":0,\"9\":0,\"10\":0,\"7\":0,\"4\":0,\"11\":0,\"12\":0,\"5\":0,\"8\":0}}')";
 
-        $DB->doQueryOrDie($query, "9.1 update profile with Unlock profile");
+        $DB->doQuery($query);
         $ro_p_id = $DB->insertId();
-        $DB->doQueryOrDie("INSERT INTO `glpi_profilerights`
+        $DB->doQuery("INSERT INTO `glpi_profilerights`
                               (`profiles_id`, `name`, `rights`)
                        VALUES ($ro_p_id, 'backup',                    '1'),
                               ($ro_p_id, 'bookmark_public',           '1'),
@@ -187,36 +166,38 @@ function update090xto910()
             $rightnames[] = $itemtype::$rightname;
         }
 
-        $DB->updateOrDie(
+        $DB->update(
             "glpi_profilerights",
             [
-                'rights' => new \QueryExpression(
+                'rights' => new QueryExpression(
                     DBmysql::quoteName("rights") . " | " . DBmysql::quoteValue(UNLOCK)
-                )
+                ),
             ],
             [
                 'profiles_id'  => 4,
-                'name'         => $rightnames
-            ],
-            "update super-admin profile with UNLOCK right"
+                'name'         => $rightnames,
+            ]
         );
 
-        Config::setConfigurationValues('core', ['lock_use_lock_item'             => 0,
-            'lock_autolock_mode'             => 1,
-            'lock_directunlock_notification' => 0,
-            'lock_item_list'                 => '[]',
-            'lock_lockprofile_id'            => $ro_p_id
-        ]);
+        $migration->addConfig(
+            [
+                'lock_use_lock_item'             => 0,
+                'lock_autolock_mode'             => 1,
+                'lock_directunlock_notification' => 0,
+                'lock_item_list'                 => '[]',
+                'lock_lockprofile_id'            => $ro_p_id,
+            ]
+        );
     }
 
-   // cron task
+    // cron task
     if (
         !countElementsInTable(
             'glpi_crontasks',
             ['itemtype' => 'ObjectLock', 'name' => 'unlockobject']
         )
     ) {
-        $DB->insertOrDie(
+        $DB->insert(
             "glpi_crontasks",
             [
                 'itemtype'        => "ObjectLock",
@@ -231,31 +212,29 @@ function update090xto910()
                 'logs_lifetime'   => 30,
                 'lastrun'         => null,
                 'lastcode'        => null,
-                'comment'         => null
-            ],
-            "9.1 Add UnlockObject cron task"
+                'comment'         => null,
+            ]
         );
     }
-   // notification template
+    // notification template
     $notificationtemplatesIterator = $DB->request([
         'FROM'   => "glpi_notificationtemplates",
-        'WHERE'  => ['itemtype' => "ObjectLock"]
+        'WHERE'  => ['itemtype' => "ObjectLock"],
     ]);
 
     if (count($notificationtemplatesIterator) == 0) {
-        $DB->insertOrDie(
+        $DB->insert(
             "glpi_notificationtemplates",
             [
                 'name'      => "Unlock Item request",
                 'itemtype'  => "ObjectLock",
-                'date_mod'  => new \QueryExpression("NOW()")
-            ],
-            "9.1 Add unlock request notification template"
+                'date_mod'  => new QueryExpression("NOW()"),
+            ]
         );
         $notid = $DB->insertId();
 
-        $contentText =
-         '##objectlock.type## ###objectlock.id## - ##objectlock.name##
+        $contentText
+         = '##objectlock.type## ###objectlock.id## - ##objectlock.name##
 
          ##lang.objectlock.url##
          ##objectlock.url##
@@ -269,8 +248,8 @@ function update090xto910()
          Regards,
          ##objectlock.requester.firstname##';
 
-        $contentHtml =
-         '&lt;table&gt;
+        $contentHtml
+         = '&lt;table&gt;
          &lt;tbody&gt;
          &lt;tr&gt;&lt;th colspan=\"2\"&gt;&lt;a href=\"##objectlock.url##\"&gt;##objectlock.type## ###objectlock.id## - ##objectlock.name##&lt;/a&gt;&lt;/th&gt;&lt;/tr&gt;
          &lt;tr&gt;
@@ -285,19 +264,18 @@ function update090xto910()
          &lt;/table&gt;
          &lt;p&gt;&lt;span style=\"font-size: small;\"&gt;Hello ##objectlock.lockedby.firstname##,&lt;br /&gt;Could go to this item and unlock it for me?&lt;br /&gt;Thank you,&lt;br /&gt;Regards,&lt;br /&gt;##objectlock.requester.firstname## ##objectlock.requester.lastname##&lt;/span&gt;&lt;/p&gt;';
 
-        $DB->insertOrDie(
+        $DB->insert(
             "glpi_notificationtemplatetranslations",
             [
                 'notificationtemplates_id' => $notid,
                 'language'                 => "",
                 'subject'                  => "##objectlock.action##",
                 'content_text'             => $contentText,
-                'content_html'             => $contentHtml
-            ],
-            "9.1 add Unlock Request notification translation"
+                'content_html'             => $contentHtml,
+            ]
         );
 
-        $DB->insertOrDie(
+        $DB->insert(
             "glpi_notifications",
             [
                 'name'                     => "Request Unlock Items",
@@ -309,32 +287,30 @@ function update090xto910()
                 'comment'                  => "",
                 'is_recursive'             => 1,
                 'is_active'                => 1,
-                'date_mod'                 => new \QueryExpression("NOW()")
-            ],
-            "9.1 add Unlock Request notification"
+                'date_mod'                 => new QueryExpression("NOW()"),
+            ]
         );
         $notifid = $DB->insertId();
 
-        $DB->insertOrDie(
+        $DB->insert(
             "glpi_notificationtargets",
             [
                 'id'                 => null,
                 'notifications_id'   => $notifid,
                 'type'               => Notification::USER_TYPE,
-                'items_id'           => Notification::USER
-            ],
-            "9.1 add Unlock Request notification target"
+                'items_id'           => Notification::USER,
+            ]
         );
     }
 
     $migration->addField("glpi_users", "lock_autolock_mode", "tinyint NULL DEFAULT NULL");
     $migration->addField("glpi_users", "lock_directunlock_notification", "tinyint NULL DEFAULT NULL");
 
-   /************** Default Requester *************/
-    Config::setConfigurationValues('core', ['set_default_requester' => 1]);
+    /************** Default Requester *************/
+    $migration->addConfig(['set_default_requester' => 1]);
     $migration->addField("glpi_users", "set_default_requester", "tinyint NULL DEFAULT NULL");
 
-   // ************ NetworkPort ethernets **************
+    // ************ NetworkPort ethernets **************
     if (!$DB->tableExists("glpi_networkportfiberchannels")) {
         $query = "CREATE TABLE `glpi_networkportfiberchannels` (
                   `id` int NOT NULL AUTO_INCREMENT,
@@ -349,14 +325,14 @@ function update090xto910()
                   KEY `netpoint` (`netpoints_id`),
                   KEY `wwn` (`wwn`),
                   KEY `speed` (`speed`)
-                ) ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;";
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;";
         $DB->doQuery($query);
     }
 
-   /************** Kernel version for os *************/
+    /************** Kernel version for os *************/
     $migration->addField("glpi_computers", "os_kernel_version", "string");
 
-   /************** os architecture *************/
+    /************** os architecture *************/
     $migration->addField("glpi_computers", "operatingsystemarchitectures_id", "integer");
     $migration->addKey("glpi_computers", "operatingsystemarchitectures_id");
 
@@ -371,11 +347,11 @@ function update090xto910()
                   KEY `name` (`name`),
                   KEY `date_mod` (`date_mod`),
                   KEY `date_creation` (`date_creation`)
-                ) ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;";
-        $DB->doQueryOrDie($query, "9.1 add table glpi_operatingsystemarchitectures");
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;";
+        $DB->doQuery($query);
     }
 
-   /************** Task's templates *************/
+    /************** Task's templates *************/
     if (!$DB->tableExists('glpi_tasktemplates')) {
         $query = "CREATE TABLE `glpi_tasktemplates` (
                   `id` int NOT NULL AUTO_INCREMENT,
@@ -391,15 +367,15 @@ function update090xto910()
                   KEY `is_recursive` (`is_recursive`),
                   KEY `taskcategories_id` (`taskcategories_id`),
                   KEY `entities_id` (`entities_id`)
-                ) ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;";
-        $DB->doQueryOrDie($query, "9.1 add table glpi_tasktemplates");
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;";
+        $DB->doQuery($query);
     }
 
-   /************** Installation date for softwares *************/
+    /************** Installation date for softwares *************/
     $migration->addField("glpi_computers_softwareversions", "date_install", "DATE");
     $migration->addKey("glpi_computers_softwareversions", "date_install");
 
-   /************** Location for budgets *************/
+    /************** Location for budgets *************/
     $migration->addField("glpi_budgets", "locations_id", "integer");
     $migration->addKey("glpi_budgets", "locations_id");
 
@@ -414,36 +390,35 @@ function update090xto910()
                   KEY `name` (`name`),
                   KEY `date_mod` (`date_mod`),
                   KEY `date_creation` (`date_creation`)
-                ) ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;";
-        $DB->doQueryOrDie($query, "add table glpi_budgettypes");
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;";
+        $DB->doQuery($query);
     }
 
     $new = $migration->addField("glpi_budgets", "budgettypes_id", "integer");
     $migration->addKey("glpi_budgets", "budgettypes_id");
 
     if ($new) {
-        $DB->updateOrDie(
+        $DB->update(
             "glpi_displaypreferences",
             [
-                'num' => 6
+                'num' => 6,
             ],
             [
                 'itemtype'  => "Budget",
                 'num'       => 4,
-            ],
-            "change budget display preference"
+            ]
         );
     }
     $ADDTODISPLAYPREF['Budget'] = [4];
 
-   /************** New Planning with fullcalendar.io *************/
+    /************** New Planning with fullcalendar.io *************/
     $migration->addField("glpi_users", "plannings", "text");
 
-   /************** API Rest *************/
-    Config::setConfigurationValues('core', ['enable_api'                      => 0]);
-    Config::setConfigurationValues('core', ['enable_api_login_credentials'    => 0]);
-    Config::setConfigurationValues('core', ['enable_api_login_external_token' => 1]);
-    Config::setConfigurationValues('core', ['url_base_api' => trim($current_config['url_base'], "/") . "/apirest.php/"]);
+    /************** API Rest *************/
+    $migration->addConfig(['enable_api'                      => 0]);
+    $migration->addConfig(['enable_api_login_credentials'    => 0]);
+    $migration->addConfig(['enable_api_login_external_token' => 1]);
+    $migration->addConfig(['url_base_api' => trim($current_config['url_base'], "/") . "/apirest.php/"]);
     if (!$DB->tableExists('glpi_apiclients')) {
         $query = "CREATE TABLE `glpi_apiclients` (
                   `id` int NOT NULL AUTO_INCREMENT,
@@ -462,65 +437,170 @@ function update090xto910()
                   PRIMARY KEY (`id`),
                   KEY `date_mod` (`date_mod`),
                   KEY `is_active` (`is_active`)
-                ) ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;";
-        $DB->doQueryOrDie($query, "9.1 add table glpi_apiclients");
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;";
+        $DB->doQuery($query);
 
-        $DB->insertOrDie(
+        $DB->insert(
             "glpi_apiclients",
             [
                 'id'                 => 1,
                 'entities_id'        => 0,
                 'is_recursive'       => 1,
                 'name'               => "full access from localhost",
-                'date_mod'           => new \QueryExpression("NOW()"),
+                'date_mod'           => null,
                 'is_active'          => 1,
-                'ipv4_range_start'   => new \QueryExpression("INET_ATON('127.0.0.1')"),
-                'ipv4_range_end'     => new \QueryExpression("INET_ATON('127.0.0.1')"),
+                'ipv4_range_start'   => new QueryExpression("INET_ATON('127.0.0.1')"),
+                'ipv4_range_end'     => new QueryExpression("INET_ATON('127.0.0.1')"),
                 'ipv6'               => "::1",
-                'app_token'          => "",
+                'app_token'          => null,
                 'app_token_date'     => null,
                 'dolog_method'       => 0,
-                'comment'            => null
-            ],
-            "9.1 insert first line into table glpi_apiclients"
+                'comment'            => null,
+            ]
         );
     }
 
-   /************** Date mod/creation for itemtypes *************/
-    $migration->displayMessage(sprintf(__('date_mod and date_creation')));
-    $types = ['AuthLDAP', 'Blacklist', 'BlacklistedMailContent', 'Budget',  'Calendar',
-        'CartridgeItemType', 'Change', 'ChangeTask', 'ComputerDisk',
-        'ComputerVirtualMachine', 'ConsumableItemType', 'Contact', 'ContactType',
-        'Contract', 'ContractType', 'Crontask', 'DeviceCaseType', 'DeviceMemoryType',
-        'Document', 'DocumentCategory', 'DocumentType', 'Domain',  'Entity', 'FQDN',
-        'Fieldblacklist', 'FieldUnicity', 'Filesystem', 'Group', 'Holiday', 'Infocom',
-        'InterfaceType', 'IPNetwork', 'ITILCategory', 'KnowbaseItemCategory', 'Location',
-        'Link', 'MailCollector', 'Manufacturer', 'Netpoint', 'Network',
-        'NetworkEquipmentFirmware', 'NetworkName', 'NetworkPort', 'Notification',
-        'NotificationTemplate', 'PhonePowerSupply', 'Problem', 'ProblemTask', 'Profile',
-        'Project', 'ProjectState', 'ProjectTaskType', 'ProjectType',  'Reminder',
-        'RequestType', 'RSSFeed', 'Rule', 'RuleRightParameter', 'SLA',
-        'SoftwareLicenseType', 'SoftwareVersion', 'SolutionTemplate', 'SolutionType',
-        'SsoVariable', 'State', 'Supplier', 'SupplierType',
-        'TaskCategory', 'TaskTemplate',  'Ticket', 'TicketFollowup', 'TicketTask',
-        'User', 'UserCategory', 'UserTitle', 'VirtualMachineState', 'VirtualMachineSystem',
-        'VirtualMachineType', 'Vlan', 'WifiNetwork'
+    /************** Date mod/creation for itemtypes *************/
+    $migration->displayMessage(__('date_mod and date_creation'));
+    $type_tables = [
+        'glpi_authldaps',
+        'glpi_blacklists',
+        'glpi_blacklistedmailcontents',
+        'glpi_budgets',
+        'glpi_calendars',
+        'glpi_cartridgeitemtypes',
+        'glpi_changes',
+        'glpi_changetasks',
+        'glpi_computerdisks',
+        'glpi_computervirtualmachines',
+        'glpi_consumableitemtypes',
+        'glpi_contacts',
+        'glpi_contacttypes',
+        'glpi_contracts',
+        'glpi_contracttypes',
+        'glpi_crontasks',
+        'glpi_devicecasetypes',
+        'glpi_devicememorytypes',
+        'glpi_documents',
+        'glpi_documentcategories',
+        'glpi_documenttypes',
+        'glpi_domains',
+        'glpi_entities',
+        'glpi_fqdns',
+        'glpi_fieldblacklists',
+        'glpi_fieldunicities',
+        'glpi_filesystems',
+        'glpi_groups',
+        'glpi_holidays',
+        'glpi_infocoms',
+        'glpi_interfacetypes',
+        'glpi_ipnetworks',
+        'glpi_itilcategories',
+        'glpi_knowbaseitemcategories',
+        'glpi_locations',
+        'glpi_links',
+        'glpi_mailcollectors',
+        'glpi_manufacturers',
+        'glpi_netpoints',
+        'glpi_networks',
+        'glpi_networkequipmentfirmwares',
+        'glpi_networknames',
+        'glpi_networkports',
+        'glpi_notifications',
+        'glpi_notificationtemplates',
+        'glpi_phonepowersupplies',
+        'glpi_problems',
+        'glpi_problemtasks',
+        'glpi_profiles',
+        'glpi_projects',
+        'glpi_projectstates',
+        'glpi_projecttasktypes',
+        'glpi_projecttypes',
+        'glpi_reminders',
+        'glpi_requesttypes',
+        'glpi_rssfeeds',
+        'glpi_rules',
+        'glpi_rulerightparameters',
+        'glpi_slas',
+        'glpi_softwarelicensetypes',
+        'glpi_softwareversions',
+        'glpi_solutiontemplates',
+        'glpi_solutiontypes',
+        'glpi_ssovariables',
+        'glpi_states',
+        'glpi_suppliers',
+        'glpi_suppliertypes',
+        'glpi_taskcategories',
+        'glpi_tasktemplates',
+        'glpi_tickets',
+        'glpi_ticketfollowups',
+        'glpi_tickettasks',
+        'glpi_users',
+        'glpi_usercategories',
+        'glpi_usertitles',
+        'glpi_virtualmachinestates',
+        'glpi_virtualmachinesystems',
+        'glpi_virtualmachinetypes',
+        'glpi_vlans',
+        'glpi_wifinetworks',
+        'glpi_cartridges',
+        'glpi_cartridgeitems',
+        'glpi_computers',
+        'glpi_consumables',
+        'glpi_consumableitems',
+        'glpi_monitors',
+        'glpi_networkequipments',
+        'glpi_peripherals',
+        'glpi_phones',
+        'glpi_printers',
+        'glpi_softwares',
+        'glpi_softwarelicenses',
+        'glpi_computermodels',
+        'glpi_computertypes',
+        'glpi_monitormodels',
+        'glpi_monitortypes',
+        'glpi_networkequipmentmodels',
+        'glpi_networkequipmenttypes',
+        'glpi_operatingsystems',
+        'glpi_operatingsystemservicepacks',
+        'glpi_operatingsystemversions',
+        'glpi_peripheralmodels',
+        'glpi_peripheraltypes',
+        'glpi_phonemodels',
+        'glpi_phonetypes',
+        'glpi_printers',
+        'glpi_printermodels',
+        'glpi_printertypes',
+        'glpi_softwares',
+        'glpi_devicemotherboards',
+        'glpi_deviceprocessors',
+        'glpi_devicememories',
+        'glpi_deviceharddrives',
+        'glpi_devicenetworkcards',
+        'glpi_devicedrives',
+        'glpi_devicegraphiccards',
+        'glpi_devicesoundcards',
+        'glpi_devicecontrols',
+        'glpi_devicepcis',
+        'glpi_devicecases',
+        'glpi_devicepowersupplies',
+        'glpi_networkportethernets',
+        'glpi_networkportwifis',
+        'glpi_networkportaggregates',
+        'glpi_networkportaliases',
+        'glpi_networkportdialups',
+        'glpi_networkportlocals',
+        'glpi_networkportfiberchannels',
     ];
-    $types = array_merge($types, $CFG_GLPI["infocom_types"]);
-    $types = array_merge($types, $CFG_GLPI["dictionnary_types"]);
-    $types = array_merge($types, $CFG_GLPI["device_types"]);
-    $types = array_merge($types, $CFG_GLPI['networkport_instantiations']);
 
-    foreach ($types as $type) {
-        $table = getTableForItemType($type);
-
+    foreach ($type_tables as $table) {
         if (
             $DB->tableExists($table)
             && !$DB->fieldExists($table, 'date_mod')
         ) {
             $migration->displayMessage(sprintf(__('Add date_mod to %s'), $table));
 
-           //Add date_mod field if it doesn't exists
+            //Add date_mod field if it doesn't exists
             $migration->addField($table, 'date_mod', 'datetime');
             $migration->addKey($table, 'date_mod');
             $migration->migrationOneTable($table);
@@ -532,22 +612,22 @@ function update090xto910()
         ) {
             $migration->displayMessage(sprintf(__('Add date_creation to %s'), $table));
 
-           //Add date_creation field
+            //Add date_creation field
             $migration->addField($table, 'date_creation', 'datetime');
             $migration->addKey($table, 'date_creation');
             $migration->migrationOneTable($table);
         }
     }
 
-   /************** Enhance Associated items for ticket ***************/
-   // TEMPLATE UPDATE
+    /************** Enhance Associated items for ticket ***************/
+    // TEMPLATE UPDATE
     $migration->dropKey('glpi_tickettemplatepredefinedfields', 'unicity');
 
-   // Get associated item searchoption num
+    // Get associated item searchoption num
     if (!isset($CFG_GLPI["use_rich_text"])) {
         $CFG_GLPI["use_rich_text"] = false;
     }
-    $searchOption = Search::getOptions('Ticket');
+    $searchOption = SearchOption::getOptionsForItemtype('Ticket');
     $item_num     = 0;
     $itemtype_num = 0;
     foreach ($searchOption as $num => $option) {
@@ -557,7 +637,7 @@ function update090xto910()
         ) {
             if ($option['field'] == 'items_id') {
                 $item_num = $num;
-            } else if ($option['field'] == 'itemtype') {
+            } elseif ($option['field'] == 'itemtype') {
                 $itemtype_num = $num;
             }
         }
@@ -565,7 +645,7 @@ function update090xto910()
 
     foreach (
         ['glpi_tickettemplatepredefinedfields', 'glpi_tickettemplatehiddenfields',
-            'glpi_tickettemplatemandatoryfields'
+            'glpi_tickettemplatemandatoryfields',
         ] as $table
     ) {
         $columns = [];
@@ -585,9 +665,9 @@ function update090xto910()
             'WHERE'  => [
                 'OR' => [
                     ['num' => $item_num],
-                    ['num' => $itemtype_num]
-                ]
-            ]
+                    ['num' => $itemtype_num],
+                ],
+            ],
         ]);
 
         $items_to_update = [];
@@ -595,10 +675,10 @@ function update090xto910()
             foreach ($iterator as $data) {
                 if ($data['num'] == $itemtype_num) {
                     $items_to_update[$data['tickettemplates_id']]['itemtype']
-                     = isset($data['value']) ? $data['value'] : 0;
-                } else if ($data['num'] == $item_num) {
+                     = $data['value'] ?? 0;
+                } elseif ($data['num'] == $item_num) {
                     $items_to_update[$data['tickettemplates_id']]['items_id']
-                    = isset($data['value']) ? $data['value'] : 0;
+                    = $data['value'] ?? 0;
                 }
             }
         }
@@ -608,25 +688,23 @@ function update090xto910()
                 foreach ($items_to_update as $templates_id => $type) {
                     if (isset($type['itemtype'])) {
                         if (isset($type['items_id'])) {
-                            $DB->updateOrDie(
+                            $DB->update(
                                 $table,
                                 [
-                                    'value' => $type['itemtype'] . "_" . $type['items_id']
+                                    'value' => $type['itemtype'] . "_" . $type['items_id'],
                                 ],
                                 [
                                     'num'                => $item_num,
                                     'tickettemplates_id' => $templates_id,
-                                ],
-                                "Associated items migration : update predefined items"
+                                ]
                             );
 
-                            $DB->deleteOrDie(
+                            $DB->delete(
                                 $table,
                                 [
                                     'num'                => $itemtype_num,
                                     'tickettemplates_id' => $templates_id,
-                                ],
-                                "Associated items migration : delete $table itemtypes"
+                                ]
                             );
                         }
                     }
@@ -637,25 +715,23 @@ function update090xto910()
                 foreach ($items_to_update as $templates_id => $type) {
                     if (isset($type['itemtype'])) {
                         if (isset($type['items_id'])) {
-                            $DB->deleteOrDie(
+                            $DB->delete(
                                 $table,
                                 [
                                     'num'                => $item_num,
                                     'tickettemplates_id' => $templates_id,
-                                ],
-                                "Associated items migration : delete $table itemtypes"
+                                ]
                             );
                         }
-                        $DB->updateOrDie(
+                        $DB->update(
                             $table,
                             [
-                                'num' => $item_num
+                                'num' => $item_num,
                             ],
                             [
                                 'num'                => $itemtype_num,
                                 'tickettemplates_id' => $templates_id,
-                            ],
-                            "Associated items migration : update $table itemtypes"
+                            ]
                         );
                     }
                 }
@@ -663,7 +739,7 @@ function update090xto910()
         }
     }
 
-   /************** Add more fields to software licenses */
+    /************** Add more fields to software licenses */
     $migration->addField("glpi_softwarelicenses", "is_deleted", "bool");
     $migration->addField("glpi_softwarelicenses", "locations_id", "integer");
     $migration->addField("glpi_softwarelicenses", "users_id_tech", "integer");
@@ -698,13 +774,13 @@ function update090xto910()
     $migration->addField("glpi_states", "is_visible_softwarelicense", "bool");
     $migration->addKey("glpi_states", "is_visible_softwarelicense");
 
-   /************* Add is_recursive on assets ***/
+    /************* Add is_recursive on assets ***/
     foreach (['glpi_computers', 'glpi_monitors', 'glpi_phones', 'glpi_peripherals'] as $table) {
         $migration->addField($table, "is_recursive", "bool");
         $migration->addKey($table, "is_recursive");
     }
 
-   /************* Add antivirus table */
+    /************* Add antivirus table */
     if (!$DB->tableExists('glpi_computerantiviruses')) {
         $query = "CREATE TABLE `glpi_computerantiviruses` (
                   `id` int NOT NULL AUTO_INCREMENT,
@@ -732,48 +808,48 @@ function update090xto910()
                   KEY `date_expiration` (`date_expiration`),
                   KEY `date_mod` (`date_mod`),
                   KEY `date_creation` (`date_creation`)
-                ) ENGINE=MyISAM  DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci AUTO_INCREMENT=1;";
-        $DB->doQueryOrDie($query, "Add antivirus table");
+                ) ENGINE=InnoDB  DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci AUTO_INCREMENT=1;";
+        $DB->doQuery($query);
     }
 
     if (countElementsInTable("glpi_profilerights", ['name' => 'license']) == 0) {
-       //new right for software license
-       //copy the software right value to the new license right
-        foreach ($DB->request("glpi_profilerights", "`name` = 'software'") as $profrights) {
-            $DB->insertOrDie(
+        //new right for software license
+        //copy the software right value to the new license right
+        $prights = $DB->request(['FROM' => 'glpi_profilerights', 'WHERE' => ['name' => 'software']]);
+        foreach ($prights as $profrights) {
+            $DB->insert(
                 "glpi_profilerights",
                 [
                     'id'           => null,
                     'profiles_id'  => $profrights['profiles_id'],
                     'name'         => "license",
                     'rights'       => $profrights['rights'],
-                ],
-                "9.1 add right for softwarelicense"
+                ]
             );
         }
     }
 
-   //new right for survey
-    foreach ($DB->request("glpi_profilerights", "`name` = 'ticket'") as $profrights) {
-        $DB->updateOrDie(
+    //new right for survey
+    $prights = $DB->request(['FROM' => 'glpi_profilerights', 'WHERE' => ['name' => 'ticket']]);
+    foreach ($prights as $profrights) {
+        $DB->update(
             "glpi_profilerights",
             [
-                'rights' => new \QueryExpression(
+                'rights' => new QueryExpression(
                     DBmysql::quoteName("rights") . " | " . DBmysql::quoteValue(Ticket::SURVEY)
-                )
+                ),
             ],
             [
                 'profiles_id'  => $profrights['profiles_id'],
-                'name'         => "ticket"
-            ],
-            "9.1 update ticket with survey right"
+                'name'         => "ticket",
+            ]
         );
     }
 
-   //new field
+    //new field
     $migration->addField('glpi_authldaps', 'location_field', 'string', ['after' => 'email4_field']);
 
-   //TRANS: %s is the table or item to migrate
+    //TRANS: %s is the table or item to migrate
     $migration->displayMessage(sprintf(__('Data migration - %s'), 'glpi_displaypreferences'));
 
     $ADDTODISPLAYPREF['SoftwareLicense'] = [1, 3, 10, 162, 5];
@@ -782,7 +858,7 @@ function update090xto910()
             'SELECT'    => "users_id",
             'DISTINCT'  => true,
             'FROM'      => "glpi_displaypreferences",
-            'WHERE'     => ['itemtype' => $type]
+            'WHERE'     => ['itemtype' => $type],
         ]);
 
         if (count($displaypreferencesIterator)) {
@@ -793,34 +869,34 @@ function update090xto910()
                     'FROM'      => "glpi_displaypreferences",
                     'WHERE'     => [
                         'users_id' => $data['users_id'],
-                        'itemtype' => $type
-                    ]
+                        'itemtype' => $type,
+                    ],
                 ])->current();
                 $rank = $rank ? $rank['max_rank']++ : 1;
 
                 foreach ($tab as $newval) {
-                      $iterator = $DB->request([
-                          'FROM' => "glpi_displaypreferences",
-                          'WHERE' => [
-                              'users_id'  => $data['users_id'],
-                              'num'       => $newval,
-                              'itemtype'  => $type
-                          ],
-                      ]);
+                    $iterator = $DB->request([
+                        'FROM' => "glpi_displaypreferences",
+                        'WHERE' => [
+                            'users_id'  => $data['users_id'],
+                            'num'       => $newval,
+                            'itemtype'  => $type,
+                        ],
+                    ]);
                     if (count($iterator) == 0) {
-                         $DB->insertOrDie("glpi_displaypreferences", [
-                             'itemtype'  => $type,
-                             'num'       => $newval,
-                             'rank'      => $rank++,
-                             'users_id'  => $data['users_id'],
-                         ]);
+                        $DB->insert("glpi_displaypreferences", [
+                            'itemtype'  => $type,
+                            'num'       => $newval,
+                            'rank'      => $rank++,
+                            'users_id'  => $data['users_id'],
+                        ]);
                     }
                 }
             }
         } else { // Add for default user
             $rank = 1;
             foreach ($tab as $newval) {
-                $DB->insertOrDie("glpi_displaypreferences", [
+                $DB->insert("glpi_displaypreferences", [
                     'itemtype'  => $type,
                     'num'       => $newval,
                     'rank'      => $rank++,
@@ -852,48 +928,47 @@ function update090xto910()
                   KEY `date_mod` (`date_mod`),
                   KEY `date_creation` (`date_creation`),
                   KEY `slas_id` (`slas_id`)
-                ) ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;";
-        $DB->doQueryOrDie($query, "9.1 add table glpi_slts");
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;";
+        $DB->doQuery($query);
 
-       // Sla migration
-        $slasIterator = $DB->request("glpi_slas");
+        // Sla migration
+        $slasIterator = $DB->request(['FROM' => "glpi_slas"]);
         if (count($slasIterator)) {
             foreach ($slasIterator as $data) {
-                $DB->insertOrDie(
+                $DB->insert(
                     "glpi_slts",
                     [
                         'id'                 => $data['id'],
-                        'name'               => Toolbox::addslashes_deep($data['name']),
+                        'name'               => $data['name'],
                         'entities_id'        => $data['entities_id'],
                         'is_recursive'       => $data['is_recursive'],
                         'type'               => SLM::TTR,
-                        'comment'            => addslashes($data['comment']),
+                        'comment'            => $data['comment'],
                         'number_time'        => $data['resolution_time'],
                         'date_mod'           => $data['date_mod'],
                         'definition_time'    => $data['definition_time'],
                         'end_of_working_day' => $data['end_of_working_day'],
                         'date_creation'      => date('Y-m-d H:i:s'),
-                        'slas_id'            => $data['id']
-                    ],
-                    "SLA migration to SLT"
+                        'slas_id'            => $data['id'],
+                    ]
                 );
             }
         }
 
-       // Delete deprecated fields of SLA
-       // save table before delete fields
+        // Delete deprecated fields of SLA
+        // save table before delete fields
         $migration->copyTable('glpi_slas', 'backup_glpi_slas');
 
         foreach (
             ['number_time', 'definition_time',
-                'end_of_working_day'
+                'end_of_working_day',
             ] as $field
         ) {
             $migration->dropField('glpi_slas', $field);
         }
     }
 
-   // Slalevels changes
+    // Slalevels changes
     if ($DB->fieldExists('glpi_slalevels', 'slas_id')) {
         $migration->changeField('glpi_slalevels', 'slas_id', 'slts_id', 'integer');
         $migration->migrationOneTable('glpi_slalevels');
@@ -901,7 +976,7 @@ function update090xto910()
         $migration->addKey('glpi_slalevels', 'slts_id');
     }
 
-   // Ticket changes
+    // Ticket changes
     if ($DB->fieldExists('glpi_tickets', 'slas_id')) {
         $migration->changeField("glpi_tickets", "slas_id", "slts_ttr_id", "integer");
         $migration->migrationOneTable('glpi_tickets');
@@ -926,7 +1001,7 @@ function update090xto910()
         $migration->addKey('glpi_tickets', 'ttr_slalevels_id');
     }
 
-   // Unique key for slalevel_ticket
+    // Unique key for slalevel_ticket
     $migration->addKey(
         'glpi_slalevels_tickets',
         ['tickets_id', 'slalevels_id'],
@@ -934,23 +1009,21 @@ function update090xto910()
         'UNIQUE'
     );
 
-   // Sla rules criterias migration
-    $DB->updateOrDie(
+    // Sla rules criterias migration
+    $DB->update(
         "glpi_rulecriterias",
         ['criteria' => "slts_ttr_id" ],
-        ['criteria' => "slas_id"],
-        "SLA rulecriterias migration"
+        ['criteria' => "slas_id"]
     );
 
-   // Sla rules actions migration
-    $DB->updateOrDie(
+    // Sla rules actions migration
+    $DB->update(
         "glpi_ruleactions",
         ['field' => "slts_ttr_id" ],
-        ['field' => "slas_id"],
-        "SLA ruleactions migration"
+        ['field' => "slas_id"]
     );
 
-   // to delete in next version - fix change in update
+    // to delete in next version - fix change in update
     if (!$DB->fieldExists('glpi_slas', 'calendars_id')) {
         $migration->addField("glpi_slas", "calendars_id", "integer", ['after' => 'is_recursive']);
         $migration->addKey('glpi_slas', 'calendars_id');
@@ -962,14 +1035,14 @@ function update090xto910()
         $migration->changeField('glpi_slts', 'resolution_time', 'number_time', 'integer');
     }
 
-   /************** High contrast CSS **************/
-    Config::setConfigurationValues('core', ['highcontrast_css' => 0]);
+    /************** High contrast CSS **************/
+    $migration->addConfig(['highcontrast_css' => 0]);
     $migration->addField("glpi_users", "highcontrast_css", "tinyint DEFAULT 0");
 
-   /************** SMTP option for self-signed certificates **************/
-    Config::setConfigurationValues('core', ['smtp_check_certificate' => 1]);
+    /************** SMTP option for self-signed certificates **************/
+    $migration->addConfig(['smtp_check_certificate' => 1]);
 
-   // for group task
+    // for group task
     $migration->addField("glpi_tickettasks", "groups_id_tech", "integer");
     $migration->addKey("glpi_tickettasks", "groups_id_tech");
     $migration->addField("glpi_changetasks", "groups_id_tech", "integer");
@@ -977,10 +1050,10 @@ function update090xto910()
     $migration->addField("glpi_problemtasks", "groups_id_tech", "integer");
     $migration->addKey("glpi_problemtasks", "groups_id_tech");
     $migration->addField("glpi_groups", "is_task", "bool", ['value' => 1,
-        'after' => 'is_assign'
+        'after' => 'is_assign',
     ]);
 
-   // for date_mod adding to tasks and to followups
+    // for date_mod adding to tasks and to followups
     $migration->addField("glpi_tickettasks", "date_mod", "datetime");
     $migration->addKey("glpi_tickettasks", "date_mod");
     $migration->addField("glpi_problemtasks", "date_mod", "datetime");
@@ -990,11 +1063,11 @@ function update090xto910()
     $migration->addField("glpi_ticketfollowups", "date_mod", "datetime");
     $migration->addKey("glpi_ticketfollowups", "date_mod");
 
-   // for is_active adding to glpi_taskcategories
+    // for is_active adding to glpi_taskcategories
     $migration->addField("glpi_taskcategories", "is_active", "bool", ['value' => 1]);
     $migration->addKey("glpi_taskcategories", "is_active");
 
-   // for is_active, is_followup_default, is_ticketheader and is_ticketfollowup in glpi_requesttypes
+    // for is_active, is_followup_default, is_ticketheader and is_ticketfollowup in glpi_requesttypes
     $migration->addField("glpi_requesttypes", "is_active", "bool", ['value' => 1]);
     $migration->addKey("glpi_requesttypes", "is_active");
     $migration->addField("glpi_requesttypes", "is_ticketheader", "bool", ['value' => 1]);
@@ -1006,20 +1079,19 @@ function update090xto910()
     $migration->addField("glpi_requesttypes", "is_mailfollowup_default", "bool", ['value' => 0]);
     $migration->addKey("glpi_requesttypes", "is_mailfollowup_default");
 
-   /************** Fix autoclose_delay for root_entity in glpi_entities (from -1 to 0) **************/
-    $DB->updateOrDie(
+    /************** Fix autoclose_delay for root_entity in glpi_entities (from -1 to 0) **************/
+    $DB->update(
         "glpi_entities",
         [
-            'autoclose_delay' => 0
+            'autoclose_delay' => 0,
         ],
         [
             'autoclose_delay' => -1,
-            'id'              => 0
-        ],
-        "glpi_entities root_entity change autoclose_delay value from -1 to 0"
+            'id'              => 0,
+        ]
     );
 
-   // ************ Keep it at the end **************
+    // ************ Keep it at the end **************
     $migration->executeMigration();
 
     return $updateresult;

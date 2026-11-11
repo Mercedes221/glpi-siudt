@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,14 +33,18 @@
  * ---------------------------------------------------------------------
  */
 
-/// ContractCost class
-/// since version 0.84
+use Glpi\Application\View\TemplateRenderer;
+
+/**
+ * ContractCost Class
+ * @since 0.84
+ */
 class ContractCost extends CommonDBChild
 {
-   // From CommonDBChild
-    public static $itemtype = 'Contract';
-    public static $items_id = 'contracts_id';
-    public $dohistory       = true;
+    // From CommonDBChild
+    public static string $itemtype = Contract::class;
+    public static string $items_id = 'contracts_id';
+    public bool $dohistory       = true;
 
 
     public static function getTypeName($nb = 0)
@@ -48,6 +52,10 @@ class ContractCost extends CommonDBChild
         return _n('Cost', 'Costs', $nb);
     }
 
+    public static function getIcon()
+    {
+        return Infocom::getIcon();
+    }
 
     public function prepareInputForAdd($input)
     {
@@ -55,15 +63,18 @@ class ContractCost extends CommonDBChild
         if (
             !empty($input['begin_date'])
             && (empty($input['end_date'])
-              || ($input['end_date'] == 'NULL')
+              || ($input['end_date'] === 'NULL')
               || ($input['end_date'] < $input['begin_date']))
         ) {
             $input['end_date'] = $input['begin_date'];
         }
 
+        if (Session::getLoginUserID()) {
+            $input['users_id'] = Session::getLoginUserID();
+        }
+
         return parent::prepareInputForAdd($input);
     }
-
 
     public function prepareInputForUpdate($input)
     {
@@ -71,20 +82,23 @@ class ContractCost extends CommonDBChild
         if (
             !empty($input['begin_date'])
             && (empty($input['end_date'])
-              || ($input['end_date'] == 'NULL')
+              || ($input['end_date'] === 'NULL')
               || ($input['end_date'] < $input['begin_date']))
         ) {
             $input['end_date'] = $input['begin_date'];
         }
 
+        if (Session::getLoginUserID()) {
+            $input['users_id_lastupdater'] = Session::getLoginUserID();
+        }
+
         return parent::prepareInputForUpdate($input);
     }
-
 
     public function getTabNameForItem(CommonGLPI $item, $withtemplate = 0)
     {
 
-       // can exists for template
+        // can exist for template
         if (
             $item instanceof Contract
             && Contract::canView()
@@ -93,19 +107,20 @@ class ContractCost extends CommonDBChild
             if ($_SESSION['glpishow_count_on_tabs']) {
                 $nb = countElementsInTable('glpi_contractcosts', ['contracts_id' => $item->getID()]);
             }
-            return self::createTabEntry(self::getTypeName(Session::getPluralNumber()), $nb);
+            return self::createTabEntry(self::getTypeName(Session::getPluralNumber()), $nb, $item::class);
         }
         return '';
     }
 
-
     public static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0)
     {
+        if (!$item instanceof Contract) {
+            return false;
+        }
 
         self::showForContract($item, $withtemplate);
         return true;
     }
-
 
     public function rawSearchOptions()
     {
@@ -113,12 +128,12 @@ class ContractCost extends CommonDBChild
 
         $tab[] = [
             'id'                 => 'common',
-            'name'               => __('Characteristics')
+            'name'               => __('Characteristics'),
         ];
 
         $tab[] = [
             'id'                 => '1',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'name',
             'name'               => __('Title'),
             'searchtype'         => 'contains',
@@ -128,43 +143,43 @@ class ContractCost extends CommonDBChild
 
         $tab[] = [
             'id'                 => '2',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'id',
             'name'               => __('ID'),
             'massiveaction'      => false,
-            'datatype'           => 'number'
+            'datatype'           => 'number',
         ];
 
         $tab[] = [
             'id'                 => '16',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'comment',
-            'name'               => __('Comments'),
-            'datatype'           => 'text'
+            'name'               => _n('Comment', 'Comments', Session::getPluralNumber()),
+            'datatype'           => 'text',
         ];
 
         $tab[] = [
             'id'                 => '12',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'begin_date',
             'name'               => __('Begin date'),
-            'datatype'           => 'datetime'
+            'datatype'           => 'datetime',
         ];
 
         $tab[] = [
             'id'                 => '10',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'end_date',
             'name'               => __('End date'),
-            'datatype'           => 'datetime'
+            'datatype'           => 'datetime',
         ];
 
         $tab[] = [
             'id'                 => '14',
-            'table'              => $this->getTable(),
+            'table'              => static::getTable(),
             'field'              => 'cost',
             'name'               => _n('Cost', 'Costs', 1),
-            'datatype'           => 'decimal'
+            'datatype'           => 'decimal',
         ];
 
         $tab[] = [
@@ -172,7 +187,7 @@ class ContractCost extends CommonDBChild
             'table'              => 'glpi_budgets',
             'field'              => 'name',
             'name'               => Budget::getTypeName(1),
-            'datatype'           => 'dropdown'
+            'datatype'           => 'dropdown',
         ];
 
         $tab[] = [
@@ -181,26 +196,20 @@ class ContractCost extends CommonDBChild
             'field'              => 'completename',
             'name'               => Entity::getTypeName(1),
             'massiveaction'      => false,
-            'datatype'           => 'dropdown'
+            'datatype'           => 'dropdown',
         ];
 
         return $tab;
     }
 
-
-
-    /**
-     * Init cost for creation based on previous cost
-     **/
-    public function initBasedOnPrevious()
+    public function initBasedOnPrevious(): void
     {
-
         $contract = new Contract();
         if (
             !isset($this->fields['contracts_id'])
             || !$contract->getFromDB($this->fields['contracts_id'])
         ) {
-            return false;
+            return;
         }
 
         $lastdata = $this->getLastCostForContract($this->fields['contracts_id']);
@@ -222,17 +231,17 @@ class ContractCost extends CommonDBChild
     /**
      * Get last datas for a contract
      *
-     * @param $contracts_id        integer  ID of the contract
+     * @param int $contracts_id ID of the contract
+     * @return array
      **/
     public function getLastCostForContract($contracts_id)
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
-            'FROM'   => $this->getTable(),
+            'FROM'   => static::getTable(),
             'WHERE'  => ['contracts_id' => $contracts_id],
-            'ORDER'  => ['end_date DESC', 'id DESC']
+            'ORDER'  => ['end_date DESC', 'id DESC'],
         ]);
         if ($result = $iterator->current()) {
             return $result;
@@ -241,79 +250,41 @@ class ContractCost extends CommonDBChild
         return [];
     }
 
-    /**
-     * Print the contract cost form
-     *
-     * @param $ID        integer  ID of the item
-     * @param $options   array    options used
-     **/
     public function showForm($ID, array $options = [])
     {
-
         if ($ID > 0) {
             $this->check($ID, READ);
         } else {
-           // Create item
+            // Create item
             $options['contracts_id'] = $options['parent']->getField('id');
             $this->check(-1, CREATE, $options);
             $this->initBasedOnPrevious();
         }
 
-        $this->showFormHeader($options);
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Name') . "</td>";
-        echo "<td>";
-        echo "<input type='hidden' name='contracts_id' value='" . $this->fields['contracts_id'] . "'>";
-        echo Html::input('name', ['value' => $this->fields['name']]);
-        echo "</td>";
-        echo "<td>" . _n('Cost', 'Costs', 1) . "</td>";
-        echo "<td>";
-        echo "<input type='text' name='cost' value='" . Html::formatNumber($this->fields["cost"], true) . "'
-             size='14'>";
-        echo "</td></tr>";
-
-        echo "<tr class='tab_bg_1'><td>" . __('Begin date') . "</td>";
-        echo "<td>";
-        Html::showDateField("begin_date", ['value' => $this->fields['begin_date']]);
-        echo "</td>";
-        $rowspan = 3;
-        echo "<td rowspan='$rowspan'>" . __('Comments') . "</td>";
-        echo "<td rowspan='$rowspan' class='middle'>";
-        echo "<textarea class='form-control' name='comment' >" . $this->fields["comment"] .
-           "</textarea>";
-        echo "</td></tr>\n";
-
-        echo "<tr class='tab_bg_1'><td>" . __('End date') . "</td>";
-        echo "<td>";
-        Html::showDateField("end_date", ['value' => $this->fields['end_date']]);
-        echo "</td></tr>";
-
-        echo "<tr class='tab_bg_1'><td>" . Budget::getTypeName(1) . "</td>";
-        echo "<td>";
-        Budget::dropdown(['value' => $this->fields["budgets_id"]]);
-        echo "</td></tr>";
-
-        $this->showFormButtons($options);
+        TemplateRenderer::getInstance()->display('pages/management/cost.html.twig', [
+            'item' => $this,
+            'no_header' => true,
+            'items_id_field' => static::$items_id,
+            'parent_id' => $this->fields['contracts_id'],
+            'params' => [
+                'canedit' => $this->can($this->getID(), UPDATE),
+            ],
+        ]);
 
         return true;
     }
-
 
     /**
      * Print the contract costs
      *
      * @param Contract $contract
-     * @param integer  $withtemplate Template or basic item
+     * @param int  $withtemplate Template or basic item
      *
      * @return void
      **/
     public static function showForContract(Contract $contract, $withtemplate = 0)
     {
-        /**
-         * @var array $CFG_GLPI
-         * @var \DBmysql $DB
-         */
-        global $CFG_GLPI, $DB;
+        global $DB;
 
         $ID = $contract->fields['id'];
 
@@ -325,111 +296,161 @@ class ContractCost extends CommonDBChild
         }
         $canedit = $contract->can($ID, UPDATE);
 
-        echo "<div class='center'>";
+        $sort = $_GET['sort'] ?: 'begin_date';
+        $order = $_GET['order'] ?: 'ASC';
 
-        $iterator = $DB->request([
+        if ($sort === 'budgets_id') {
+            $sort = 'begin_date';
+            $order = 'ASC';
+        }
+
+        $criteria = [
             'FROM'   => self::getTable(),
             'WHERE'  => ['contracts_id' => $ID],
-            'ORDER'  => 'begin_date'
-        ]);
+            'ORDER'  => ["$sort $order"],
+        ];
+        $iterator = $DB->request($criteria);
         $rand   = mt_rand();
 
         if (
             $canedit
             && ($withtemplate != 2)
         ) {
-            echo "<div id='viewcost" . $ID . "_$rand'></div>\n";
-            echo "<script type='text/javascript' >\n";
-            echo "function viewAddCost" . $ID . "_$rand() {\n";
-            $params = ['type'         => __CLASS__,
-                'parenttype'   => 'Contract',
-                'contracts_id' => $ID,
-                'id'           => -1
+            $twig_params = [
+                'item' => $contract,
+                'rand' => $rand,
             ];
-            Ajax::updateItemJsCode(
-                "viewcost" . $ID . "_$rand",
-                $CFG_GLPI["root_doc"] . "/ajax/viewsubitem.php",
-                $params
+            // language=Twig
+            echo TemplateRenderer::getInstance()->renderFromStringTemplate(<<<TWIG
+                <div id="viewsubitem{{ rand }}" class="mb-3"></div>
+                <script>
+                    function showCost{{ rand }}(subitems_id, btn) {
+                        // Hide the triggering button
+                        if (typeof btn !== undefined) {
+                            $(btn).hide();
+                        }
+                        $.ajax({
+                            url: '{{ config('root_doc') }}/ajax/viewsubitem.php',
+                            method: 'POST',
+                            data: {
+                                type: 'ContractCost',
+                                parenttype: '{{ item.getType()|e('js') }}',
+                                contracts_id: {{ item.getID() }},
+                                id: subitems_id
+                            },
+                            success: (data) => {
+                                $('#viewsubitem{{ rand }}').html(data);
+                            }
+                        });
+                    }
+                    $(() => {
+                        $('#contractcostlist{{ rand }} tbody tr').on('click', function() {
+                            showCost{{ rand }}($(this).attr('data-id'));
+                        });
+                    });
+                </script>
+TWIG, $twig_params);
+            TemplateRenderer::getInstance()->display(
+                'components/tab/addlink_block.html.twig',
+                [
+                    'add_link' => 'javascript:showCost' . $rand . '(-1, this);',
+                    'button_label' => __('Add a new cost'),
+                ]
             );
-            echo "};";
-            echo "</script>\n";
-            echo "<div class='center firstbloc'>" .
-               "<a class='btn btn-primary' href='javascript:viewAddCost" . $ID . "_$rand();'>";
-            echo __('Add a new cost') . "</a></div>\n";
+
         }
 
-        echo "<table class='tab_cadre_fixehov'>";
-        echo "<tr><th colspan='5'>" . self::getTypeName(count($iterator)) . "</th></tr>";
-
-        if (count($iterator)) {
-            echo "<tr><th>" . __('Name') . "</th>";
-            echo "<th>" . __('Begin date') . "</th>";
-            echo "<th>" . __('End date') . "</th>";
-            echo "<th>" . Budget::getTypeName(1) . "</th>";
-            echo "<th>" . _n('Cost', 'Costs', 1) . "</th>";
-            echo "</tr>";
-
-            Session::initNavigateListItems(
-                __CLASS__,
-                //TRANS : %1$s is the itemtype name,
-                           //        %2$s is the name of the item (used for headings of a list)
-                                       sprintf(
-                                           __('%1$s = %2$s'),
-                                           Contract::getTypeName(1),
-                                           $contract->getName()
-                                       )
+        $entries = [];
+        $budget_cache = [];
+        $user_links = [];
+        foreach ($iterator as $data) {
+            $name = empty($data['name']) ? sprintf(
+                __('%1$s (%2$s)'),
+                $data['name'],
+                $data['id']
+            ) : $data['name'];
+            $name = sprintf(
+                __s('%1$s %2$s'),
+                htmlescape($name),
+                !empty($data['comment']) ? Html::showToolTip(htmlescape($data['comment']), ['display' => false]) : ''
             );
-
-            $total = 0;
-            foreach ($iterator as $data) {
-                echo "<tr class='tab_bg_2' " .
-                  ($canedit
-                     ? "style='cursor:pointer' onClick=\"viewEditCost" . $data['contracts_id'] . "_" .
-                     $data['id'] . "_$rand();\"" : '') . ">";
-                 $name = (empty($data['name']) ? sprintf(
-                     __('%1$s (%2$s)'),
-                     $data['name'],
-                     $data['id']
-                 )
-                                          : $data['name']);
-                 echo "<td>";
-                 printf(
-                     __('%1$s %2$s'),
-                     $name,
-                     Html::showToolTip($data['comment'], ['display' => false])
-                 );
-                if ($canedit) {
-                     echo "\n<script type='text/javascript' >\n";
-                     echo "function viewEditCost" . $data['contracts_id'] . "_" . $data["id"] . "_$rand() {\n";
-                     $params = ['type'         => __CLASS__,
-                         'parenttype'   => 'Contract',
-                         'contracts_id' => $data["contracts_id"],
-                         'id'           => $data["id"]
-                     ];
-                     Ajax::updateItemJsCode(
-                         "viewcost" . $ID . "_$rand",
-                         $CFG_GLPI["root_doc"] . "/ajax/viewsubitem.php",
-                         $params
-                     );
-                     echo "};";
-                     echo "</script>\n";
-                }
-                 echo "</td>";
-                 echo "<td>" . Html::convDate($data['begin_date']) . "</td>";
-                 echo "<td>" . Html::convDate($data['end_date']) . "</td>";
-                 echo "<td>" . Dropdown::getDropdownName('glpi_budgets', $data['budgets_id']) . "</td>";
-                 echo "<td class='numeric'>" . Html::formatNumber($data['cost']) . "</td>";
-                 $total += $data['cost'];
-                 echo "</tr>";
-                 Session::addToNavigateListItems(__CLASS__, $data['id']);
+            if (!isset($budget_cache[$data['budgets_id']])) {
+                $budget_cache[$data['budgets_id']] = Dropdown::getDropdownName(table: 'glpi_budgets', id: $data['budgets_id'], default: '');
             }
-            echo "<tr class='b noHover'><td colspan='3'>&nbsp;</td>";
-            echo "<td class='right'>" . __('Total cost') . '</td>';
-            echo "<td class='numeric'>" . Html::formatNumber($total) . '</td></tr>';
-        } else {
-            echo "<tr><th colspan='5'>" . __('No item found') . "</th></tr>";
+            if (!array_key_exists($data['users_id'], $user_links)) {
+                $user = new User();
+                $user->getFromDB($data['users_id']);
+                $user_links[$data['users_id']] = $user->getLink();
+            }
+            if (!array_key_exists($data['users_id_lastupdater'], $user_links)) {
+                $user = new User();
+                $user->getFromDB($data['users_id_lastupdater']);
+                $user_links[$data['users_id_lastupdater']] = $user->getLink();
+            }
+            $entries[] = [
+                'itemtype' => self::class,
+                'id' => $data['id'],
+                'row_class' => $canedit ? 'cursor-pointer' : '',
+                'name' => $name,
+                'begin_date' => $data['begin_date'],
+                'end_date' => $data['end_date'],
+                'budgets_id' => $budget_cache[$data['budgets_id']],
+                'cost' => $data['cost'],
+                'date_creation' => $data['date_creation'],
+                'date_mod' => $data['date_mod'],
+                'users_id' => $user_links[$data['users_id']],
+                'users_id_lastupdater' => $user_links[$data['users_id_lastupdater']],
+            ];
         }
-        echo "</table>";
-        echo "</div><br>";
+
+        TemplateRenderer::getInstance()->display('components/datatable.html.twig', [
+            'datatable_id' => 'contractcostlist' . $rand,
+            'is_tab' => true,
+            'nofilter' => true,
+            'sort' => $sort,
+            'order' => $order,
+            'columns' => [
+                'name' => __('Name'),
+                'date_creation' => __('Creation date'),
+                'users_id' => User::getTypeName(1),
+                'date_mod' => __('Modification date'),
+                'users_id_lastupdater' => User::getTypeName(1) . ' (' . __('Last updater') . ')',
+                'begin_date' => __('Begin date'),
+                'end_date' => __('End date'),
+                'budgets_id' => Budget::getTypeName(1),
+                'cost' => _n('Cost', 'Costs', 1),
+            ],
+            'formatters' => [
+                'name' => 'raw_html',
+                'date_creation' => 'datetime',
+                'users_id' => 'raw_html',
+                'date_mod' => 'datetime',
+                'users_id_lastupdater' => 'raw_html',
+                'begin_date' => 'date',
+                'end_date' => 'date',
+                'cost' => 'number',
+            ],
+            'footers' => [
+                [
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    __('Total cost'),
+                    array_sum(array_column($entries, 'cost')),
+                ],
+            ],
+            'entries' => $entries,
+            'total_number' => count($entries),
+            'showmassiveactions' => $canedit,
+            'massiveactionparams' => [
+                'num_displayed' => count($entries),
+                'container'     => 'mass' . static::class . $rand,
+                'specific_actions' => ['purge' => _x('button', 'Delete permanently')],
+            ],
+        ]);
     }
 }

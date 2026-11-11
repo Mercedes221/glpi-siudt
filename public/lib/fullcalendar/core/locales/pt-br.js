@@ -1,28 +1,42 @@
-(function (global, factory) {
-    typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
-    typeof define === 'function' && define.amd ? define(factory) :
-    (global = global || self, (global.FullCalendarLocales = global.FullCalendarLocales || {}, global.FullCalendarLocales['pt-br'] = factory()));
-}(this, function () { 'use strict';
-
-    var ptBr = {
-        code: "pt-br",
-        buttonText: {
-            prev: "Anterior",
-            next: "Próximo",
-            today: "Hoje",
-            month: "Mês",
-            week: "Semana",
-            day: "Dia",
-            list: "Lista"
+var l57 = {
+    code: 'pt-br',
+    buttonText: {
+        prev: 'Anterior',
+        next: 'Próximo',
+        prevYear: 'Ano anterior',
+        nextYear: 'Próximo ano',
+        year: 'Ano',
+        today: 'Hoje',
+        month: 'Mês',
+        week: 'Semana',
+        day: 'Dia',
+        list: 'Lista',
+    },
+    buttonHints: {
+        prev: '$0 Anterior',
+        next: 'Próximo $0',
+        today(buttonText) {
+            return (buttonText === 'Dia') ? 'Hoje' :
+                ((buttonText === 'Semana') ? 'Esta' : 'Este') + ' ' + buttonText.toLocaleLowerCase();
         },
-        weekLabel: "Sm",
-        allDayText: "dia inteiro",
-        eventLimitText: function (n) {
-            return "mais +" + n;
-        },
-        noEventsMessage: "Não há eventos para mostrar"
-    };
+    },
+    viewHint(buttonText) {
+        return 'Visualizar ' + (buttonText === 'Semana' ? 'a' : 'o') + ' ' + buttonText.toLocaleLowerCase();
+    },
+    weekText: 'Sm',
+    weekTextLong: 'Semana',
+    allDayText: 'dia inteiro',
+    moreLinkText(n) {
+        return 'mais +' + n;
+    },
+    moreLinkHint(eventCnt) {
+        return `Mostrar mais ${eventCnt} eventos`;
+    },
+    noEventsText: 'Não há eventos para mostrar',
+    navLinkHint: 'Ir para $0',
+    closeHint: 'Fechar',
+    timeHint: 'A hora',
+    eventHint: 'Evento',
+};
 
-    return ptBr;
-
-}));
+export { l57 as default };

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -38,9 +38,9 @@
  **/
 class SsoVariable extends CommonDropdown
 {
-    public static $rightname = 'config';
+    public static string $rightname = 'config';
 
-    public $can_be_translated = false;
+    public bool $can_be_translated = false;
 
 
     public static function getTypeName($nb = 0)
@@ -54,18 +54,60 @@ class SsoVariable extends CommonDropdown
     }
 
 
-    public static function canCreate()
+    public static function canCreate(): bool
     {
         return static::canUpdate();
     }
 
-
-    /**
-     * @since 0.85
-     **/
-    public static function canPurge()
+    public static function canPurge(): bool
     {
         return static::canUpdate();
+    }
+
+    public function prepareInputForAdd($input)
+    {
+        $input = $this->prepareInput($input);
+
+        if ($input === false) {
+            return false;
+        }
+
+        return parent::prepareInputForAdd($input);
+    }
+
+    public function prepareInputForUpdate($input)
+    {
+        $input = $this->prepareInput($input);
+
+        if ($input === false) {
+            return false;
+        }
+
+        return parent::prepareInputForUpdate($input);
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     * @return array<string, mixed>|false
+     */
+    private function prepareInput(array $input): array|false
+    {
+        if (
+            $this->isServerVariableSafe($input['name'] ?? '') === false
+            && ($this->isNewItem() || $input['name'] !== $this->fields['name'])
+        ) {
+            Session::addMessageAfterRedirect(
+                sprintf(
+                    __s('The %s variable is unsafe. It should not be used for authentication.'),
+                    htmlescape($input['name']),
+                ),
+                false,
+                ERROR
+            );
+            return false;
+        }
+
+        return $input;
     }
 
 
@@ -75,7 +117,7 @@ class SsoVariable extends CommonDropdown
         parent::cleanRelationData();
 
         if ($this->isUsedInAuth()) {
-            $newval = (isset($this->input['_replace_by']) ? $this->input['_replace_by'] : 0);
+            $newval = ($this->input['_replace_by'] ?? 0);
 
             Config::setConfigurationValues(
                 'core',
@@ -101,7 +143,7 @@ class SsoVariable extends CommonDropdown
     /**
      * Check if variable is used in auth process.
      *
-     * @return boolean
+     * @return bool
      */
     private function isUsedInAuth()
     {
@@ -110,5 +152,24 @@ class SsoVariable extends CommonDropdown
 
         return array_key_exists('ssovariables_id', $config_values)
          && $config_values['ssovariables_id'] == $this->fields['id'];
+    }
+
+    /**
+     * Indicates whether the current variable is safe.
+     */
+    public function isSafe(): bool
+    {
+        return $this->isServerVariableSafe($this->fields['name'] ?? '');
+    }
+
+    /**
+     * Indicates whether a server variable is safe.
+     */
+    private function isServerVariableSafe(string $name): bool
+    {
+        $name = mb_strtoupper($name);
+
+        return str_starts_with($name, 'HTTP_') === false
+            && $name !== 'PHP_AUTH_USER';
     }
 }

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -35,20 +35,18 @@
 
 class RuleAssetCollection extends RuleCollection
 {
-   // From RuleCollection
-    public $stop_on_first_match = false;
-    public static $rightname           = 'rule_asset';
-    public $menu_option         = 'ruleasset';
+    // From RuleCollection
+    public bool $stop_on_first_match = false;
+    public static string $rightname           = 'rule_asset';
+    public string $menu_option         = 'ruleasset';
 
     public function getTitle()
     {
         return __('Business rules for assets');
     }
 
-
     public function cleanTestOutputCriterias(array $output)
     {
-
         if (isset($output["_rule_process"])) {
             unset($output["_rule_process"]);
         }

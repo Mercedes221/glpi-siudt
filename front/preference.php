@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,13 +33,19 @@
  * ---------------------------------------------------------------------
  */
 
-use Glpi\Event;
+require_once(__DIR__ . '/_check_webserver_config.php');
 
-include('../inc/includes.php');
+use Glpi\Event;
+use Glpi\Security\TOTPManager;
 
 $user = new User();
 
-Session::checkLoginUser();
+// Manage 2FA
+if (isset($_POST['disable_2fa'])) {
+    $totp_manager = new TOTPManager();
+    $totp_manager->disable2FAForUser(Session::getLoginUserID());
+    Html::redirect(Preference::getSearchURL());
+}
 
 if (
     isset($_POST["update"])
@@ -57,7 +63,7 @@ if (
     Html::back();
 } else {
     if (Session::getCurrentInterface() == "central") {
-        Html::header(Preference::getTypeName(1), $_SERVER['PHP_SELF'], 'preference');
+        Html::header(Preference::getTypeName(1), '', 'preference');
     } else {
         Html::helpHeader(Preference::getTypeName(1));
     }

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,18 +33,25 @@
  * ---------------------------------------------------------------------
  */
 
-include('../inc/includes.php');
+use Glpi\Marketplace\Controller;
+use Glpi\Marketplace\View;
 
-Session::checkRight("config", UPDATE);
+require_once(__DIR__ . '/_check_webserver_config.php');
 
+(new Config())->checkGlobal(UPDATE);
+
+if (!Controller::isWebAllowed()) {
+    // Redirect to classic plugins page
+    Html::redirect(Plugin::getSearchURL());
+}
 // This has to be called before search process is called, in order to add
 // "new" plugins in DB to be able to display them.
 $plugin = new Plugin();
 $plugin->checkStates(true);
 
-Html::header(__('Marketplace'), $_SERVER['PHP_SELF'], "config", "plugin", "marketplace");
+Html::header(__('Marketplace'), '', "config", "plugin", "marketplace");
 
-$market_view = new \Glpi\Marketplace\View();
+$market_view = new View();
 $market_view->display();
 
 Html::footer();

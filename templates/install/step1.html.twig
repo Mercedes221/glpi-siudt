@@ -5,8 +5,7 @@
  #
  # http://glpi-project.org
  #
- # @copyright 2015-2025 Teclib' and contributors.
- # @copyright 2003-2014 by the INDEPNET Development Team.
+ # @copyright 2015-2026 Teclib' and contributors.
  # @licence   https://www.gnu.org/licenses/gpl-3.0.html
  #
  # ---------------------------------------------------------------------
@@ -36,7 +35,7 @@
     <div class="alert alert-danger" role="alert">
         <div class="d-flex">
             <div>
-                <i class="ti ti-alert-circle me-2"></i>
+                <i class="ti ti-alert-circle me-2" aria-hidden="true"></i>
             </div>
             <div>
                 <h4 class="alert-title">{{ __('Write access denied for configuration files') }}</h4>
@@ -56,14 +55,13 @@
 {% set common_hiddens %}
    <input type="hidden" name="language" value="{{ session('glpilanguage') }}">
    <input type="hidden" name="update" value="{{ update }}">
-   <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
 {% endset %}
 
 {% set continue_form %}
    <form action="install.php" method="post" class="d-inline" data-submit-once>
       <button type="submit" name="submit" class="btn btn-primary">
          {{ __("Continue") }}
-         <i class="fas fa-chevron-right ms-1"></i>
+         <i class="ti ti-chevron-right ms-1" aria-hidden="true"></i>
       </button>
 
       <input type="hidden" name="install" value="Etape_1">
@@ -75,7 +73,7 @@
    <form action="install.php" method="post" class="d-inline" data-submit-once>
       <button type="submit" name="submit" class="btn btn-warning">
          {{ __("Try again") }}
-         <i class="fas fa-redo ms-1"></i>
+         <i class="ti ti-reload ms-1" aria-hidden="true"></i>
       </button>
 
       <input type="hidden" name="install" value="Etape_0">

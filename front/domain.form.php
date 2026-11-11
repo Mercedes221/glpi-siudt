@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,9 +33,9 @@
  * ---------------------------------------------------------------------
  */
 
-include('../inc/includes.php');
+require_once(__DIR__ . '/_check_webserver_config.php');
 
-Session::checkRight("domain", READ);
+Session::checkRight(Domain::$rightname, READ);
 
 if (empty($_GET["id"])) {
     $_GET["id"] = '';
@@ -54,36 +54,52 @@ if (isset($_POST["add"])) {
         Html::redirect($domain->getLinkURL());
     }
     Html::back();
-} else if (isset($_POST["delete"])) {
+} elseif (isset($_POST["delete"])) {
     $domain->check($_POST['id'], DELETE);
     $domain->delete($_POST);
     $domain->redirectToList();
-} else if (isset($_POST["restore"])) {
+} elseif (isset($_POST["restore"])) {
     $domain->check($_POST['id'], PURGE);
     $domain->restore($_POST);
     $domain->redirectToList();
-} else if (isset($_POST["purge"])) {
+} elseif (isset($_POST["purge"])) {
     $domain->check($_POST['id'], PURGE);
-    $domain->delete($_POST, 1);
+    $domain->delete($_POST, true);
     $domain->redirectToList();
-} else if (isset($_POST["update"])) {
+} elseif (isset($_POST["update"])) {
     $domain->check($_POST['id'], UPDATE);
     $domain->update($_POST);
     Html::back();
-} else if (isset($_POST["additem"])) {
+} elseif (isset($_POST["additem"])) {
     if (!empty($_POST['itemtype']) && $_POST['items_id'] > 0) {
+        if (!$_POST['domains_id']) {
+            $message = sprintf(
+                __('Mandatory fields are not filled. Please correct: %s'),
+                _n('Domain', 'Domains', 1)
+            );
+            Session::addMessageAfterRedirect(htmlescape($message), false, ERROR);
+            Html::back();
+        }
         $ditem->check(-1, UPDATE, $_POST);
         $ditem->addItem($_POST);
     }
     Html::back();
-} else if (isset($_POST["addrecord"])) {
-    $record = new \DomainRecord();
+} elseif (isset($_POST["addrecord"])) {
+    $record = new DomainRecord();
     $_POST['id'] = $_POST['domainrecords_id'];
     unset($_POST['domainrecords_id']);
-    $record->check(-1, UPDATE, $_POST);
+    if (!$_POST['id']) {
+        $message = sprintf(
+            __('Mandatory fields are not filled. Please correct: %s'),
+            _n('Record', 'Records', 1)
+        );
+        Session::addMessageAfterRedirect(htmlescape($message), false, ERROR);
+        Html::back();
+    }
+    $record->check($_POST['id'], UPDATE, $_POST);
     $record->update($_POST);
     Html::redirect($domain->getFormURLWithID($_POST['domains_id']));
-} else if (isset($_POST["deleteitem"])) {
+} elseif (isset($_POST["deleteitem"])) {
     foreach ($_POST["item"] as $key => $val) {
         $input = ['id' => $key];
         if ($val == 1) {
@@ -92,7 +108,7 @@ if (isset($_POST["add"])) {
         }
     }
     Html::back();
-} else if (isset($_POST["deletedomains"])) {
+} elseif (isset($_POST["deletedomains"])) {
     $input = ['id' => $_POST["id"]];
     $ditem->check($_POST["id"], UPDATE);
     $ditem->delete($input);
@@ -101,6 +117,6 @@ if (isset($_POST["add"])) {
     $menus = ["management", "domain"];
     Domain::displayFullPageForItem($_GET["id"], $menus, [
         'withtemplate' => $_GET["withtemplate"],
-        'formoptions'  => "data-track-changes=true"
+        'formoptions'  => "data-track-changes=true",
     ]);
 }

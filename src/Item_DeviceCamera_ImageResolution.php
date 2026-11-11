@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,13 +33,15 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\Application\View\TemplateRenderer;
+
 class Item_DeviceCamera_ImageResolution extends CommonDBRelation
 {
-    public static $itemtype_1 = 'Item_DeviceCamera';
-    public static $items_id_1 = 'items_devicecameras_id';
+    public static ?string $itemtype_1 = Item_DeviceCamera::class;
+    public static ?string $items_id_1 = 'items_devicecameras_id';
 
-    public static $itemtype_2 = 'ImageResolution';
-    public static $items_id_2 = 'imageresolutions_id';
+    public static ?string $itemtype_2 = ImageResolution::class;
+    public static ?string $items_id_2 = 'imageresolutions_id';
 
     public static function getTypeName($nb = 0)
     {
@@ -49,24 +51,23 @@ class Item_DeviceCamera_ImageResolution extends CommonDBRelation
     public function getTabNameForItem(CommonGLPI $item, $withtemplate = 0)
     {
         $nb = 0;
-        if (
-            ($item instanceof CommonDBTM)
-            && $_SESSION['glpishow_count_on_tabs']
-        ) {
+        if ($item instanceof CommonDBTM && $_SESSION['glpishow_count_on_tabs']) {
             $nb = countElementsInTable(
                 self::getTable(),
                 [
-                    'items_devicecameras_id' => $item->getID()
+                    'items_devicecameras_id' => $item->getID(),
                 ]
             );
         }
-        return self::createTabEntry(self::getTypeName(Session::getPluralNumber()), $nb);
+        return self::createTabEntry(self::getTypeName(Session::getPluralNumber()), $nb, $item::class);
     }
 
     public static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0)
     {
-        self::showItems($item);
-        return true;
+        if (!$item instanceof DeviceCamera) {
+            return false;
+        }
+        return self::showItems($item);
     }
 
     public function getForbiddenStandardMassiveAction()
@@ -82,15 +83,11 @@ class Item_DeviceCamera_ImageResolution extends CommonDBRelation
     /**
      * Print items
      * @param  DeviceCamera $camera the current camera instance
-     * @return void
+     * @return bool
      */
-    public static function showItems(DeviceCamera $camera)
+    public static function showItems(DeviceCamera $camera): bool
     {
-        /**
-         * @var array $CFG_GLPI
-         * @var \DBmysql $DB
-         */
-        global $CFG_GLPI, $DB;
+        global $DB;
 
         $ID = $camera->getID();
         $rand = mt_rand();
@@ -110,84 +107,54 @@ class Item_DeviceCamera_ImageResolution extends CommonDBRelation
                 ImageResolution::getTable() => [
                     'ON' => [
                         ImageResolution::getTable() => 'id',
-                        self::getTable() => 'imageresolutions_id'
-                    ]
-                ]
+                        self::getTable() => 'imageresolutions_id',
+                    ],
+                ],
             ],
             'WHERE'  => [
-                'items_devicecameras_id' => $camera->getID()
-            ]
+                'items_devicecameras_id' => $camera->getID(),
+            ],
         ]);
-        $link = new self();
 
-        echo "<div>";
+        $entries = [];
+        foreach ($items as $row) {
+            $item = new ImageResolution();
+            $item->getFromDB($row['imageresolutions_id']);
 
-        if (!count($items)) {
-            echo "<table class='tab_cadre_fixe'><tr><th>" . __('No item found') . "</th></tr>";
-            echo "</table>";
-        } else {
-            Session::initNavigateListItems(
-                self::getType(),
-                //TRANS : %1$s is the itemtype name,
-                //        %2$s is the name of the item (used for headings of a list)
-                sprintf(
-                    __('%1$s = %2$s'),
-                    $camera->getTypeName(1),
-                    $camera->getName()
-                )
-            );
-
-            if ($canedit) {
-                Html::openMassiveActionsForm('mass' . __CLASS__ . $rand);
-                $massiveactionparams = [
-                    'num_displayed'   => min($_SESSION['glpilist_limit'], count($items)),
-                    'container'       => 'mass' . __CLASS__ . $rand
-                ];
-                Html::showMassiveActions($massiveactionparams);
-            }
-
-            echo "<table class='tab_cadre_fixehov'>";
-            $header = "<tr>";
-            if ($canedit) {
-                $header .= "<th width='10'>";
-                $header .= Html::getCheckAllAsCheckbox('mass' . __CLASS__ . $rand);
-                $header .= "</th>";
-            }
-            $header .= "<th>" . ImageResolution::getTypeName(1) . "</th>";
-            $header .= "<th>" . __('Is Video') . "</th>";
-            $header .= "<th>" . __('Is dynamic') . "</th>";
-            $header .= "</tr>";
-
-            echo $header;
-            foreach ($items as $row) {
-                $item = new ImageResolution();
-                $item->getFromDB($row['imageresolutions_id']);
-                echo "<tr lass='tab_bg_1'>";
-                if ($canedit) {
-                    echo "<td>";
-                    Html::showMassiveActionCheckBox(__CLASS__, $row["id"]);
-                    echo "</td>";
-                }
-
-                $is_video =  $row['is_video'] ? __('Yes') : __('No');
-
-                echo "<td>" . $item->getLink() . "</td>";
-                echo "<td>" . $is_video . "</td>";
-                echo "<td>{$row['is_dynamic']}</td>";
-                echo "</tr>";
-            }
-            echo $header;
-            echo "</table>";
-
-            if ($canedit && count($items)) {
-                $massiveactionparams['ontop'] = false;
-                Html::showMassiveActions($massiveactionparams);
-            }
-            if ($canedit) {
-                Html::closeForm();
-            }
+            $entries[] = [
+                'itemtype' => self::class,
+                'id' => $row['id'],
+                'imageresolutions_id' => $item->getLink(),
+                'is_video' => Dropdown::getYesNo($row['is_video']),
+                'is_dynamic' => $row['is_dynamic'],
+            ];
         }
 
-        echo "</div>";
+        TemplateRenderer::getInstance()->display('components/datatable.html.twig', [
+            'is_tab' => true,
+            'nofilter' => true,
+            'columns' => [
+                'imageresolutions_id' => ImageResolution::getTypeName(1),
+                'is_video' => __('Is Video'),
+                'is_dynamic' => __('Is dynamic'),
+            ],
+            'formatters' => [
+                'imageresolutions_id' => 'raw_html',
+            ],
+            'entries' => $entries,
+            'total_number' => count($entries),
+            'showmassiveactions' => $canedit,
+            'massiveactionparams' => [
+                'num_displayed' => min($_SESSION['glpilist_limit'], count($entries)),
+                'container'     => 'mass' . static::class . $rand,
+            ],
+        ]);
+
+        return true;
+    }
+
+    public static function getIcon()
+    {
+        return "fas fa-expand";
     }
 }

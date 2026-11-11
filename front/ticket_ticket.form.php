@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,22 +33,25 @@
  * ---------------------------------------------------------------------
  */
 
+require_once(__DIR__ . '/_check_webserver_config.php');
+
+use Glpi\Event;
+use Glpi\Exception\Http\BadRequestHttpException;
+
 /**
  * @since 0.84
  */
-
-use Glpi\Event;
-
-include('../inc/includes.php');
 
 $ticket_ticket = new Ticket_Ticket();
 
 Session::checkCentralAccess();
 
+Toolbox::deprecated();
+
 if (isset($_POST['purge'])) {
     $ticket_ticket->check($_POST['id'], PURGE);
 
-    $ticket_ticket->delete($_POST, 1);
+    $ticket_ticket->delete($_POST, true);
 
     Event::log(
         $_POST['tickets_id'],
@@ -60,4 +63,5 @@ if (isset($_POST['purge'])) {
     );
     Html::redirect(Ticket::getFormURLWithID($_POST['tickets_id']));
 }
-Html::displayErrorAndDie("lost");
+
+throw new BadRequestHttpException();

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,36 +33,33 @@
  * ---------------------------------------------------------------------
  */
 
-// Direct access to file
-if (strpos($_SERVER['PHP_SELF'], "ticketiteminformation.php")) {
-    $AJAX_INCLUDE = 1;
-    include('../inc/includes.php');
-    header("Content-Type: text/html; charset=UTF-8");
-    Html::header_nocache();
-}
+use Glpi\Exception\Http\AccessDeniedHttpException;
 
-Session::checkLoginUser();
+header("Content-Type: text/html; charset=UTF-8");
+Html::header_nocache();
 
 if (isset($_POST["my_items"]) && !empty($_POST["my_items"])) {
-    $splitter = explode("_", $_POST["my_items"]);
-    if (count($splitter) == 2) {
-        $_POST["itemtype"] = $splitter[0];
-        $_POST["items_id"] = $splitter[1];
+    $last_underscore = strrpos($_POST["my_items"], "_");
+    if ($last_underscore === false) {
+        throw new AccessDeniedHttpException();
     }
+    $_POST["itemtype"] = substr($_POST["my_items"], 0, $last_underscore);
+    $_POST["items_id"] = substr($_POST["my_items"], $last_underscore + 1);
 }
 
 if (
     isset($_POST['itemtype'])
     && isset($_POST['items_id']) && ($_POST['items_id'] > 0)
 ) {
-   // Security
-    if (!class_exists($_POST['itemtype'])) {
-        exit();
+    // Security
+    if (!($item = getItemForItemtype($_POST['itemtype'])) || !$item->can($_POST['items_id'], READ)) {
+        throw new AccessDeniedHttpException();
     }
 
     $days   = 3;
+
     $ticket = new Ticket();
-    $data   = $ticket->getActiveOrSolvedLastDaysTicketsForItem(
+    $data   = $ticket->getActiveOrSolvedLastDaysForItem(
         $_POST['itemtype'],
         $_POST['items_id'],
         $days
@@ -70,7 +67,7 @@ if (
 
     $nb = count($data);
     $badge_helper = sprintf(
-        _n(
+        _sn(
             '%s ticket in progress or recently solved on this item.',
             '%s tickets in progress or recently solved on this item.',
             $nb
@@ -82,7 +79,7 @@ if (
     if ($nb) {
         $content = '';
         foreach ($data as $title) {
-            $content .= $title . '<br>';
+            $content .= htmlescape($title) . '<br>';
         }
         echo '&nbsp;';
         Html::showToolTip($content);

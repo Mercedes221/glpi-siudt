@@ -7,8 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
- * @copyright 2003-2014 by the INDEPNET Development Team.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
  * ---------------------------------------------------------------------
@@ -33,27 +32,27 @@
  * ---------------------------------------------------------------------
  */
 
+use function Safe\preg_match_all;
+
 /**
  * Update from 9.5.1 to 9.5.2
  *
- * @return bool for success (will die for most error)
+ * @return bool
  **/
 function update951to952()
 {
     /**
-     * @var \DBmysql $DB
-     * @var \Migration $migration
+     * @var DBmysql $DB
+     * @var Migration $migration
      */
     global $DB, $migration;
 
     $updateresult     = true;
 
-   //TRANS: %s is the number of new version
-    $migration->displayTitle(sprintf(__('Update to %s'), '9.5.2'));
     $migration->setVersion('9.5.2');
 
     /* Fix document_item migration */
-    $migration->displayTitle("Building inline images data in " . Document_Item::getTable());
+    $migration->displayMessage("Building inline images data in " . Document_Item::getTable());
 
     $now = date('Y-m-d H:i:s');
 
@@ -61,7 +60,7 @@ function update951to952()
         'ITILFollowup' => 'content',
         'ITILSolution' => 'content',
         'Reminder'     => 'text',
-        'KnowbaseItem' => 'answer'
+        'KnowbaseItem' => 'answer',
     ];
 
     foreach (['Change', 'Problem', 'Ticket'] as $itiltype) {
@@ -72,14 +71,14 @@ function update951to952()
     $docs_input = [];
     foreach ($itemtypes as $itemtype => $field) {
         // Check ticket and child items (followups, tasks, solutions) contents
-        $regexPattern = 'document\\\.send\\\.php\\\?docid=[0-9]+';
+        $regexPattern = 'document\.send\.php\?docid=[0-9]+';
         $user_field = is_a($itemtype, CommonITILObject::class, true) ? 'users_id_recipient' : 'users_id';
         $result = $DB->request([
             'SELECT' => ['id', $field, $user_field],
             'FROM'   => $itemtype::getTable(),
             'WHERE'  => [
-                $field => ['REGEXP', $regexPattern]
-            ]
+                $field => ['REGEXP', $regexPattern],
+            ],
         ]);
 
         foreach ($result as $data) {
@@ -87,7 +86,7 @@ function update951to952()
             preg_match_all('/document\\.send\\.php\\?docid=([0-9]+)/', $data[$field], $matches);
 
             // No inline documents found in this item, skip to next
-            if (!isset($matches[1])) {
+            if (count($matches[1]) === 0) {
                 continue;
             }
 
@@ -98,7 +97,7 @@ function update951to952()
                         'FROM'   => 'glpi_documents',
                         'WHERE'  => [
                             'id' => $docid,
-                        ]
+                        ],
                     ]
                 );
                 if ($document->count() === 0) {
@@ -132,31 +131,27 @@ function update951to952()
         if (countElementsInTable('glpi_documents_items', $unicity_fields) > 0) {
             continue; // Already declared in DB
         }
-        $DB->insertOrDie('glpi_documents_items', $doc_input);
+        $DB->insert('glpi_documents_items', $doc_input);
     }
     /* /Fix document_item migration */
 
-   /* Register missing DomainAlert crontask */
-    CronTask::Register(
+    /* Register missing DomainAlert crontask */
+    $migration->addCrontask(
         'Domain',
         'DomainsAlert',
         DAY_TIMESTAMP,
-        [
-            'mode'  => CronTask::MODE_EXTERNAL,
-            'state' => CronTask::STATE_WAITING,
-        ]
     );
-   /* /Register missing DomainAlert crontask */
+    /* /Register missing DomainAlert crontask */
 
-   //add option to collect only unread mail
+    //add option to collect only unread mail
     $migration->addField('glpi_mailcollectors', 'collect_only_unread', 'bool', ['value' => 0]);
 
-   /* Appliances rewrite */
+    /* Appliances rewrite */
     $migration->addField('glpi_appliances', 'is_helpdesk_visible', 'bool', ['after' => 'otherserial', 'value' => 1]);
     $migration->addKey('glpi_appliances', 'is_helpdesk_visible');
     $migration->addField('glpi_states', 'is_visible_appliance', 'bool', [
         'value' => 1,
-        'after' => 'is_visible_contract'
+        'after' => 'is_visible_contract',
     ]);
     $migration->addKey('glpi_states', 'is_visible_appliance');
 
@@ -187,10 +182,10 @@ function update951to952()
                 'glpi_appliances AS app' => [
                     'ON'  => [
                         'app'    => 'id',
-                        'items'  => 'appliances_id'
-                    ]
-                ]
-            ]
+                        'items'  => 'appliances_id',
+                    ],
+                ],
+            ],
         ]);
         foreach ($iterator as $row) {
             $itemtype = null;
@@ -210,19 +205,19 @@ function update951to952()
                 $DB->buildUpdate(
                     'glpi_appliances_items_relations',
                     [
-                        'itemtype'  => $itemtype
+                        'itemtype'  => $itemtype,
                     ],
                     [
-                        'appliances_items_id'   => $row['id']
+                        'appliances_items_id'   => $row['id'],
                     ]
                 )
             );
         }
         $migration->dropField('glpi_appliances', 'relationtype');
     }
-   /* /Appliances rewrite */
+    /* /Appliances rewrite */
 
-   // ************ Keep it at the end **************
+    // ************ Keep it at the end **************
     $migration->executeMigration();
 
     return $updateresult;

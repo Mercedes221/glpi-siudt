@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,20 +33,21 @@
  * ---------------------------------------------------------------------
  */
 
+require_once(__DIR__ . '/_check_webserver_config.php');
+
+use Glpi\Event;
+use Glpi\Exception\Http\BadRequestHttpException;
+
 /**
  * @since 0.85
  */
-
-use Glpi\Event;
-
-include('../inc/includes.php');
 
 $note = new Notepad();
 
 if (isset($_POST['add'])) {
     $note->check(-1, CREATE, $_POST);
 
-    $newID = $note->add($_POST, false);
+    $newID = $note->add($_POST);
     Event::log(
         $newID,
         "notepad",
@@ -55,9 +56,9 @@ if (isset($_POST['add'])) {
         sprintf(__('%1$s adds the item %2$s'), $_SESSION["glpiname"], $newID)
     );
     Html::back();
-} else if (isset($_POST["purge"])) {
+} elseif (isset($_POST["purge"])) {
     $note->check($_POST["id"], PURGE);
-    $note->delete($_POST, 1);
+    $note->delete($_POST, true);
     Event::log(
         $_POST["id"],
         "notepad",
@@ -67,7 +68,7 @@ if (isset($_POST['add'])) {
         sprintf(__('%s purges an item'), $_SESSION["glpiname"])
     );
     Html::back();
-} else if (isset($_POST["update"])) {
+} elseif (isset($_POST["update"])) {
     $note->check($_POST["id"], UPDATE);
 
     $note->update($_POST);
@@ -80,6 +81,18 @@ if (isset($_POST['add'])) {
         sprintf(__('%s updates an item'), $_SESSION["glpiname"])
     );
     Html::back();
+} elseif (isset($_POST["delete_document"])) {
+    $doc = new Document();
+    $doc->getFromDB(intval($_POST['documents_id']));
+    if ($doc->can($doc->getID(), UPDATE)) {
+        $document_item = new Document_Item();
+        $document_item->deleteByCriteria([
+            'itemtype'     => "Notepad",
+            'items_id'     => (int) $_POST['id'],
+            'documents_id' => $doc->getID(),
+        ]);
+    }
+    Html::back();
 }
 
 if (isset($_GET['id']) && $note->getFromDB($_GET['id'])) {
@@ -88,5 +101,5 @@ if (isset($_GET['id']) && $note->getFromDB($_GET['id'])) {
     $redirect = $parent_itemtype::getFormURLWithID($note->fields['items_id'], true) . "&forcetab=Notepad$1";
     Html::redirect($redirect);
 } else {
-    Html::displayErrorAndDie("lost");
+    throw new BadRequestHttpException();
 }

@@ -7,8 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
- * @copyright 2003-2014 by the INDEPNET Development Team.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
  * ---------------------------------------------------------------------
@@ -34,32 +33,28 @@
  */
 
 /**
- * @var \DBmysql $DB
- * @var \Migration $migration
+ * @var DBmysql $DB
+ * @var Migration $migration
  */
-
-$migration->displayMessage("Adding recurrent changes");
-
 $default_charset = DBConnection::getDefaultCharset();
 $default_collation = DBConnection::getDefaultCollation();
 $default_key_sign = DBConnection::getDefaultPrimaryKeySignOption();
 
-$DB->updateOrDie(
+$DB->update(
     'glpi_crontasks',
     [
         'itemtype' => 'CommonITILRecurrentCron',
-        'name'     => 'RecurrentItems'
+        'name'     => 'RecurrentItems',
     ],
     [
         'itemtype' => 'TicketRecurrent',
         'name'     => 'ticketrecurrent',
-    ],
-    "CommonITILReccurent crontask"
+    ]
 );
 
 $recurrent_change_table = 'glpi_recurrentchanges';
 if (!$DB->tableExists($recurrent_change_table)) {
-    $DB->doQueryOrDie("CREATE TABLE `$recurrent_change_table` (
+    $DB->doQuery("CREATE TABLE `$recurrent_change_table` (
          `id` int {$default_key_sign} NOT NULL AUTO_INCREMENT,
          `name` varchar(255) DEFAULT NULL,
          `comment` text,

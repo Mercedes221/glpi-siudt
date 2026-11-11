@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,14 +33,21 @@
  * ---------------------------------------------------------------------
  */
 
-include('../inc/includes.php');
+require_once(__DIR__ . '/_check_webserver_config.php');
 
-Session::checkRightsOr('reservation', [READ, ReservationItem::RESERVEANITEM]);
+Session::checkRightsOr(Reservation::$rightname, [READ, ReservationItem::RESERVEANITEM]);
 
 if (Session::getCurrentInterface() == "helpdesk") {
-    Html::helpHeader(__('Simplified interface'), 'reservation');
+    Html::helpHeader(
+        sprintf(
+            '%s - %s',
+            Reservation::getTypeName(Session::getPluralNumber()),
+            __('Simplified interface')
+        ),
+        'reservation'
+    );
 } else {
-    Html::header(Reservation::getTypeName(Session::getPluralNumber()), $_SERVER['PHP_SELF'], "tools", "reservationitem");
+    Html::header(Reservation::getTypeName(Session::getPluralNumber()), '', "tools", "reservationitem");
 }
 
 $res = new ReservationItem();

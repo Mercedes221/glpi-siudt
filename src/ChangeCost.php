@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -40,25 +40,25 @@
  **/
 class ChangeCost extends CommonITILCost
 {
-   // From CommonDBChild
-    public static $itemtype  = 'Change';
-    public static $items_id  = 'changes_id';
+    // From CommonDBChild
+    public static string $itemtype = Change::class;
+    public static string $items_id  = 'changes_id';
 
 
-    public static function canCreate()
+    public static function canCreate(): bool
     {
-        return Session::haveRight('change', UPDATE);
+        return Session::haveRight(Change::$rightname, UPDATE);
     }
 
 
-    public static function canView()
+    public static function canView(): bool
     {
-        return Session::haveRightsOr('change', [Change::READALL, Change::READMY]);
+        return Session::haveRightsOr(Change::$rightname, [Change::READALL, Change::READMY]);
     }
 
 
-    public static function canUpdate()
+    public static function canUpdate(): bool
     {
-        return Session::haveRight('change', UPDATE);
+        return Session::haveRight(Change::$rightname, UPDATE);
     }
 }

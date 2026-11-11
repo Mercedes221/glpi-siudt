@@ -1,28 +1,21 @@
-(function (global, factory) {
-    typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
-    typeof define === 'function' && define.amd ? define(factory) :
-    (global = global || self, (global.FullCalendarLocales = global.FullCalendarLocales || {}, global.FullCalendarLocales.mk = factory()));
-}(this, function () { 'use strict';
+var l50 = {
+    code: 'mk',
+    buttonText: {
+        prev: 'претходно',
+        next: 'следно',
+        today: 'Денес',
+        year: 'година',
+        month: 'Месец',
+        week: 'Недела',
+        day: 'Ден',
+        list: 'График',
+    },
+    weekText: 'Сед',
+    allDayText: 'Цел ден',
+    moreLinkText(n) {
+        return '+повеќе ' + n;
+    },
+    noEventsText: 'Нема настани за прикажување',
+};
 
-    var mk = {
-        code: "mk",
-        buttonText: {
-            prev: "претходно",
-            next: "следно",
-            today: "Денес",
-            month: "Месец",
-            week: "Недела",
-            day: "Ден",
-            list: "График"
-        },
-        weekLabel: "Сед",
-        allDayText: "Цел ден",
-        eventLimitText: function (n) {
-            return "+повеќе " + n;
-        },
-        noEventsMessage: "Нема настани за прикажување"
-    };
-
-    return mk;
-
-}));
+export { l50 as default };

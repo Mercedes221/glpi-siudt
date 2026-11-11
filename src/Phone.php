@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -34,25 +34,36 @@
  */
 
 use Glpi\Application\View\TemplateRenderer;
+use Glpi\Asset\Asset_PeripheralAsset;
+use Glpi\Features\AssignableItem;
+use Glpi\Features\AssignableItemInterface;
+use Glpi\Features\Clonable;
+use Glpi\Features\Inventoriable;
+use Glpi\Features\StateInterface;
 use Glpi\Socket;
 
 /**
  * Phone Class
  **/
-class Phone extends CommonDBTM
+class Phone extends CommonDBTM implements AssignableItemInterface, StateInterface
 {
-    use Glpi\Features\Clonable;
-    use Glpi\Features\Inventoriable;
+    /** @use Clonable<static> */
+    use Clonable;
+    use Inventoriable;
+    use Glpi\Features\State;
+    use AssignableItem {
+        prepareInputForAdd as prepareInputForAddAssignableItem;
+    }
 
-   // From CommonDBTM
-    public $dohistory                   = true;
+    // From CommonDBTM
+    public bool $dohistory                   = true;
 
-    protected static $forward_entity_to = ['Infocom', 'NetworkPort', 'ReservationItem',
-        'Item_OperatingSystem', 'Item_Disk'
+    protected static array $forward_entity_to = ['Infocom', 'NetworkPort', 'ReservationItem',
+        'Item_OperatingSystem', 'Item_Disk',
     ];
 
-    public static $rightname                   = 'phone';
-    protected $usenotepad               = true;
+    public static string $rightname                   = 'phone';
+    protected bool $usenotepad               = true;
 
     public function getCloneRelations(): array
     {
@@ -61,23 +72,41 @@ class Phone extends CommonDBTM
             Item_Devices::class,
             Infocom::class,
             Item_Disk::class,
+            Item_Process::class,
+            Item_Environment::class,
             Item_SoftwareVersion::class,
             Item_SoftwareLicense::class,
             Contract_Item::class,
             Document_Item::class,
             NetworkPort::class,
-            Computer_Item::class,
+            Asset_PeripheralAsset::class,
             KnowbaseItem_Item::class,
-            Item_RemoteManagement::class
+            Item_RemoteManagement::class,
+            ItemAntivirus::class,
+            Appliance_Item::class,
+            Certificate_Item::class,
+            Domain_Item::class,
+            Item_Project::class,
+            ManualLink::class,
+            Socket::class,
         ];
     }
 
     public static function getTypeName($nb = 0)
     {
-       //TRANS: Test of comment for translation (mark : //TRANS)
+        //TRANS: Test of comment for translation (mark : //TRANS)
         return _n('Phone', 'Phones', $nb);
     }
 
+    public static function getSectorizedDetails(): array
+    {
+        return ['assets', self::class];
+    }
+
+    public static function getLogDefaultServiceName(): string
+    {
+        return 'inventory';
+    }
 
     /**
      * @see CommonDBTM::useDeletedToLockIfDynamic()
@@ -96,29 +125,35 @@ class Phone extends CommonDBTM
         $ong = [];
         $this->addDefaultFormTab($ong);
         $this->addImpactTab($ong, $options);
-        $this->addStandardTab('Item_OperatingSystem', $ong, $options);
-        $this->addStandardTab('Item_SoftwareVersion', $ong, $options);
-        $this->addStandardTab('Item_Devices', $ong, $options);
-        $this->addStandardTab('Item_Disk', $ong, $options);
-        $this->addStandardTab('Computer_Item', $ong, $options);
-        $this->addStandardTab('NetworkPort', $ong, $options);
+        $this->addStandardTab(Item_OperatingSystem::class, $ong, $options);
+        $this->addStandardTab(Item_SoftwareVersion::class, $ong, $options);
+        $this->addStandardTab(Item_Process::class, $ong, $options);
+        $this->addStandardTab(Item_Environment::class, $ong, $options);
+        $this->addStandardTab(Item_Devices::class, $ong, $options);
+        $this->addStandardTab(Item_Line::class, $ong, $options);
+        $this->addStandardTab(Item_Disk::class, $ong, $options);
+        $this->addStandardTab(Asset_PeripheralAsset::class, $ong, $options);
+        $this->addStandardTab(NetworkPort::class, $ong, $options);
         $this->addStandardTab(Socket::class, $ong, $options);
-        $this->addStandardTab('Item_RemoteManagement', $ong, $options);
-        $this->addStandardTab('Infocom', $ong, $options);
-        $this->addStandardTab('Contract_Item', $ong, $options);
-        $this->addStandardTab('Document_Item', $ong, $options);
-        $this->addStandardTab('KnowbaseItem_Item', $ong, $options);
-        $this->addStandardTab('Ticket', $ong, $options);
-        $this->addStandardTab('Item_Problem', $ong, $options);
-        $this->addStandardTab('Change_Item', $ong, $options);
-        $this->addStandardTab('ManualLink', $ong, $options);
-        $this->addStandardTab('Lock', $ong, $options);
-        $this->addStandardTab('Notepad', $ong, $options);
-        $this->addStandardTab('Reservation', $ong, $options);
-        $this->addStandardTab('Domain_Item', $ong, $options);
-        $this->addStandardTab('Appliance_Item', $ong, $options);
-        $this->addStandardTab('RuleMatchedLog', $ong, $options);
-        $this->addStandardTab('Log', $ong, $options);
+        $this->addStandardTab(Item_RemoteManagement::class, $ong, $options);
+        $this->addStandardTab(Infocom::class, $ong, $options);
+        $this->addStandardTab(Contract_Item::class, $ong, $options);
+        $this->addStandardTab(Document_Item::class, $ong, $options);
+        $this->addStandardTab(ItemAntivirus::class, $ong, $options);
+        $this->addStandardTab(KnowbaseItem_Item::class, $ong, $options);
+        $this->addStandardTab(Item_Ticket::class, $ong, $options);
+        $this->addStandardTab(Item_Problem::class, $ong, $options);
+        $this->addStandardTab(Change_Item::class, $ong, $options);
+        $this->addStandardTab(Item_Project::class, $ong, $options);
+        $this->addStandardTab(ManualLink::class, $ong, $options);
+        $this->addStandardTab(Certificate_Item::class, $ong, $options);
+        $this->addStandardTab(Lock::class, $ong, $options);
+        $this->addStandardTab(Notepad::class, $ong, $options);
+        $this->addStandardTab(Reservation::class, $ong, $options);
+        $this->addStandardTab(Domain_Item::class, $ong, $options);
+        $this->addStandardTab(Appliance_Item::class, $ong, $options);
+        $this->addStandardTab(RuleMatchedLog::class, $ong, $options);
+        $this->addStandardTab(Log::class, $ong, $options);
 
         return $ong;
     }
@@ -126,14 +161,24 @@ class Phone extends CommonDBTM
 
     public function prepareInputForAdd($input)
     {
-
         if (isset($input["id"]) && ($input["id"] > 0)) {
             $input["_oldID"] = $input["id"];
         }
         unset($input['id']);
         unset($input['withtemplate']);
 
+        $input = $this->prepareInputForAddAssignableItem($input);
         return $input;
+    }
+
+    public function cleanDBonPurge()
+    {
+        $this->deleteChildrenAndRelationsFromDb(
+            [
+                Item_Environment::class,
+                Item_Process::class,
+            ]
+        );
     }
 
 
@@ -145,7 +190,7 @@ class Phone extends CommonDBTM
      *     - target filename : where to go when done.
      *     - withtemplate boolean : template or basic item
      *
-     * @return boolean item found
+     * @return bool item found
      **/
     public function showForm($ID, array $options = [])
     {
@@ -159,47 +204,44 @@ class Phone extends CommonDBTM
 
 
     /**
-     * Return the linked items (in computers_items)
+     * Return the linked items (`Asset_PeripheralAsset` relations)
      *
      * @return array of linked items  like array('Computer' => array(1,2), 'Printer' => array(5,6))
      * @since 0.84.4
      **/
     public function getLinkedItems()
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
-            'SELECT' => 'computers_id',
-            'FROM'   => 'glpi_computers_items',
+            'SELECT' => [
+                'itemtype_asset',
+                'items_id_asset',
+            ],
+            'FROM'   => Asset_PeripheralAsset::getTable(),
             'WHERE'  => [
-                'itemtype'  => $this->getType(),
-                'items_id'  => $this->fields['id']
-            ]
+                'itemtype_peripheral' => static::class,
+                'items_id_peripheral' => $this->fields['id'],
+            ],
         ]);
         $tab = [];
         foreach ($iterator as $data) {
-            $tab['Computer'][$data['computers_id']] = $data['computers_id'];
+            $tab[$data['itemtype_asset']][$data['items_id_asset']] = $data['items_id_asset'];
         }
         return $tab;
     }
 
-
-    /**
-     * @see CommonDBTM::getSpecificMassiveActions()
-     **/
     public function getSpecificMassiveActions($checkitem = null)
     {
-
         $actions = parent::getSpecificMassiveActions($checkitem);
         if (static::canUpdate()) {
-            Computer_Item::getMassiveActionsForItemtype($actions, __CLASS__, 0, $checkitem);
+            Asset_PeripheralAsset::getMassiveActionsForItemtype($actions, self::class, false, $checkitem);
             $actions += [
                 'Item_SoftwareLicense' . MassiveAction::CLASS_ACTION_SEPARATOR . 'add'
-               => "<i class='ma-icon fas fa-key'></i>" .
-                  _x('button', 'Add a license')
+               => "<i class='ti ti-key' aria-hidden='true'></i>"
+                  . _sx('button', 'Add a license'),
             ];
-            KnowbaseItem_Item::getMassiveActionsForItemtype($actions, __CLASS__, 0, $checkitem);
+            KnowbaseItem_Item::getMassiveActionsForItemtype($actions, self::class, false, $checkitem);
         }
 
         return $actions;
@@ -216,7 +258,7 @@ class Phone extends CommonDBTM
             'field'              => 'id',
             'name'               => __('ID'),
             'massiveaction'      => false,
-            'datatype'           => 'number'
+            'datatype'           => 'number',
         ];
 
         $tab = array_merge($tab, Location::rawSearchOptionsToAdd());
@@ -226,7 +268,7 @@ class Phone extends CommonDBTM
             'table'              => 'glpi_phonetypes',
             'field'              => 'name',
             'name'               => _n('Type', 'Types', 1),
-            'datatype'           => 'dropdown'
+            'datatype'           => 'dropdown',
         ];
 
         $tab[] = [
@@ -234,16 +276,16 @@ class Phone extends CommonDBTM
             'table'              => 'glpi_phonemodels',
             'field'              => 'name',
             'name'               => _n('Model', 'Models', 1),
-            'datatype'           => 'dropdown'
+            'datatype'           => 'dropdown',
         ];
 
         $tab[] = [
             'id'                 => '31',
-            'table'              => 'glpi_states',
+            'table'              => State::getTable(),
             'field'              => 'completename',
             'name'               => __('Status'),
             'datatype'           => 'dropdown',
-            'condition'          => ['is_visible_phone' => 1]
+            'condition'          => $this->getStateVisibilityCriteria(),
         ];
 
         $tab[] = [
@@ -300,7 +342,7 @@ class Phone extends CommonDBTM
             'field'              => 'name',
             'name'               => User::getTypeName(1),
             'datatype'           => 'dropdown',
-            'right'              => 'all'
+            'right'              => 'all',
         ];
 
         $tab[] = [
@@ -309,7 +351,18 @@ class Phone extends CommonDBTM
             'field'              => 'completename',
             'name'               => Group::getTypeName(1),
             'condition'          => ['is_itemgroup' => 1],
-            'datatype'           => 'dropdown'
+            'joinparams'         => [
+                'beforejoin'         => [
+                    'table'              => 'glpi_groups_items',
+                    'joinparams'         => [
+                        'jointype'           => 'itemtype_item',
+                        'condition'          => ['NEWTABLE.type' => Group_Item::GROUP_TYPE_NORMAL],
+                    ],
+                ],
+            ],
+            'forcegroupby'       => true,
+            'massiveaction'      => false,
+            'datatype'           => 'dropdown',
         ];
 
         $tab[] = [
@@ -317,7 +370,7 @@ class Phone extends CommonDBTM
             'table'              => 'glpi_autoupdatesystems',
             'field'              => 'name',
             'name'               => AutoUpdateSystem::getTypeName(1),
-            'datatype'           => 'dropdown'
+            'datatype'           => 'dropdown',
         ];
 
         $tab[] = [
@@ -326,7 +379,7 @@ class Phone extends CommonDBTM
             'field'              => 'date_mod',
             'name'               => __('Last update'),
             'datatype'           => 'datetime',
-            'massiveaction'      => false
+            'massiveaction'      => false,
         ];
 
         $tab[] = [
@@ -335,15 +388,15 @@ class Phone extends CommonDBTM
             'field'              => 'date_creation',
             'name'               => __('Creation date'),
             'datatype'           => 'datetime',
-            'massiveaction'      => false
+            'massiveaction'      => false,
         ];
 
         $tab[] = [
             'id'                 => '16',
             'table'              => $this->getTable(),
             'field'              => 'comment',
-            'name'               => __('Comments'),
-            'datatype'           => 'text'
+            'name'               => _n('Comment', 'Comments', Session::getPluralNumber()),
+            'datatype'           => 'text',
         ];
 
         $tab[] = [
@@ -359,7 +412,7 @@ class Phone extends CommonDBTM
             'table'              => 'glpi_manufacturers',
             'field'              => 'name',
             'name'               => Manufacturer::getTypeName(1),
-            'datatype'           => 'dropdown'
+            'datatype'           => 'dropdown',
         ];
 
         $tab[] = [
@@ -376,10 +429,10 @@ class Phone extends CommonDBTM
                     'table'              => 'glpi_items_devicefirmwares',
                     'joinparams'         => [
                         'jointype'           => 'itemtype_item',
-                        'specific_itemtype'  => 'Phone'
-                    ]
-                ]
-            ]
+                        'specific_itemtype'  => 'Phone',
+                    ],
+                ],
+            ],
         ];
 
         $tab[] = [
@@ -389,17 +442,28 @@ class Phone extends CommonDBTM
             'linkfield'          => 'users_id_tech',
             'name'               => __('Technician in charge'),
             'datatype'           => 'dropdown',
-            'right'              => 'own_ticket'
+            'right'              => 'own_ticket',
         ];
 
         $tab[] = [
             'id'                 => '49',
             'table'              => 'glpi_groups',
             'field'              => 'completename',
-            'linkfield'          => 'groups_id_tech',
+            'linkfield'          => 'groups_id',
             'name'               => __('Group in charge'),
             'condition'          => ['is_assign' => 1],
-            'datatype'           => 'dropdown'
+            'joinparams'         => [
+                'beforejoin'         => [
+                    'table'              => 'glpi_groups_items',
+                    'joinparams'         => [
+                        'jointype'           => 'itemtype_item',
+                        'condition'          => ['NEWTABLE.type' => Group_Item::GROUP_TYPE_TECH],
+                    ],
+                ],
+            ],
+            'forcegroupby'       => true,
+            'massiveaction'      => false,
+            'datatype'           => 'dropdown',
         ];
 
         $tab[] = [
@@ -407,7 +471,7 @@ class Phone extends CommonDBTM
             'table'              => 'glpi_phonepowersupplies',
             'field'              => 'name',
             'name'               => DevicePowerSupply::getTypeName(1),
-            'datatype'           => 'dropdown'
+            'datatype'           => 'dropdown',
         ];
 
         $tab[] = [
@@ -415,7 +479,7 @@ class Phone extends CommonDBTM
             'table'              => $this->getTable(),
             'field'              => 'have_headset',
             'name'               => __('Headset'),
-            'datatype'           => 'bool'
+            'datatype'           => 'bool',
         ];
 
         $tab[] = [
@@ -423,7 +487,7 @@ class Phone extends CommonDBTM
             'table'              => $this->getTable(),
             'field'              => 'have_hp',
             'name'               => __('Speaker'),
-            'datatype'           => 'bool'
+            'datatype'           => 'bool',
         ];
 
         $tab[] = [
@@ -443,7 +507,7 @@ class Phone extends CommonDBTM
             'field'              => 'completename',
             'name'               => Entity::getTypeName(1),
             'massiveaction'      => false,
-            'datatype'           => 'dropdown'
+            'datatype'           => 'dropdown',
         ];
 
         $tab[] = [
@@ -452,7 +516,7 @@ class Phone extends CommonDBTM
             'field'              => 'is_global',
             'name'               => __('Global management'),
             'datatype'           => 'bool',
-            'massiveaction'      => false
+            'massiveaction'      => false,
         ];
 
         $tab[] = [
@@ -465,31 +529,35 @@ class Phone extends CommonDBTM
 
         $tab = array_merge($tab, Notepad::rawSearchOptionsToAdd());
 
-        $tab = array_merge($tab, Socket::rawSearchOptionsToAdd());
+        $tab = array_merge($tab, ItemAntivirus::rawSearchOptionsToAdd());
+
+        $tab = array_merge($tab, Item_RemoteManagement::rawSearchOptionsToAdd(self::class));
 
         $tab = array_merge($tab, Agent::rawSearchOptionsToAdd());
+
+        $tab = array_merge($tab, Item_Devices::rawSearchOptionsToAdd(get_class($this)));
 
         return $tab;
     }
 
 
-   /**
-    * @param $itemtype
-    *
-    * @return array
-    */
+    /**
+     * @param ?class-string<CommonDBTM> $itemtype
+     *
+     * @return array
+     */
     public static function rawSearchOptionsToAdd($itemtype = null)
     {
         $tab = [];
 
         $tab[] = [
             'id'                 => 'phone',
-            'name'               => self::getTypeName(Session::getPluralNumber())
+            'name'               => self::getTypeName(Session::getPluralNumber()),
         ];
 
         $tab[] = [
             'id'                 => '1432',
-            'table'              => 'glpi_computers_items',
+            'table'              => Asset_PeripheralAsset::getTable(),
             'field'              => 'id',
             'name'               => _x('quantity', 'Number of phones'),
             'forcegroupby'       => true,
@@ -497,14 +565,15 @@ class Phone extends CommonDBTM
             'datatype'           => 'count',
             'massiveaction'      => false,
             'joinparams'         => [
-                'jointype'           => 'child',
-                'condition'          => ['NEWTABLE.itemtype' => 'Phone']
-            ]
+                'jointype'                  => 'itemtype_item',
+                'specific_items_id_column'  => 'items_id_asset',
+                'specific_itemtype_column'  => 'itemtype_asset',
+                'condition'                 => ['NEWTABLE.' . 'itemtype_peripheral' => 'Phone'],
+            ],
         ];
 
         return $tab;
     }
-
 
     public static function getIcon()
     {

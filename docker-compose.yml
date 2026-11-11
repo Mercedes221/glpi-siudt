@@ -2,7 +2,7 @@
   app:
     build:
       context: .
-    image: glpi-siudt:10.0.18
+    image: glpi-siudt:12.0.1
     restart: unless-stopped
     ports:
       - "8080:80"
@@ -25,6 +25,7 @@
         /var/www/html/files/_rss
         /var/www/html/files/_sessions
         /var/www/html/files/_tmp
+        /var/www/html/files/_themes
         /var/www/html/files/_uploads
         /var/www/html/files/_inventories
         /var/www/html/marketplace
@@ -43,6 +44,7 @@
         /var/www/html/files/_rss
         /var/www/html/files/_sessions
         /var/www/html/files/_tmp
+        /var/www/html/files/_themes
         /var/www/html/files/_uploads
         /var/www/html/files/_inventories
         /var/www/html/marketplace

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2025 Teclib' and contributors.
+ * @copyright 2015-2026 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -34,59 +34,36 @@
  */
 
 use Glpi\Dashboard\Widget;
+use Safe\DateTime;
 
 /**
  * Store network port metrics
  */
 class NetworkPortMetrics extends CommonDBChild
 {
-    public static $itemtype        = 'NetworkPort';
-    public static $items_id        = 'networkports_id';
-    public $dohistory              = false;
+    public static string $itemtype = NetworkPort::class;
+    public static string $items_id        = 'networkports_id';
+    public bool $dohistory              = false;
 
-    /**
-     * Get name of this type by language of the user connected
-     *
-     * @param integer $nb number of elements
-     *
-     * @return string name of this type
-     */
     public static function getTypeName($nb = 0)
     {
         return __('Network port metrics');
     }
 
-    /**
-     * Get the tab name used for item
-     *
-     * @param CommonGLPI $item the item object
-     * @param integer $withtemplate 1 if is a template form
-     * @return string|array name of the tab
-     */
     public function getTabNameForItem(CommonGLPI $item, $withtemplate = 0)
     {
-
         $array_ret = [];
 
-        if (get_class($item) == NetworkPort::class) {
-            $cnt = countElementsInTable([static::getTable()], [static::$items_id => $item->getField('id')]);
-            $array_ret[] = self::createTabEntry(self::getTypeName(Session::getPluralNumber()), $cnt);
+        if ($item::class === NetworkPort::class) {
+            $cnt = countElementsInTable([static::getTable()], [static::$items_id => $item->getID()]);
+            $array_ret[] = self::createTabEntry(self::getTypeName(Session::getPluralNumber()), $cnt, $item::class);
         }
         return $array_ret;
     }
 
-
-    /**
-     * Display the content of the tab
-     *
-     * @param CommonGLPI $item
-     * @param integer $tabnum number of the tab to display
-     * @param integer $withtemplate 1 if is a template form
-     * @return boolean
-     */
     public static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0)
     {
-        if (get_class($item) == NetworkPort::class && $item->getID() > 0) {
+        if ($item::class === NetworkPort::class && $item->getID() > 0) {
             $metrics = new self();
             $metrics->showMetrics($item);
             return true;
@@ -104,21 +81,20 @@ class NetworkPortMetrics extends CommonDBChild
      */
     public function getMetrics(NetworkPort $netport, $user_filters = []): array
     {
-        /** @var \DBmysql $DB */
         global $DB;
 
         $bdate = new DateTime();
         $bdate->sub(new DateInterval('P1Y'));
         $filters = [
-            'date' => ['>', $bdate->format('Y-m-d')]
+            'date' => ['>', $bdate->format('Y-m-d')],
         ];
         $filters = array_merge($filters, $user_filters);
 
         $iterator = $DB->request([
-            'FROM'   => $this->getTable(),
+            'FROM'   => static::getTable(),
             'WHERE'  => [
-                static::$items_id  => $netport->fields['id']
-            ] + $filters
+                static::$items_id  => $netport->fields['id'],
+            ] + $filters,
         ]);
 
         return iterator_to_array($iterator);
@@ -128,23 +104,23 @@ class NetworkPortMetrics extends CommonDBChild
      * Display form for agent
      *
      * @param NetworkPort $netport Port instance
+     *
+     * @return void
      */
     public function showMetrics(NetworkPort $netport)
     {
         $raw_metrics = $this->getMetrics($netport);
 
-       //build graph data
+        // build graph data
         $params = [
-            'label'         => $this->getTypeName(),
             'icon'          => NetworkPort::getIcon(),
-            'apply_filters' => [],
         ];
 
         $bytes_series = [];
         $errors_series = [];
         $labels = [];
         foreach ($raw_metrics as $metrics) {
-            $date = new \DateTime($metrics['date']);
+            $date = new DateTime($metrics['date']);
             $labels[] = $date->format(__('Y-m-d'));
             unset($metrics['id'], $metrics['date'], $metrics['date_creation'], $metrics['date_mod'], $metrics[static::$items_id]);
 
@@ -171,12 +147,14 @@ class NetworkPortMetrics extends CommonDBChild
             'label' => __('Input/Output megabytes'),
             'icon'  => $params['icon'],
             'color' => '#ffffff',
-            'distributed' => false
+            'distributed' => false,
+            'show_points' => false,
+            'line_width'  => 2,
         ];
 
-       //display bytes graph
+        //display bytes graph
         echo "<div class='dashboard netports_metrics bytes'>";
-        echo Widget::multipleLines($bytes_bar_conf);
+        echo Widget::multipleAreas($bytes_bar_conf);
         echo "</div>";
 
         $errors_bar_conf = [
@@ -187,28 +165,32 @@ class NetworkPortMetrics extends CommonDBChild
             'label' => __('Input/Output errors'),
             'icon'  => $params['icon'],
             'color' => '#ffffff',
-            'distributed' => false
+            'distributed' => false,
+            'show_points' => false,
+            'line_width'  => 2,
         ];
 
         echo "</br>";
 
-       //display error graph
+        //display error graph
         echo "<div class='dashboard netports_metrics'>";
-        echo Widget::multipleLines($errors_bar_conf);
+        echo Widget::multipleAreas($errors_bar_conf);
         echo "</div>";
     }
 
-    private function getLabelFor($key)
+    private function getLabelFor(string $key): string
     {
-        switch ($key) {
-            case 'ifinbytes':
-                return __('Input megabytes');
-            case 'ifoutbytes':
-                return __('Output megabytes');
-            case 'ifinerrors':
-                return __('Input errors');
-            case 'ifouterrors':
-                return __('Output errors');
-        }
+        return match ($key) {
+            'ifinbytes' => __('Input megabytes'),
+            'ifoutbytes' => __('Output megabytes'),
+            'ifinerrors' => __('Input errors'),
+            'ifouterrors' => __('Output errors'),
+            default => $key,
+        };
+    }
+
+    public static function getIcon()
+    {
+        return 'ti ti-chart-line';
     }
 }
