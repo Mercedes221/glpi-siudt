@@ -24,9 +24,15 @@ protocolo antes de reactivarlo.
 - Data Injection 2.14.7 no declara compatibilidad con GLPI 12. Su código no se
   incluye en este repositorio; en la instancia migrada quedó instalado, pero
   desactivado. No reactivarlo hasta confirmar una versión compatible.
-- Para importar equipos de red se dispone del importador REST
-  `tools/import-network-equipment.php`. Su modo predeterminado es vista previa;
-  no usar `--apply` sin revisar primero los datos.
+- El plugin local `SIUDT Front` incluye una pantalla CSV en
+  **Herramientas > Importar activos (CSV)** para los tipos de activo de GLPI.
+  Permite mapear columnas y revisar una vista previa; los valores de listas
+  relacionadas deben existir previamente y las filas con valores inexistentes
+  o ambiguos se omiten.
+- También se conserva el importador REST de consola
+  `tools/import-network-equipment.php`, limitado a equipos de red. Su modo
+  predeterminado es vista previa; no usar `--apply` sin revisar primero los
+  datos.
 - Se eligió OAuth `client_credentials` para autenticación de inventario. La
   autenticación y la API de alto nivel quedaron habilitadas; se creó el cliente
   OAuth `SIUDT GLPI Agent`, restringido al permiso `inventory` y al grant
@@ -159,6 +165,17 @@ Resultados:
    servidor estaba vacío y no era funcional; se preservó el registro.
 4. Si se ejecuta `tools/import-network-equipment.php`, empezar con vista previa
    y aplicar cambios únicamente tras revisar los registros y permisos.
+5. Para publicar cambios del importador web, reconstruir la imagen y levantar
+   el servicio de aplicación después de revisar el código. Compose iniciará las
+   dependencias declaradas que no estén en ejecución:
+
+   ```powershell
+   docker compose up -d --build app
+   ```
+
+   La configuración, los archivos y la base de datos están en volúmenes
+   persistentes; no ejecutar `docker compose down -v`. Consultar
+   `plugins/siudtfront/README.md` para el formato y límites de los CSV.
 
 El client ID, el secreto y la URL local del token se guardaron fuera del
 repositorio en el archivo privado `glpi-agent-oauth.json`. Sus permisos
